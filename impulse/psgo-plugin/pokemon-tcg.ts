@@ -718,10 +718,9 @@ async function listTrades(context: any, user: User) {
 // ==================== COMMANDS ====================
 
 export const commands: Chat.ChatCommands = {
-	tcg: 'pokemontcg',
-	pokemontcg: {
+	tcg: {
 		''(target, room, user) {
-			return this.parse('/help pokemontcg');
+			return this.parse('/help tcg');
 		},
 
 		async addcard(target, room, user) {
