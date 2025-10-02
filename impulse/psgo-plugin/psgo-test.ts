@@ -306,11 +306,11 @@ export class PSGOSystem {
     const id = toID(userId);
     const compositeId = `${id}_${cardId}`;
     
-    const userCard = await UserCardsDB.findById(compositeId);
+    const userCard = await UserCardsDB.findOne(compositeId);
     if (!userCard || userCard.quantity < quantity) return false;
 
     if (userCard.quantity === quantity) {
-      await UserCardsDB.deleteById(compositeId);
+      await UserCardsDB.deleteOne(compositeId);
     } else {
       await UserCardsDB.updateOne(
         { _id: compositeId },
@@ -331,8 +331,8 @@ export class PSGOSystem {
     const toId = toID(toUserId);
 
     const [fromProfile, toProfile] = await Promise.all([
-      UserProfilesDB.findById(fromId),
-      UserProfilesDB.findById(toId)
+      UserProfilesDB.findOne(fromId),
+      UserProfilesDB.findOne(toId)
     ]);
 
     if (!fromProfile?.allowTrades || !toProfile?.allowTrades) {
@@ -343,8 +343,8 @@ export class PSGOSystem {
     const toCompositeId = `${toId}_${cardId}`;
 
     const [fromCard, cardData] = await Promise.all([
-      UserCardsDB.findById(fromCompositeId),
-      CardsDB.findById(cardId)
+      UserCardsDB.findOne(fromCompositeId),
+      CardsDB.findOne(cardId)
     ]);
 
     if (!fromCard || fromCard.quantity < quantity) {
@@ -357,7 +357,7 @@ export class PSGOSystem {
 
     // Remove from sender
     if (fromCard.quantity === quantity) {
-      await UserCardsDB.deleteById(fromCompositeId);
+      await UserCardsDB.deleteOne(fromCompositeId);
     } else {
       await UserCardsDB.updateOne(
         { _id: fromCompositeId },
@@ -366,7 +366,7 @@ export class PSGOSystem {
     }
 
     // Add to receiver
-    const toCard = await UserCardsDB.findById(toCompositeId);
+    const toCard = await UserCardsDB.findOne(toCompositeId);
     if (toCard) {
       await UserCardsDB.updateOne(
         { _id: toCompositeId },
@@ -403,7 +403,7 @@ export class PSGOSystem {
     const id = toID(userId);
     const skip = (page - 1) * pageSize;
 
-    const profile = await UserProfilesDB.findById(id);
+    const profile = await UserProfilesDB.findOne(id);
     const userCards = await UserCardsDB.find({ userId: id });
 
     if (!userCards.length) {
