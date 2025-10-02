@@ -675,29 +675,28 @@ export const commands: Chat.ChatCommands = {
 
 				if (!key || !value) continue;
 
-				// Separate page filter from search filters
 				if (toID(key) === 'page') {
 					const pageNum = parseInt(value);
 					if (!isNaN(pageNum) && pageNum > 0) {
 						page = pageNum;
 					}
-					continue; // Don't add page to the query or command string
+					continue; 
 				}
 
 				commandArgs.push(filter);
 				searchTerms.push(`<strong>${key}</strong>: "${value}"`);
 
 				switch (toID(key)) {
+					// FIXED: Moved rarity, supertype, and stage here for case-insensitive search
 					case 'name':
 					case 'set':
-						query[toID(key)] = { $regex: value, $options: 'i' };
-						break;
 					case 'rarity':
 					case 'supertype':
 					case 'stage':
-						query[toID(key)] = value;
+						query[toID(key)] = { $regex: value, $options: 'i' };
 						break;
 					case 'type':
+						// Type search can remain exact match if desired, or moved above
 						query.type = value;
 						break;
 					case 'subtype':
@@ -727,9 +726,6 @@ export const commands: Chat.ChatCommands = {
 			}
 
 			try {
-				// --- Fetching Data for Pagination ---
-				// Note: For large databases, fetching all results can be slow.
-				// A more advanced solution would use database-level skip/limit.
 				const allResults = await TCGCards.find(query);
 				const totalResults = allResults.length;
 
@@ -741,12 +737,10 @@ export const commands: Chat.ChatCommands = {
 				const paginatedResults = allResults.slice(startIndex, startIndex + CARDS_PER_PAGE);
 				const totalPages = Math.ceil(totalResults / CARDS_PER_PAGE);
 
-				// --- Building the HTML Output ---
 				let output = `<div class="themed-table-container">`;
 				output += `<h3 class="themed-table-title">Search Results</h3>`;
 				output += `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
 
-				// --- Added Styling Wrapper ---
 				output += `<div style="max-height: 370px; overflow-y: auto;">`;
 				output += `<table class="themed-table">`;
 				output += `<tr class="themed-table-header"><th>Card ID</th><th>Name</th><th>Set</th><th>Rarity</th><th>Type</th><th>Subtypes</th><th>HP</th></tr>`;
@@ -764,9 +758,8 @@ export const commands: Chat.ChatCommands = {
 				});
 
 				output += `</table>`;
-				output += `</div>`; // Close styling wrapper
+				output += `</div>`;
 
-				// --- Pagination Buttons and Info ---
 				output += `<p style="text-align:center; margin-top: 8px;">`;
 				output += `Showing ${paginatedResults.length} of ${totalResults} results.`;
 				output += `</p>`;
