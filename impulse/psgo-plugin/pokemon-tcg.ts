@@ -506,8 +506,7 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	};
 
 	// 2. Define pack structure and fill slots
-	// Modern packs are often 4 commons, 3 uncommons, 2 reverse holos, 1 rare
-	// We'll simplify to 5 commons, 3 uncommons, 1 "special", 1 rare slot
+	// We'll simplify to 5 commons, 3 uncommons, 1 "reverse holo" slot, 1 rare slot
 	
 	// 5 Commons
 	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
@@ -610,14 +609,11 @@ async function createTradeOffer(context: any, user: User, args: string[]) {
 }
 
 async function acceptTrade(context: any, user: User, tradeId: string) {
-	if (!tradeId) {
-		return context.errorReply("You need to specify a Trade ID to accept.");
-	}
+	if (!tradeId) return context.errorReply("You need to specify a Trade ID to accept.");
 	
 	const userId = user.id;
-	
-	// This is just a blueprint - the actual card swapping logic is complex.
-	// You will need to write the logic to add/remove cards from each user's collection.
+	let fromUserCollection: UserCollection | null = null;
+	let toUserCollection: UserCollection | null = null;
 	
 	try {
 		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), toUser: userId, status: 'pending' });
@@ -625,52 +621,156 @@ async function acceptTrade(context: any, user: User, tradeId: string) {
 			return context.errorReply(`Trade with ID "${tradeId}" not found, or it is not for you.`);
 		}
 		
-		// --- LOGIC TO UPDATE STATS WOULD GO HERE ---
+		// 1. Lock both users to prevent concurrent trades
+		await UserCollections.updateMany(
+			{ userId: { $in: [trade.fromUser, trade.toUser] } },
+			{ $set: { tradeLocked: true } }
+		);
 
-		// 1. Get the collections for both users in the trade
-		const fromUserCollection = await UserCollections.findOne({ userId: trade.fromUser });
-		const toUserCollection = await UserCollections.findOne({ userId: trade.toUser });
+		fromUserCollection = await UserCollections.findOne({ userId: trade.fromUser });
+		toUserCollection = await UserCollections.findOne({ userId: trade.toUser });
 
 		if (!fromUserCollection || !toUserCollection) {
-			return context.errorReply("Could not find collection for one of the users.");
+			throw new Error("Could not find collection for one of the users.");
 		}
+
+		// 2. Verify both users have the cards to trade
+		const allTradeCardIds = [
+			...trade.offeredCards.map(c => c.cardId),
+			...trade.requestedCards.map(c => c.cardId),
+		];
+		const cardData = await TCGCards.find({ cardId: { $in: allTradeCardIds } });
+		const cardMap = new Map(cardData.map(c => [c.cardId, c]));
+
+		for (const offer of trade.offeredCards) {
+			const cardInCollection = fromUserCollection.cards.find(c => c.cardId === offer.cardId);
+			if (!cardInCollection || cardInCollection.quantity < offer.quantity) {
+				throw new Error(`${trade.fromUser} no longer has enough of card ${offer.cardId}.`);
+			}
+		}
+		for (const request of trade.requestedCards) {
+			const cardInCollection = toUserCollection.cards.find(c => c.cardId === request.cardId);
+			if (!cardInCollection || cardInCollection.quantity < request.quantity) {
+				throw new Error(`${trade.toUser} no longer has enough of card ${request.cardId}.`);
+			}
+		}
+
+		// 3. Exchange Cards
+		let fromUserPointsDelta = 0;
+		let toUserPointsDelta = 0;
+
+		// Helper to manage card quantity changes
+		const updateCardQuantity = (collection: UserCollection, cardId: string, quantity: number) => {
+			let card = collection.cards.find(c => c.cardId === cardId);
+			if (card) {
+				card.quantity += quantity;
+			} else if (quantity > 0) {
+				collection.cards.push({ cardId, quantity, addedAt: Date.now() });
+			}
+			// Remove card from collection if quantity is 0 or less
+			collection.cards = collection.cards.filter(c => c.quantity > 0);
+		};
 		
-		// 2. Calculate the total number of cards each person is trading away
+		// fromUser -> toUser
+		for (const offer of trade.offeredCards) {
+			const card = cardMap.get(offer.cardId);
+			if (!card) continue;
+			updateCardQuantity(fromUserCollection, offer.cardId, -offer.quantity);
+			updateCardQuantity(toUserCollection, offer.cardId, offer.quantity);
+			fromUserPointsDelta -= getCardPoints(card) * offer.quantity;
+			toUserPointsDelta += getCardPoints(card) * offer.quantity;
+		}
+
+		// toUser -> fromUser
+		for (const request of trade.requestedCards) {
+			const card = cardMap.get(request.cardId);
+			if (!card) continue;
+			updateCardQuantity(toUserCollection, request.cardId, -request.quantity);
+			updateCardQuantity(fromUserCollection, request.cardId, request.quantity);
+			toUserPointsDelta -= getCardPoints(card) * request.quantity;
+			fromUserPointsDelta += getCardPoints(card) * request.quantity;
+		}
+
+		// 4. Recalculate Stats
 		const fromUserTradedCount = trade.offeredCards.reduce((sum, card) => sum + card.quantity, 0);
 		const toUserTradedCount = trade.requestedCards.reduce((sum, card) => sum + card.quantity, 0);
 
-		// 3. Update the `totalCardsTraded` stat for each user
-		fromUserCollection.stats.totalCardsTraded = (fromUserCollection.stats.totalCardsTraded || 0) + fromUserTradedCount;
-		toUserCollection.stats.totalCardsTraded = (toUserCollection.stats.totalCardsTraded || 0) + toUserTradedCount;
-		
-		// 4. Here you would implement the card swapping logic...
-		// ... remove offeredCards from fromUser, add them to toUser
-		// ... remove requestedCards from toUser, add them to fromUser
+		fromUserCollection.stats = {
+			...fromUserCollection.stats,
+			totalCards: fromUserCollection.cards.reduce((sum, c) => sum + c.quantity, 0),
+			uniqueCards: fromUserCollection.cards.length,
+			totalPoints: (fromUserCollection.stats.totalPoints || 0) + fromUserPointsDelta,
+			totalCardsTraded: (fromUserCollection.stats.totalCardsTraded || 0) + fromUserTradedCount,
+		};
 
-		// 5. After swapping cards, save the updated collections to the database
+		toUserCollection.stats = {
+			...toUserCollection.stats,
+			totalCards: toUserCollection.cards.reduce((sum, c) => sum + c.quantity, 0),
+			uniqueCards: toUserCollection.cards.length,
+			totalPoints: (toUserCollection.stats.totalPoints || 0) + toUserPointsDelta,
+			totalCardsTraded: (toUserCollection.stats.totalCardsTraded || 0) + toUserTradedCount,
+		};
+		
+		// 5. Finalize and Save
 		await UserCollections.updateOne({ userId: trade.fromUser }, fromUserCollection);
 		await UserCollections.updateOne({ userId: trade.toUser }, toUserCollection);
-		
-		// 6. Mark the trade as accepted
 		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'accepted' } });
-		
-		context.sendReply(`Trade with ${trade.fromUser} successfully completed!`);
+
+		context.sendReply(`Trade successfully completed with ${trade.fromUser}!`);
+		const fromUserObj = Users.get(trade.fromUser);
+		if (fromUserObj) fromUserObj.sendTo(context.room, `|html|Your trade with ${trade.toUser} was accepted!`);
 
 	} catch (e: any) {
-		context.errorReply(`An error occurred while accepting the trade: ${e.message}`);
+		await TradeOffers.updateOne({ tradeId: tradeId.trim() }, { $set: { status: 'cancelled' } });
+		context.errorReply(`An error occurred and the trade was cancelled: ${e.message}`);
+	} finally {
+		// 6. Unlock users regardless of outcome
+		if (fromUserCollection && toUserCollection) {
+			await UserCollections.updateMany(
+				{ userId: { $in: [fromUserCollection.userId, toUserCollection.userId] } },
+				{ $set: { tradeLocked: false } }
+			);
+		}
 	}
-	
-	// The full implementation is complex and requires careful handling of card quantities.
-	// For now, this placeholder shows how the stats would be updated.
-	return context.sendReply('Trade acceptance feature - implementation continues...');
 }
 
 async function rejectTrade(context: any, user: User, tradeId: string) {
-	return context.sendReply('Trade rejection feature - implementation continues...');
+	if (!tradeId) return context.errorReply("You need to specify a Trade ID to reject.");
+	const userId = user.id;
+
+	try {
+		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), toUser: userId, status: 'pending' });
+		if (!trade) {
+			return context.errorReply(`Trade with ID "${tradeId}" not found, or it is not for you.`);
+		}
+
+		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'rejected' } });
+		
+		context.sendReply(`You have rejected the trade offer from ${trade.fromUser}.`);
+		const fromUserObj = Users.get(trade.fromUser);
+		if (fromUserObj) fromUserObj.sendTo(context.room, `|html|Your trade offer to ${trade.toUser} was rejected.`);
+
+	} catch (e: any) {
+		context.errorReply(`An error occurred while rejecting the trade: ${e.message}`);
+	}
 }
 
 async function cancelTrade(context: any, user: User, tradeId: string) {
-	return context.sendReply('Trade cancellation feature - implementation continues...');
+	if (!tradeId) return context.errorReply("You need to specify a Trade ID to cancel.");
+	const userId = user.id;
+
+	try {
+		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), fromUser: userId, status: 'pending' });
+		if (!trade) {
+			return context.errorReply(`Trade with ID "${tradeId}" not found, or you are not the sender.`);
+		}
+
+		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'cancelled' } });
+		
+		context.sendReply(`You have cancelled your trade offer (ID: ${trade.tradeId}).`);
+	} catch (e: any) {
+		context.errorReply(`An error occurred while cancelling the trade: ${e.message}`);
+	}
 }
 
 async function listTrades(context: any, user: User) {
@@ -718,9 +818,10 @@ async function listTrades(context: any, user: User) {
 // ==================== COMMANDS ====================
 
 export const commands: Chat.ChatCommands = {
-	tcg: {
+	tcg: 'pokemontcg',
+	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help tcg');
+			return this.parse('/help pokemontcg');
 		},
 
 		async addcard(target, room, user) {
@@ -757,7 +858,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async collection(target, room, user) {
-			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
 			const targetUsername = parts[0] || user.name;
 			const targetId = toID(targetUsername);
@@ -849,7 +949,7 @@ export const commands: Chat.ChatCommands = {
 					if (!card) return;
 					
 					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -960,8 +1060,7 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
-		async card(target, room, user) {
-			if (!this.runBroadcast()) return;
+		async viewcard(target, room, user) {
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg viewcard [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
@@ -1016,7 +1115,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
-			if (!this.runBroadcast()) return;
 			const CARDS_PER_PAGE = 20;
 
 			if (!target) {
@@ -1086,7 +1184,6 @@ export const commands: Chat.ChatCommands = {
 			try {
 				const allResults = await TCGCards.find(query);
 				
-				// --- NEW: Default sort by rarity (points) then by name ---
 				allResults.sort((a, b) => {
 					const pointsDiff = getCardPoints(b) - getCardPoints(a);
 					if (pointsDiff !== 0) return pointsDiff;
@@ -1114,7 +1211,7 @@ export const commands: Chat.ChatCommands = {
 				paginatedResults.forEach(card => {
 					output += `<tr class="themed-table-row">`;
 					output += `<td>${card.cardId}</td>`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -1151,7 +1248,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async stats(target, room, user) {
-			if (!this.runBroadcast()) return;
 			const sortBy = toID(target) || 'total';
 			let sortQuery: any = { 'stats.totalCards': -1 };
 			let sortLabel = 'Total Cards';
@@ -1227,7 +1323,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async sets(target, room, user) {
-			if (!this.runBroadcast()) return;
 			let output = `<div class="themed-table-container">`;
 			output += `<h3 class="themed-table-title">Pokemon TCG Sets</h3>`;
 			
@@ -1309,7 +1404,7 @@ export const commands: Chat.ChatCommands = {
 
 	tcghelp: [
 		'/tcg collection [user] - View a user\'s TCG card collection.',
-		'/tcg card [cardId] - View the details of a specific card.',
+		'/tcg viewcard [cardId] - View the details of a specific card.',
 		'/tcg openpack [set ID] - Open a pack of 10 cards from a specific set.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg trade offer, [user], [your cards], [their cards] - Offer a trade.',
