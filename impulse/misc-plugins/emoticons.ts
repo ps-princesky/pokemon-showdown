@@ -210,7 +210,7 @@ Impulse.parseEmoticons = parseEmoticons;
 // Initialize emoticons on startup
 loadEmoticons();
 
-export const commands: ChatCommands = {
+export const commands: Chat.ChatCommands = {
   blockemote: "ignoreemotes",
   blockemotes: "ignoreemotes",
   blockemoticon: "ignoreemotes",
