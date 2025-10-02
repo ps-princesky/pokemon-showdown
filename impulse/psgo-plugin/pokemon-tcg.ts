@@ -1083,6 +1083,14 @@ export const commands: Chat.ChatCommands = {
 
 			try {
 				const allResults = await TCGCards.find(query);
+				
+				// --- NEW: Default sort by rarity (points) then by name ---
+				allResults.sort((a, b) => {
+					const pointsDiff = getCardPoints(b) - getCardPoints(a);
+					if (pointsDiff !== 0) return pointsDiff;
+					return a.name.localeCompare(b.name);
+				});
+
 				const totalResults = allResults.length;
 
 				if (totalResults === 0) {
