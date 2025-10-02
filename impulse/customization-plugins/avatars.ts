@@ -114,15 +114,17 @@ export const commands: Chat.ChatCommands = {
       }
     },
   },
-  
-    customavatarhelp(target, room, user) {
+   
+   customavatarhelp(target, room, user) {
       if (!this.runBroadcast()) return;
       this.sendReplyBox(
-        `<p><strong>Custom Avatar Commands</strong></p>` +
-        `<ul>` +
-        `<li><code>/customavatar set [username], [image url]</code> - Sets a user's avatar (Requires: ~)</li>` +
-        `<li><code>/customavatar delete [username]</code> - Removes a user's avatar (Requires: ~)</li>` +
-        `</ul>`
+         `<div><b><center>Custom Avatar Commands</center></b><br>` +
+         `<ul>` +
+         `<li><code>/customavatar set [username], [image url]</code> - Sets a user's avatar</li>` +
+         `<li><code>/customavatar delete [username]</code> - Removes a user's avatar</li>` +
+         `</ul>` +
+         `<small>All commands require ~ or higher permission.</small>` +
+         `</div>`
       );
-    },
+   },	
 };
