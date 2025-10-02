@@ -1,0 +1,155 @@
+/* Impulse Themed Table */
+
+.themed-table-container {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: 8px;
+  background: rgba(240, 248, 255, 0.8);
+  border: 1px solid rgba(30, 144, 255, 0.2);
+  box-shadow: 0 2px 4px rgba(70, 130, 180, 0.2);
+}
+
+/* Dark theme support for Pokemon Showdown */
+body.dark .themed-table-container,
+.dark .themed-table-container,
+[data-theme="dark"] .themed-table-container {
+  background: rgba(30, 60, 90, 0.8);
+  border-color: rgba(135, 206, 235, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.themed-table-title {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  color: #2d2d2d !important;
+  border-bottom: 2px solid rgba(30, 144, 255, 0.3);
+  background: rgba(240, 248, 255, 0.6);
+  text-align: center !important;
+}
+
+body.dark .themed-table-title,
+.dark .themed-table-title,
+[data-theme="dark"] .themed-table-title {
+  color: #e0f0ff !important;
+  background: rgba(30, 60, 90, 0.7);
+  border-bottom-color: rgba(135, 206, 235, 0.4);
+}
+
+.themed-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: Verdana, Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+}
+
+.themed-table-header {
+  background: linear-gradient(to bottom, rgba(224, 240, 255, 0.9), rgba(176, 224, 230, 0.9)) !important;
+}
+
+body.dark .themed-table-header,
+.dark .themed-table-header,
+[data-theme="dark"] .themed-table-header {
+  background: linear-gradient(to bottom, rgba(30, 80, 120, 0.95), rgba(30, 60, 90, 0.95)) !important;
+}
+
+.themed-table-header th {
+  padding: 0.5rem 0.75rem;
+  text-align: center !important;
+  font-weight: 600 !important;
+  font-size: 9pt !important;
+  color: #1e3a5f !important;
+  background: transparent !important;
+  border-bottom: 2px solid rgba(30, 144, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+body.dark .themed-table-header th,
+.dark .themed-table-header th,
+[data-theme="dark"] .themed-table-header th {
+  color: #b3d9ff !important;
+  background: transparent !important;
+  border-bottom-color: rgba(135, 206, 235, 0.5);
+}
+
+.themed-table-row {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  background-color: transparent;
+}
+
+.themed-table-row:nth-child(even) {
+  background-color: rgba(135, 206, 235, 0.05);
+}
+
+body.dark .themed-table-row:nth-child(even),
+.dark .themed-table-row:nth-child(even),
+[data-theme="dark"] .themed-table-row:nth-child(even) {
+  background-color: rgba(135, 206, 235, 0.1);
+}
+
+.themed-table-row:hover {
+  background-color: rgba(135, 206, 235, 0.25);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(135, 206, 235, 0.3);
+}
+
+body.dark .themed-table-row:hover,
+.dark .themed-table-row:hover,
+[data-theme="dark"] .themed-table-row:hover {
+  background-color: rgba(135, 206, 235, 0.35);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(135, 206, 235, 0.4);
+}
+
+.themed-table-row td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(30, 144, 255, 0.15);
+  color: #2d2d2d !important;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+body.dark .themed-table-row td,
+.dark .themed-table-row td,
+[data-theme="dark"] .themed-table-row td {
+  color: #d0e8ff !important;
+  border-bottom-color: rgba(135, 206, 235, 0.2);
+}
+
+.themed-table-row:last-child td {
+  border-bottom: none;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .themed-table-title {
+    font-size: 1rem !important;
+    padding: 0.6rem 0.8rem;
+  }
+  
+  .themed-table-header th,
+  .themed-table-row td {
+    padding: 0.4rem 0.6rem;
+    font-size: 8pt !important;
+  }
+  
+  /* Disable transform on mobile for better performance */
+  .themed-table-row:hover {
+    transform: none;
+  }
+}
+
+/* Smooth scrolling for overflow */
+.themed-table-container {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Impulse Themed Table Ends */
