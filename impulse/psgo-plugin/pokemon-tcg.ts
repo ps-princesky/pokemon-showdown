@@ -667,7 +667,7 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help pokemontcg');
+			return this.parse('/help tcg');
 		},
 
 		async addcard(target, room, user) {
@@ -840,7 +840,7 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
-		async viewcard(target, room, user) {
+		async card(target, room, user) {
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg viewcard [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
@@ -1131,7 +1131,7 @@ export const commands: Chat.ChatCommands = {
 
 	tcghelp: [
 		'/tcg collection [user] - View a user\'s TCG card collection.',
-		'/tcg viewcard [cardId] - View the details of a specific card.',
+		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg openpack [set ID] - Open a pack of 10 cards from a specific set.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg trade offer, [user], [your cards], [their cards] - Offer a trade.',
