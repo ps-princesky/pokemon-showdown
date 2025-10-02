@@ -6,10 +6,9 @@
 */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { User } from '../users';
 
 const DEFAULT_SORT = 'rarity';
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 // MongoDB Document Interfaces
 interface Attack {
