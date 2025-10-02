@@ -1,6 +1,6 @@
 /*
 * Pokemon Showdown
-* News System - Refactored with Atomic Operations
+* News System
 * Instructions:
 * Add this code inside server/users.ts
 * handleRename function
