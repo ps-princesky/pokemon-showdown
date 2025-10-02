@@ -960,7 +960,7 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
-		async viewcard(target, room, user) {
+		async card(target, room, user) {
 			if (!this.runBroadcast()) return;
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg viewcard [cardId]");
 
