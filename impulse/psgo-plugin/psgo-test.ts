@@ -281,7 +281,7 @@ export class PSGOSystem {
     const id = toID(userId);
     
     // Verify card exists
-    const card = await CardsDB.findOne({ _id: cardId, isEnabled: true });
+    const card = await CardsDB.findOne({ _id: cardId });
     if (!card) throw new Error('Card not found or disabled');
 
     const compositeId = `${id}_${cardId}`;
@@ -411,7 +411,7 @@ export class PSGOSystem {
     }
 
     const cardIds = userCards.map(uc => uc.cardId);
-    const cards = await CardsDB.find({ _id: { $in: cardIds }, isEnabled: true });
+    const cards = await CardsDB.find({ _id: { $in: cardIds } });
     const cardMap = new Map(cards.map(c => [c._id, c]));
 
     const enrichedCards = userCards
@@ -459,10 +459,25 @@ export class PSGOSystem {
     pageSize: number = PAGE_SIZE
   ): Promise<{cards: EnhancedCardDocument[]; total: number; hasMore: boolean}> {
     const skip = (page - 1) * pageSize;
+    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\  static async searchCards(
+    query: string,
+    page: number = 1,
+    pageSize: number = PAGE_SIZE
+  ): Promise<{cards: EnhancedCardDocument[]; total: number; hasMore: boolean}> {
+    const skip = (page - 1) * pageSize;
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
     const matchConditions = {
       isEnabled: true,
+      $or: [
+        { name: { $regex: regex } },
+        { _id: { $regex: regex } },
+        { 'set.name': { $regex: regex } },
+        { artist: { $regex: regex } }
+      ]
+    };'), 'i');
+
+    const matchConditions = {
       $or: [
         { name: { $regex: regex } },
         { _id: { $regex: regex } },
@@ -606,7 +621,7 @@ async function viewCard(context: any, cardId: string): Promise<void> {
   if (!cardId) return context.sendReply(`Please specify a card ID.`);
 
   try {
-    const card = await CardsDB.findOne({ _id: cardId, isEnabled: true });
+    const card = await CardsDB.findOne({ _id: cardId });
     if (!card) return context.sendReply(`Card not found.`);
 
     let html = `<div class="card-details" style="max-width: 600px;">` +
