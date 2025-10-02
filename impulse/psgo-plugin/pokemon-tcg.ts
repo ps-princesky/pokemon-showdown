@@ -758,6 +758,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async collection(target, room, user) {
+			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
 			const targetUsername = parts[0] || user.name;
 			const targetId = toID(targetUsername);
@@ -849,7 +850,7 @@ export const commands: Chat.ChatCommands = {
 					if (!card) return;
 					
 					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -961,6 +962,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async viewcard(target, room, user) {
+			if (!this.runBroadcast()) return;
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg viewcard [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
@@ -1015,6 +1017,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
+			if (!this.runBroadcast()) return;
 			const CARDS_PER_PAGE = 20;
 
 			if (!target) {
@@ -1112,7 +1115,7 @@ export const commands: Chat.ChatCommands = {
 				paginatedResults.forEach(card => {
 					output += `<tr class="themed-table-row">`;
 					output += `<td>${card.cardId}</td>`;
-					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -1149,6 +1152,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async stats(target, room, user) {
+			if (!this.runBroadcast()) return;
 			const sortBy = toID(target) || 'total';
 			let sortQuery: any = { 'stats.totalCards': -1 };
 			let sortLabel = 'Total Cards';
@@ -1224,6 +1228,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async sets(target, room, user) {
+			if (!this.runBroadcast()) return;
 			let output = `<div class="themed-table-container">`;
 			output += `<h3 class="themed-table-title">Pokemon TCG Sets</h3>`;
 			
@@ -1305,7 +1310,7 @@ export const commands: Chat.ChatCommands = {
 
 	tcghelp: [
 		'/tcg collection [user] - View a user\'s TCG card collection.',
-		'/tcg viewcard [cardId] - View the details of a specific card.',
+		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg openpack [set ID] - Open a pack of 10 cards from a specific set.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg trade offer, [user], [your cards], [their cards] - Offer a trade.',
