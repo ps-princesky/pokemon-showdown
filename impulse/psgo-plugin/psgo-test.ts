@@ -306,11 +306,11 @@ export class PSGOSystem {
     const id = toID(userId);
     const compositeId = `${id}_${cardId}`;
     
-    const userCard = await UserCardsDB.findOne(compositeId);
+    const userCard = await UserCardsDB.findOne({ _id: compositeId });
     if (!userCard || userCard.quantity < quantity) return false;
 
     if (userCard.quantity === quantity) {
-      await UserCardsDB.deleteOne(compositeId);
+      await UserCardsDB.deleteOne({ _id: compositeId });
     } else {
       await UserCardsDB.updateOne(
         { _id: compositeId },
@@ -331,8 +331,8 @@ export class PSGOSystem {
     const toId = toID(toUserId);
 
     const [fromProfile, toProfile] = await Promise.all([
-      UserProfilesDB.findOne(fromId),
-      UserProfilesDB.findOne(toId)
+      UserProfilesDB.findOne({ _id: fromId }),
+      UserProfilesDB.findOne({ _id: toId })
     ]);
 
     if (!fromProfile?.allowTrades || !toProfile?.allowTrades) {
@@ -343,8 +343,8 @@ export class PSGOSystem {
     const toCompositeId = `${toId}_${cardId}`;
 
     const [fromCard, cardData] = await Promise.all([
-      UserCardsDB.findOne(fromCompositeId),
-      CardsDB.findOne(cardId)
+      UserCardsDB.findOne({ _id: fromCompositeId }),
+      CardsDB.findOne({ _id: cardId })
     ]);
 
     if (!fromCard || fromCard.quantity < quantity) {
@@ -357,7 +357,7 @@ export class PSGOSystem {
 
     // Remove from sender
     if (fromCard.quantity === quantity) {
-      await UserCardsDB.deleteOne(fromCompositeId);
+      await UserCardsDB.deleteOne({ _id: fromCompositeId });
     } else {
       await UserCardsDB.updateOne(
         { _id: fromCompositeId },
@@ -366,14 +366,14 @@ export class PSGOSystem {
     }
 
     // Add to receiver
-    const toCard = await UserCardsDB.findOne(toCompositeId);
+    const toCard = await UserCardsDB.findOne({ _id: toCompositeId });
     if (toCard) {
       await UserCardsDB.updateOne(
         { _id: toCompositeId },
         { $inc: { quantity } }
       );
     } else {
-      await UserCardsDB.insert({
+      await UserCardsDB.insertOne({
         _id: toCompositeId,
         userId: toId,
         cardId,
@@ -403,7 +403,7 @@ export class PSGOSystem {
     const id = toID(userId);
     const skip = (page - 1) * pageSize;
 
-    const profile = await UserProfilesDB.findOne(id);
+    const profile = await UserProfilesDB.findOne({ _id: id });
     const userCards = await UserCardsDB.find({ userId: id });
 
     if (!userCards.length) {
