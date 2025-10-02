@@ -4,7 +4,7 @@
  * @license MIT
  */
 
-import { MongoDB } from '../mongodb_module';
+import { MongoDB } from '../../impulse/mongodb_module';
 
 interface TCGCard {
 	_id?: string;
@@ -481,7 +481,7 @@ async function listTrades(context: any, user: User) {
 
 // ==================== COMMANDS ====================
 
-export const commands: ChatCommands = {
+export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
