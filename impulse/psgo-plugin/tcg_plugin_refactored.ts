@@ -656,31 +656,102 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
-			if (!target) return this.errorReply('Usage: /tcg search [card name or type]');
+			const CARDS_PER_PAGE = 20;
 
-			const searchTerm = toID(target);
+			if (!target) {
+				return this.errorReply(`Usage: /tcg search [filter]:[value], [filter]:[value], ...`);
+			}
 
-			try {
-				const results = await TCGCards.find({
-					$or: [
-						{ name: { $regex: target, $options: 'i' } },
-						{ type: searchTerm },
-						{ set: { $regex: target, $options: 'i' } },
-						{ supertype: { $regex: target, $options: 'i' } },
-						{ subtypes: { $regex: target, $options: 'i' } },
-					],
-				});
+			const filters = target.split(',').map(f => f.trim());
+			const query: any = {};
+			const searchTerms: string[] = [];
+			let page = 1;
 
-				if (results.length === 0) {
-					return this.sendReply(`No cards found matching "${target}".`);
+			// --- Pagination and Filter Parsing ---
+			const commandArgs = [];
+			for (const filter of filters) {
+				const [key, ...valueParts] = filter.split(':');
+				const value = valueParts.join(':').trim();
+
+				if (!key || !value) continue;
+
+				// Separate page filter from search filters
+				if (toID(key) === 'page') {
+					const pageNum = parseInt(value);
+					if (!isNaN(pageNum) && pageNum > 0) {
+						page = pageNum;
+					}
+					continue; // Don't add page to the query or command string
 				}
 
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">Search Results for "${target}"</h3>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Card ID</th><th>Name</th><th>Set</th><th>Rarity</th><th>Type</th><th>Subtypes</th></tr>`;
+				commandArgs.push(filter);
+				searchTerms.push(`<strong>${key}</strong>: "${value}"`);
 
-				results.slice(0, 20).forEach(card => {
+				switch (toID(key)) {
+					case 'name':
+					case 'set':
+						query[toID(key)] = { $regex: value, $options: 'i' };
+						break;
+					case 'rarity':
+					case 'supertype':
+					case 'stage':
+						query[toID(key)] = value;
+						break;
+					case 'type':
+						query.type = value;
+						break;
+					case 'subtype':
+						query.subtypes = { $regex: value, $options: 'i' };
+						break;
+					case 'hp':
+						const match = value.match(/([<>=]+)?\s*(\d+)/);
+						if (match) {
+							const operator = match[1] || '=';
+							const amount = parseInt(match[2]);
+							if (isNaN(amount)) break;
+
+							if (operator === '>') query.hp = { $gt: amount };
+							else if (operator === '>=') query.hp = { $gte: amount };
+							else if (operator === '<') query.hp = { $lt: amount };
+							else if (operator === '<=') query.hp = { $lte: amount };
+							else query.hp = amount;
+						}
+						break;
+					default:
+						return this.errorReply(`Invalid filter: "${key}". Valid filters are: name, set, rarity, type, supertype, subtype, hp, stage.`);
+				}
+			}
+
+			if (Object.keys(query).length === 0) {
+				return this.errorReply('No valid filters provided. Usage: /tcg search [filter]:[value]');
+			}
+
+			try {
+				// --- Fetching Data for Pagination ---
+				// Note: For large databases, fetching all results can be slow.
+				// A more advanced solution would use database-level skip/limit.
+				const allResults = await TCGCards.find(query);
+				const totalResults = allResults.length;
+
+				if (totalResults === 0) {
+					return this.sendReply(`No cards found matching your criteria.`);
+				}
+
+				const startIndex = (page - 1) * CARDS_PER_PAGE;
+				const paginatedResults = allResults.slice(startIndex, startIndex + CARDS_PER_PAGE);
+				const totalPages = Math.ceil(totalResults / CARDS_PER_PAGE);
+
+				// --- Building the HTML Output ---
+				let output = `<div class="themed-table-container">`;
+				output += `<h3 class="themed-table-title">Search Results</h3>`;
+				output += `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
+
+				// --- Added Styling Wrapper ---
+				output += `<div style="max-height: 370px; overflow-y: auto;">`;
+				output += `<table class="themed-table">`;
+				output += `<tr class="themed-table-header"><th>Card ID</th><th>Name</th><th>Set</th><th>Rarity</th><th>Type</th><th>Subtypes</th><th>HP</th></tr>`;
+
+				paginatedResults.forEach(card => {
 					output += `<tr class="themed-table-row">`;
 					output += `<td>${card.cardId}</td>`;
 					output += `<td><strong>${card.name}</strong></td>`;
@@ -688,13 +759,30 @@ export const commands: Chat.ChatCommands = {
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
 					output += `<td>${card.subtypes.join(', ')}</td>`;
+					output += `<td>${card.hp || 'N/A'}</td>`;
 					output += `</tr>`;
 				});
 
 				output += `</table>`;
-				if (results.length > 20) {
-					output += `<p><em>Showing 20 of ${results.length} results.</em></p>`;
+				output += `</div>`; // Close styling wrapper
+
+				// --- Pagination Buttons and Info ---
+				output += `<p style="text-align:center; margin-top: 8px;">`;
+				output += `Showing ${paginatedResults.length} of ${totalResults} results.`;
+				output += `</p>`;
+
+				const commandString = `/tcg search ${commandArgs.join(', ')}`;
+
+				output += `<div style="text-align: center; margin-top: 5px;">`;
+				if (page > 1) {
+					output += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
 				}
+				output += `<strong>Page ${page} of ${totalPages}</strong>`;
+				if (startIndex + CARDS_PER_PAGE < totalResults) {
+					output += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
+				}
+				output += `</div>`;
+
 				output += `</div>`;
 
 				return this.sendReplyBox(output);
