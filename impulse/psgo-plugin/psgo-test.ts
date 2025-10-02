@@ -453,29 +453,13 @@ export class PSGOSystem {
     };
   }
 
-  static async searchCards(
-    query: string,
-    page: number = 1,
-    pageSize: number = PAGE_SIZE
-  ): Promise<{cards: EnhancedCardDocument[]; total: number; hasMore: boolean}> {
-    const skip = (page - 1) * pageSize;
-    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\  static async searchCards(
+   static async searchCards(
     query: string,
     page: number = 1,
     pageSize: number = PAGE_SIZE
   ): Promise<{cards: EnhancedCardDocument[]; total: number; hasMore: boolean}> {
     const skip = (page - 1) * pageSize;
     const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-
-    const matchConditions = {
-      isEnabled: true,
-      $or: [
-        { name: { $regex: regex } },
-        { _id: { $regex: regex } },
-        { 'set.name': { $regex: regex } },
-        { artist: { $regex: regex } }
-      ]
-    };'), 'i');
 
     const matchConditions = {
       $or: [
@@ -496,8 +480,8 @@ export class PSGOSystem {
       total,
       hasMore: skip + pageSize < total
     };
-  }
-
+   }
+   
   static async bulkAddCards(cards: any[]): Promise<void> {
     const operations = cards.map(card => ({
       _id: card.id,
