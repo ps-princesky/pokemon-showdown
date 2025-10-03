@@ -1261,6 +1261,448 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`An error occurred with your packs: ${e.message}`);
 			}
 		},
+
+		/**
+ * Tournament Commands
+ * Add these to the exports.commands object in pokemon-tcg.ts
+ * Import at top: import * as TCG_Tournament from './tcg_tournaments';
+ */
+
+async tournament(target, room, user) {
+	const [action, ...args] = target.split(',').map(p => p.trim());
+
+	switch (toID(action)) {
+		case 'create': {
+			this.checkCan('mute', null, room);
+			const [name, entryFeeStr, setId, maxParticipantsStr] = args;
+			
+			if (!name || !entryFeeStr || !setId || !maxParticipantsStr) {
+				return this.errorReply('Usage: /tcg tournament create, [name], [entry fee], [set ID], [max participants]');
+			}
+
+			const entryFee = parseInt(entryFeeStr);
+			const maxParticipants = parseInt(maxParticipantsStr);
+
+			if (isNaN(entryFee) || isNaN(maxParticipants)) {
+				return this.errorReply('Entry fee and max participants must be numbers.');
+			}
+
+			try {
+				const result = await TCG_Tournament.createTournament(
+					name,
+					user.id,
+					entryFee,
+					toID(setId),
+					maxParticipants
+				);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to create tournament.');
+				}
+
+				this.sendReply(`Tournament "${name}" created successfully! ID: ${result.tournamentId}`);
+				this.parse(`/tcg tournament view ${result.tournamentId}`);
+			} catch (e: any) {
+				return this.errorReply(`Error creating tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'join': {
+			const [tournamentId] = args;
+			if (!tournamentId) {
+				return this.errorReply('Usage: /tcg tournament join, [tournament ID]');
+			}
+
+			try {
+				const result = await TCG_Tournament.joinTournament(tournamentId, user.id, user.name);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to join tournament.');
+				}
+
+				this.sendReply(`You have successfully joined the tournament!`);
+				this.parse(`/tcg tournament view ${tournamentId}`);
+			} catch (e: any) {
+				return this.errorReply(`Error joining tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'leave': {
+			const [tournamentId] = args;
+			if (!tournamentId) {
+				return this.errorReply('Usage: /tcg tournament leave, [tournament ID]');
+			}
+
+			try {
+				const result = await TCG_Tournament.leaveTournament(tournamentId, user.id);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to leave tournament.');
+				}
+
+				this.sendReply(`You have left the tournament and your entry fee has been refunded.`);
+			} catch (e: any) {
+				return this.errorReply(`Error leaving tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'start': {
+			const [tournamentId] = args;
+			if (!tournamentId) {
+				return this.errorReply('Usage: /tcg tournament start, [tournament ID]');
+			}
+
+			try {
+				const result = await TCG_Tournament.startTournament(tournamentId, user.id);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to start tournament.');
+				}
+
+				this.sendReply(`Tournament has been started! The bracket has been generated.`);
+				this.parse(`/tcg tournament view ${tournamentId}`);
+			} catch (e: any) {
+				return this.errorReply(`Error starting tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'view': {
+			if (!this.runBroadcast()) return;
+			const [tournamentId] = args;
+			if (!tournamentId) {
+				return this.errorReply('Usage: /tcg tournament view, [tournament ID]');
+			}
+
+			try {
+				const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+				if (!tournament) {
+					return this.errorReply('Tournament not found.');
+				}
+
+				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(tournament.setId));
+				const displaySetName = setInfo ? setInfo.name : tournament.setId;
+
+				let content = `<div style="margin-bottom: 10px;">`;
+				content += `<strong>Host:</strong> ${Impulse.nameColor(tournament.host, true)} | `;
+				content += `<strong>Entry Fee:</strong> ${tournament.entryFee} Credits | `;
+				content += `<strong>Prize Pool:</strong> ${tournament.prizePool} Credits<br/>`;
+				content += `<strong>Set:</strong> ${displaySetName} | `;
+				content += `<strong>Status:</strong> ${tournament.status.toUpperCase()} | `;
+				content += `<strong>Participants:</strong> ${tournament.participants.length}/${tournament.maxParticipants}`;
+				content += `</div>`;
+
+				if (tournament.status === 'registration') {
+					content += `<h4>Registered Players:</h4>`;
+					if (tournament.participants.length === 0) {
+						content += `<p><em>No players registered yet.</em></p>`;
+					} else {
+						content += `<ul style="list-style: none; padding-left: 0;">`;
+						tournament.participants.forEach(p => {
+							content += `<li>${Impulse.nameColor(p.username, true)}</li>`;
+						});
+						content += `</ul>`;
+					}
+
+					const isParticipant = tournament.participants.some(p => p.userId === user.id);
+					const isHost = tournament.host === user.id;
+
+					content += `<div style="margin-top: 10px;">`;
+					if (!isParticipant) {
+						content += `<button name="send" value="/tcg tournament join, ${tournament.tournamentId}">Join Tournament</button> `;
+					} else {
+						content += `<button name="send" value="/tcg tournament leave, ${tournament.tournamentId}">Leave Tournament</button> `;
+					}
+					if (isHost) {
+						content += `<button name="send" value="/tcg tournament start, ${tournament.tournamentId}">Start Tournament</button> `;
+						content += `<button name="send" value="/tcg tournament cancel, ${tournament.tournamentId}">Cancel Tournament</button>`;
+					}
+					content += `</div>`;
+				}
+
+				if (tournament.status === 'in_progress' || tournament.status === 'completed') {
+					content += `<h4>Round ${tournament.currentRound} Matches:</h4>`;
+					content += `<table class="themed-table">`;
+					content += `<tr class="themed-table-header"><th>Match</th><th>Player 1</th><th>Player 2</th><th>Status</th></tr>`;
+
+					for (let i = 0; i < tournament.matches.length; i++) {
+						const match = tournament.matches[i];
+						const p1 = tournament.participants.find(p => p.userId === match.player1);
+						const p2 = tournament.participants.find(p => p.userId === match.player2);
+
+						content += `<tr class="themed-table-row">`;
+						content += `<td>Match ${i + 1}</td>`;
+						content += `<td>${p1 ? Impulse.nameColor(p1.username, true) : 'Unknown'}</td>`;
+						content += `<td>${p2 ? Impulse.nameColor(p2.username, true) : 'Unknown'}</td>`;
+
+						if (match.winner) {
+							const winner = tournament.participants.find(p => p.userId === match.winner);
+							content += `<td><button name="send" value="/tcg tournament match, ${tournament.tournamentId}, ${match.matchId}">Winner: ${winner ? winner.username : 'Unknown'}</button></td>`;
+						} else {
+							const canPlay = match.player1 === user.id || match.player2 === user.id || tournament.host === user.id;
+							if (canPlay) {
+								content += `<td><button name="send" value="/tcg tournament play, ${tournament.tournamentId}, ${match.matchId}">Play Match</button></td>`;
+							} else {
+								content += `<td>Pending</td>`;
+							}
+						}
+						content += `</tr>`;
+					}
+					content += `</table>`;
+
+					if (tournament.status === 'completed' && tournament.winner) {
+						const winner = tournament.participants.find(p => p.userId === tournament.winner);
+						content += `<div style="margin-top: 15px; padding: 10px; background: #2ecc7140; border-radius: 5px; text-align: center;">`;
+						content += `<h3 style="color: #2ecc71; margin: 0;">Tournament Winner: ${winner ? Impulse.nameColor(winner.username, true) : 'Unknown'}</h3>`;
+						content += `</div>`;
+					}
+				}
+
+				const output = TCG_UI.buildPage(tournament.name, content);
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error viewing tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'play': {
+			if (!this.runBroadcast()) return;
+			const [tournamentId, matchId] = args;
+			if (!tournamentId || !matchId) {
+				return this.errorReply('Usage: /tcg tournament play, [tournament ID], [match ID]');
+			}
+
+			try {
+				const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+				if (!tournament) {
+					return this.errorReply('Tournament not found.');
+				}
+
+				const match = tournament.matches.find(m => m.matchId === matchId);
+				if (!match) {
+					return this.errorReply('Match not found.');
+				}
+
+				const canPlay = match.player1 === user.id || match.player2 === user.id || tournament.host === user.id;
+				if (!canPlay) {
+					return this.errorReply('You are not a participant in this match.');
+				}
+
+				const result = await TCG_Tournament.playMatch(tournamentId, matchId);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to play match.');
+				}
+
+				const matchData = result.matchData!;
+				const p1 = tournament.participants.find(p => p.userId === match.player1);
+				const p2 = tournament.participants.find(p => p.userId === match.player2);
+				const winner = tournament.participants.find(p => p.userId === result.winner);
+
+				const p1Cards = await TCGCards.find({ cardId: { $in: matchData.player1Pack || [] } });
+				const p2Cards = await TCGCards.find({ cardId: { $in: matchData.player2Pack || [] } });
+
+				p1Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+				p2Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+
+				let output = `<div class="infobox">`;
+				output += `<h2 style="text-align:center;">Tournament Match Results</h2>`;
+				output += `<table style="width:100%;"><tr>`;
+				output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+				output += `<strong>${p1 ? Impulse.nameColor(p1.username, true) : 'Player 1'}'s Pack (${matchData.player1Points} Points)</strong>`;
+				output += `<table class="themed-table">`;
+				p1Cards.forEach(c => {
+					output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+				});
+				output += `</table></td>`;
+				output += `<td style="width:50%; vertical-align:top; padding-left:5px;">`;
+				output += `<strong>${p2 ? Impulse.nameColor(p2.username, true) : 'Player 2'}'s Pack (${matchData.player2Points} Points)</strong>`;
+				output += `<table class="themed-table">`;
+				p2Cards.forEach(c => {
+					output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+				});
+				output += `</table></td></tr></table><hr/>`;
+				output += `<h3 style="text-align:center; color:#2ecc71;">${winner ? winner.username : 'Unknown'} wins and advances!</h3>`;
+				output += `</div>`;
+
+				this.sendReplyBox(output);
+
+				const updatedTournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+				if (updatedTournament?.status === 'completed') {
+					setTimeout(() => {
+						this.parse(`/tcg tournament view ${tournamentId}`);
+					}, 1000);
+				}
+			} catch (e: any) {
+				return this.errorReply(`Error playing match: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'match': {
+			if (!this.runBroadcast()) return;
+			const [tournamentId, matchId] = args;
+			if (!tournamentId || !matchId) {
+				return this.errorReply('Usage: /tcg tournament match, [tournament ID], [match ID]');
+			}
+
+			try {
+				const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+				if (!tournament) {
+					return this.errorReply('Tournament not found.');
+				}
+
+				let match = null;
+				for (const roundMatches of tournament.bracketHistory) {
+					const found = roundMatches.find(m => m.matchId === matchId);
+					if (found) {
+						match = found;
+						break;
+					}
+				}
+
+				if (!match || !match.winner) {
+					return this.errorReply('Match not found or not yet played.');
+				}
+
+				const p1 = tournament.participants.find(p => p.userId === match.player1);
+				const p2 = tournament.participants.find(p => p.userId === match.player2);
+				const winner = tournament.participants.find(p => p.userId === match.winner);
+
+				const p1Cards = await TCGCards.find({ cardId: { $in: match.player1Pack || [] } });
+				const p2Cards = await TCGCards.find({ cardId: { $in: match.player2Pack || [] } });
+
+				p1Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+				p2Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+
+				let output = `<div class="infobox">`;
+				output += `<h2 style="text-align:center;">Match Results</h2>`;
+				output += `<table style="width:100%;"><tr>`;
+				output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+				output += `<strong>${p1 ? Impulse.nameColor(p1.username, true) : 'Player 1'}'s Pack (${match.player1Points} Points)</strong>`;
+				output += `<table class="themed-table">`;
+				p1Cards.forEach(c => {
+					output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+				});
+				output += `</table></td>`;
+				output += `<td style="width:50%; vertical-align:top; padding-left:5px;">`;
+				output += `<strong>${p2 ? Impulse.nameColor(p2.username, true) : 'Player 2'}'s Pack (${match.player2Points} Points)</strong>`;
+				output += `<table class="themed-table">`;
+				p2Cards.forEach(c => {
+					output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+				});
+				output += `</table></td></tr></table><hr/>`;
+				output += `<h3 style="text-align:center; color:#2ecc71;">Winner: ${winner ? winner.username : 'Unknown'}</h3>`;
+				output += `</div>`;
+
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error viewing match: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'list': {
+			if (!this.runBroadcast()) return;
+			try {
+				const tournaments = await TCG_Tournament.listActiveTournaments();
+
+				if (tournaments.length === 0) {
+					return this.sendReplyBox(TCG_UI.buildPage('Active Tournaments', '<p>No active tournaments at this time.</p>'));
+				}
+
+				let content = `<table class="themed-table">`;
+				content += `<tr class="themed-table-header"><th>Name</th><th>Host</th><th>Players</th><th>Entry Fee</th><th>Prize Pool</th><th>Status</th><th></th></tr>`;
+
+				for (const t of tournaments) {
+					content += `<tr class="themed-table-row">`;
+					content += `<td><strong>${t.name}</strong></td>`;
+					content += `<td>${Impulse.nameColor(t.host, true)}</td>`;
+					content += `<td>${t.participants.length}/${t.maxParticipants}</td>`;
+					content += `<td>${t.entryFee} Credits</td>`;
+					content += `<td>${t.prizePool} Credits</td>`;
+					content += `<td>${t.status === 'registration' ? 'Open' : 'In Progress'}</td>`;
+					content += `<td><button name="send" value="/tcg tournament view, ${t.tournamentId}">View</button></td>`;
+					content += `</tr>`;
+				}
+				content += `</table>`;
+
+				const output = TCG_UI.buildPage('Active Tournaments', content);
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error listing tournaments: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'history': {
+			if (!this.runBroadcast()) return;
+			const targetUser = args[0] ? toID(args[0]) : user.id;
+			const targetUsername = args[0] || user.name;
+
+			try {
+				const tournaments = await TCG_Tournament.getUserTournamentHistory(targetUser);
+
+				if (tournaments.length === 0) {
+					return this.sendReplyBox(TCG_UI.buildPage(`${targetUsername}'s Tournament History`, '<p>No tournament history found.</p>'));
+				}
+
+				let content = `<table class="themed-table">`;
+				content += `<tr class="themed-table-header"><th>Tournament</th><th>Placement</th><th>Prize Pool</th><th>Date</th></tr>`;
+
+				for (const t of tournaments) {
+					const participant = t.participants.find(p => p.userId === targetUser);
+					const placement = t.winner === targetUser ? '1st' : 
+									  t.bracketHistory.length > 0 && 
+									  t.bracketHistory[t.bracketHistory.length - 1].some(m => 
+										  (m.player1 === targetUser || m.player2 === targetUser) && !m.winner
+									  ) ? '2nd' : 'Eliminated';
+
+					content += `<tr class="themed-table-row">`;
+					content += `<td><strong>${t.name}</strong></td>`;
+					content += `<td>${placement}</td>`;
+					content += `<td>${t.prizePool} Credits</td>`;
+					content += `<td>${new Date(t.completedAt || t.createdAt).toLocaleDateString()}</td>`;
+					content += `</tr>`;
+				}
+				content += `</table>`;
+
+				const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s Tournament History`, content);
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching history: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'cancel': {
+			const [tournamentId] = args;
+			if (!tournamentId) {
+				return this.errorReply('Usage: /tcg tournament cancel, [tournament ID]');
+			}
+
+			try {
+				const result = await TCG_Tournament.cancelTournament(tournamentId, user.id);
+
+				if (!result.success) {
+					return this.errorReply(result.error || 'Failed to cancel tournament.');
+				}
+
+				this.sendReply(`Tournament has been cancelled. All entry fees have been refunded.`);
+			} catch (e: any) {
+				return this.errorReply(`Error cancelling tournament: ${e.message}`);
+			}
+			break;
+		}
+
+		default:
+			return this.errorReply('Invalid tournament action. Use: create, join, leave, start, view, play, match, list, history, or cancel.');
+	}
+},
 	},
 	
 	tcghelp: [
@@ -1288,5 +1730,15 @@ export const commands: Chat.ChatCommands = {
 		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
 		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
 		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
+		'/tcg tournament create, [name], [entry fee], [set ID], [max participants] - Create a tournament (requires room staff).',
+		'/tcg tournament join, [tournament ID] - Join a tournament.',
+		'/tcg tournament leave, [tournament ID] - Leave a tournament before it starts.',
+		'/tcg tournament start, [tournament ID] - Start a tournament (host only).',
+		'/tcg tournament view, [tournament ID] - View tournament details and bracket.',
+		'/tcg tournament play, [tournament ID], [match ID] - Play your tournament match.',
+		'/tcg tournament match, [tournament ID], [match ID] - View results of a completed match.',
+		'/tcg tournament list - View all active tournaments.',
+		'/tcg tournament history [user] - View tournament history for a user.',
+		'/tcg tournament cancel, [tournament ID] - Cancel a tournament (host only).',
 	],
 };
