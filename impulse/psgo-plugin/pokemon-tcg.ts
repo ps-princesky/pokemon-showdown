@@ -196,8 +196,7 @@ export const commands: Chat.ChatCommands = {
 			try {
 				const collection = await UserCollections.findOne({ userId: targetId });
 				if (!collection || collection.cards.length === 0) {
-					this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
-					return;
+					return this.sendReplyBox(`${targetUsername} doesn't have any cards in their collection yet!`);
 				}
 
 				query.cardId = { $in: collection.cards.map(c => c.cardId) };
@@ -569,7 +568,7 @@ export const commands: Chat.ChatCommands = {
 				this.sendReplyBox(output);
 
 			} catch (e: any) {
-				return this.errorReply(`Error fetching set progress: ${e.message}`);
+				this.errorReply(`Error fetching set progress: ${e.message}`);
 			}
 		},
 
@@ -725,7 +724,194 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async battle(target, room, user) {
-			// ... (full battle command)
+			const [action, ...args] = target.split(',').map(p => p.trim());
+
+			switch (toID(action)) {
+				case 'challenge':
+				case 'chal': {
+					if (!this.runBroadcast()) return;
+					const [targetUsername, wagerStr] = args;
+					if (!targetUsername || !wagerStr) {
+						return this.errorReply("Usage: /tcg battle challenge, [user], [wager]");
+					}
+					const wager = parseInt(wagerStr);
+					if (isNaN(wager) || wager <= 0) {
+						return this.errorReply("The wager must be a positive number.");
+					}
+
+					const challengerId = user.id;
+					const targetId = toID(targetUsername);
+
+					if (challengerId === targetId) return this.errorReply("You cannot challenge yourself.");
+					if (battleChallenges.has(targetId) || battleChallenges.has(challengerId)) {
+						return this.errorReply("One of you already has a pending battle challenge.");
+					}
+
+					try {
+						const challengerBalance = await TCG_Economy.getUserBalance(challengerId);
+						if (challengerBalance < wager) {
+							return this.errorReply("You do not have enough Credits to make that wager.");
+						}
+
+						const availableSets = await TCGCards.distinct('set');
+						if (availableSets.length === 0) {
+							return this.errorReply("There are no sets available for a pack battle.");
+						}
+						const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
+
+						battleChallenges.set(targetId, { from: challengerId, wager, setId: randomSetId });
+						setTimeout(() => {
+							if (battleChallenges.get(targetId)?.from === challengerId) {
+								battleChallenges.delete(targetId);
+								this.sendReply(`Your battle challenge to ${targetUsername} has expired.`);
+							}
+						}, 2 * 60 * 1000);
+
+						this.sendReply(`You have challenged ${targetUsername} to a ${wager} Credit pack battle! They have 2 minutes to accept.`);
+						const targetUserObj = Users.get(targetId);
+						if (targetUserObj) {
+							targetUserObj.sendTo(room, `|html|<div class="infobox"><strong>${user.name} has challenged you to a ${wager} Credit Pack Battle!</strong><br/>Type <code>/tcg battle accept, ${user.name}</code> to accept.</div>`);
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error creating battle: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'accept': {
+					const broadcast = this.broadcasting;
+					if (!this.runBroadcast()) return;
+					const [challengerName] = args;
+					if (!challengerName) return this.errorReply("Usage: /tcg battle accept, [user]");
+					
+					const acceptorId = user.id;
+					const challengerId = toID(challengerName);
+					
+					const challenge = battleChallenges.get(acceptorId);
+					if (!challenge || challenge.from !== challengerId) {
+						return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
+					}
+					
+					const { wager, setId } = challenge;
+					battleChallenges.delete(acceptorId);
+
+					try {
+						const canAcceptorPay = await TCG_Economy.deductCurrency(acceptorId, wager);
+						if (!canAcceptorPay) {
+							return this.errorReply("You do not have enough Credits to accept this wager.");
+						}
+
+						const canChallengerPay = await TCG_Economy.deductCurrency(challengerId, wager);
+						if (!canChallengerPay) {
+							await TCG_Economy.grantCurrency(acceptorId, wager); // Refund acceptor
+							return this.errorReply(`${challengerName} no longer has enough Credits for this wager. The battle is cancelled.`);
+						}
+
+						const [pack1, pack2] = await Promise.all([generatePack(setId), generatePack(setId)]);
+						if (!pack1 || !pack2) throw new Error("Could not generate packs for the battle.");
+
+						const points1 = pack1.reduce((sum, card) => sum + getCardPoints(card), 0);
+						const points2 = pack2.reduce((sum, card) => sum + getCardPoints(card), 0);
+
+						let winnerId = '';
+						let winnerName = '';
+						if (points1 > points2) {
+							winnerId = challengerId;
+							winnerName = challengerName;
+						} else if (points2 > points1) {
+							winnerId = acceptorId;
+							winnerName = user.name;
+						}
+
+						if (winnerId) {
+							await TCG_Economy.grantCurrency(winnerId, wager * 2);
+						} else {
+							await Promise.all([
+								TCG_Economy.grantCurrency(challengerId, wager),
+								TCG_Economy.grantCurrency(acceptorId, wager),
+							]);
+						}
+						
+						const buildPackHtml = (pack: TCGCard[]) => {
+							pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+							return pack.map(c => `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`).join('');
+						};
+
+						let output = `<div class="infobox">`;
+						output += `<h2 style="text-align:center;">Pack Battle!</h2>`;
+						output += `<table style="width:100%;"><tr>`;
+						output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+						output += `<strong>${Impulse.nameColor(challengerName, true)}'s Pack (Total: ${points1} Points)</strong>`;
+						output += `<table class="themed-table"> ${buildPackHtml(pack1)} </table>`;
+						output += `</td><td style="width:50%; vertical-align:top; padding-left:5px;">`;
+						output += `<strong>${Impulse.nameColor(user.name, true)}'s Pack (Total: ${points2} Points)</strong>`;
+						output += `<table class="themed-table"> ${buildPackHtml(pack2)} </table>`;
+						output += `</td></tr></table><hr/>`;
+
+						if (winnerName) {
+							output += `<h3 style="text-align:center; color:#2ecc71;">${winnerName} wins ${wager * 2} Credits!</h3>`;
+						} else {
+							output += `<h3 style="text-align:center; color:#f1c40f;">It's a tie! Wagers have been refunded.</h3>`;
+						}
+						
+						output += `</div>`;
+						
+						this.sendReplyBox(output);
+
+						if (!broadcast) {
+							const challengerObj = Users.get(challengerId);
+							if (challengerObj) {
+								challengerObj.sendTo(room, `|uhtml|battle-result-${challengerId}|${output}`);
+							}
+						}
+
+					} catch (e: any) {
+						await TCG_Economy.grantCurrency(acceptorId, wager);
+						await TCG_Economy.grantCurrency(challengerId, wager);
+						return this.errorReply(`An error occurred during the battle, wagers have been refunded: ${e.message}`);
+					}
+					break;
+				}
+				
+				case 'reject': {
+					const [challengerName] = args;
+					if (!challengerName) return this.errorReply("Usage: /tcg battle reject, [user]");
+					const rejectorId = user.id;
+					const challengerId = toID(challengerName);
+
+					const challenge = battleChallenges.get(rejectorId);
+					if (!challenge || challenge.from !== challengerId) {
+						return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
+					}
+					
+					battleChallenges.delete(rejectorId);
+					this.sendReply(`You have rejected the battle challenge from ${challengerName}.`);
+					const challengerObj = Users.get(challengerId);
+					if (challengerObj) challengerObj.sendTo(room, `${user.name} has rejected your battle challenge.`);
+					break;
+				}
+
+				case 'cancel': {
+					const challengerId = user.id;
+					let found = false;
+					for (const [targetId, challenge] of battleChallenges.entries()) {
+						if (challenge.from === challengerId) {
+							battleChallenges.delete(targetId);
+							found = true;
+							break;
+						}
+					}
+					if (found) {
+						this.sendReply("You have cancelled your outgoing battle challenge.");
+					} else {
+						this.errorReply("You do not have an outgoing battle challenge.");
+					}
+					break;
+				}
+
+				default:
+					this.errorReply("Invalid battle action. Use `challenge`, `accept`, `reject`, or `cancel`.");
+			}
 		},
 		
 		async currency(target, room, user) {
@@ -845,7 +1031,7 @@ export const commands: Chat.ChatCommands = {
 		'/tcg pay [user], [amount] - Give credits to another user.',
 		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
 		'/tcg battle accept, [user] - Accept a pack battle challenge.',
-		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
+		'/tcg collection [user] - View a user\'s TCG card collection.',
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
