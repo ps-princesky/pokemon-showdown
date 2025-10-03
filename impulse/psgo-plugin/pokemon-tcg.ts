@@ -35,7 +35,9 @@ interface UserCollection {
 		favoriteType?: string;
 		totalPoints?: number; 
 	};
+	wishlist?: string[];
 	lastUpdated: number;
+	lastDaily?: number;
 }
 
 // Initialize collections
@@ -50,184 +52,58 @@ const SUPERTYPES = [
 ];
 
 const POKEMON_TYPES = [
-	'Grass',
-	'Fire',
-	'Water',
-	'Lightning',
-	'Psychic',
-	'Fighting',
-	'Darkness',
-	'Metal',
-	'Fairy',
-	'Dragon',
-	'Colorless',
+	'Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting',
+	'Darkness', 'Metal', 'Fairy', 'Dragon', 'Colorless',
 ];
 
 const SUBTYPES = {
 	Pokemon: [
-		'Amazing',
-		'Ancient',
-		'Baby',
-		'Basic',
-		'BREAK',
-		'Crystal Pokémon',
-		'Dark Pokémon',
-		'ex', // Lowercase for modern Scarlet & Violet ex
-		'EX', // Uppercase for older Black & White / XY EX
-		'Fusion Strike',
-		'Future',
-		'GX',
-		'LEGEND',
-		'Level-Up',
-		'Light Pokémon',
-		'Mega',
-		'Owner\'s Pokémon',
-		'Prime',
-		'Prism Star',
-		'Radiant',
-		'Rapid Strike',
-		'Restored',
-		'Shining',
-		'Single Strike',
-		'SP', // Special Pokémon from Diamond & Pearl / Platinum
-		'Stage 1',
-		'Stage 2',
-		'TAG TEAM',
-		'Team Aqua',
-		'Team Magma',
-		'Team Plasma',
-		'Tera',
-		'Ultra Beast',
-		'V',
-		'V-UNION',
-		'VMAX',
-		'VSTAR',
+		'Amazing', 'Ancient', 'Baby', 'Basic', 'BREAK', 'Crystal Pokémon',
+		'Dark Pokémon', 'ex', 'EX', 'Fusion Strike', 'Future', 'GX', 'LEGEND',
+		'Level-Up', 'Light Pokémon', 'Mega', 'Owner\'s Pokémon', 'Prime', 'Prism Star',
+		'Radiant', 'Rapid Strike', 'Restored', 'Shining', 'Single Strike', 'SP',
+		'Stage 1', 'Stage 2', 'TAG TEAM', 'Team Aqua', 'Team Magma', 'Team Plasma',
+		'Tera', 'Ultra Beast', 'V', 'V-UNION', 'VMAX', 'VSTAR',
 	],
 	Trainer: [
-		'ACE SPEC',
-		'Ancient',
-		'Fossil',
-		'Future',
-		'Goldenrod Game Corner',
-		'Item',
-		'Pokémon Tool',
-		'Rocket\'s Secret Machine',
-		'Stadium',
-		'Supporter',
-		'Technical Machine',
+		'ACE SPEC', 'Ancient', 'Fossil', 'Future', 'Goldenrod Game Corner', 'Item',
+		'Pokémon Tool', 'Rocket\'s Secret Machine', 'Stadium', 'Supporter', 'Technical Machine',
 	],
 	Energy: [
-		'Basic',
-		'Special',
+		'Basic', 'Special',
 	],
 };
 
 const RARITIES = [
-	// Core Rarities
-	'Common',
-	'Uncommon',
-	'Rare',
-
-	// Holo Variations
-	'Rare Holo',
-	'Reverse Holo',
-
-	// Classic & First Edition
-	'1st Edition',
-	'Shadowless',
-	'Rare Holo 1st Edition',
-
-	// Special Mechanics & Eras
-	'Shining',
-	'Gold Star',
-	'Rare Holo LV.X',
-	'Rare ex',
-	'Rare SP',
-	'Rare Prime',
-	'LEGEND',
-	'Rare BREAK',
-	'Prism Star',
-
-	// Modern "Rule Box" Pokémon
-	'Rare Holo EX',
-	'Rare Holo GX',
-	'Rare Holo V',
-	'Rare Holo VMAX',
-	'Rare Holo VSTAR',
-	
-	// Ultra Rare Tiers (Full Arts & Alternates)
-	'Full Art',
-	'Rare Ultra',
-	'Illustration Rare',
-	'Special Illustration Rare',
-	'Character Rare',
-	'Character Super Rare',
-	'Trainer Gallery',
-	
-	// Shiny Tiers
-	'Shiny Rare',
-	'Rare Shiny',
-	'Shiny Ultra Rare',
-	'Rare Shiny GX',
-	'Radiant Rare',
-	'Amazing Rare',
-
-	// Secret & Gold Tiers
-	'Rare Secret',
-	'Rare Rainbow',
-	'Gold Full Art',
-	'Rare Gold',
-	'Hyper Rare',
-
-	// Miscellaneous
-	'Promo',
-	'Black Star Promo',
-	'Classic Collection',
-	'ACE SPEC Rare',
-	'Rare ACE',
-	'Double Rare',
+	'Common', 'Uncommon', 'Rare', 'Rare Holo', 'Reverse Holo', '1st Edition',
+	'Shadowless', 'Rare Holo 1st Edition', 'Shining', 'Gold Star', 'Rare Holo LV.X',
+	'Rare ex', 'Rare SP', 'Rare Prime', 'LEGEND', 'Rare BREAK', 'Prism Star', 'Rare Holo EX',
+	'Rare Holo GX', 'Rare Holo V', 'Rare Holo VMAX', 'Rare Holo VSTAR', 'Full Art',
+	'Rare Ultra', 'Illustration Rare', 'Special Illustration Rare', 'Character Rare',
+	'Character Super Rare', 'Trainer Gallery', 'Shiny Rare', 'Rare Shiny', 'Shiny Ultra Rare',
+	'Rare Shiny GX', 'Radiant Rare', 'Amazing Rare', 'Rare Secret', 'Rare Rainbow',
+	'Gold Full Art', 'Rare Gold', 'Hyper Rare', 'Promo', 'Black Star Promo',
+	'Classic Collection', 'ACE SPEC Rare', 'Rare ACE', 'Double Rare',
 ];
 
 const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
-	// Modern Mechanics
-	'VMAX': { color: '#C0392B', glow: true },
-	'VSTAR': { color: '#8E44AD', glow: true },
-	'V-UNION': { color: '#6a5acd', glow: true },
-	'V': { color: '#E74C3C', glow: true },
-	'GX': { color: '#E67E22', glow: true },
-	'ex': { color: '#95a5a6', glow: true },
-	'Tera': { color: '#3498db', glow: true },
-	'Radiant': { color: '#FF6B6B', glow: true },
-	'TAG TEAM': { color: '#2980b9', glow: true },
-	
-	// Eras & Themes
-	'Ancient': { color: '#a67b5b', glow: true },
-	'Future': { color: '#8e44ad', glow: true },
-	'SP': { color: '#7f8c8d', glow: true },
-	'Dark Pokémon': { color: '#5d6d7e', glow: true },
-	'Light Pokémon': { color: '#add8e6', glow: true },
-	'Team Aqua': { color: '#3498db', glow: true },
-	'Team Magma': { color: '#e74c3c', glow: true },
-	'Team Plasma': { color: '#00a8ff', glow: true },
-
-	// Other Special Types
-	'EX': { color: '#d35400', glow: true },
-	'BREAK': { color: '#e67e22', glow: true },
-	'LEGEND': { color: '#CD853F', glow: true },
-	'Prime': { color: '#e67e22', glow: true },
-	'ACE SPEC': { color: '#F39C12', glow: true },
-	'Prism Star': { color: '#e91e63', glow: true },
-	'Amazing': { color: '#00CED1', glow: true },
-	'Shining': { color: '#00BFFF', glow: true },
-	'Baby': { color: '#ffb6c1', glow: true },
-	'Crystal Pokémon': { color: '#AFEEEE', glow: true },
-	'Level-Up': { color: '#a9a9a9', glow: true },
-	'Mega': { color: '#b22222', glow: true },
-	'Owner\'s Pokémon': { color: '#696969', glow: true },
-	'Restored': { color: '#cd853f', glow: true },
-	'Ultra Beast': { color: '#dc143c', glow: true },
-	'Fusion Strike': { color: '#DA70D6', glow: true },
-	'Rapid Strike': { color: '#1E90FF', glow: true },
+	'VMAX': { color: '#C0392B', glow: true }, 'VSTAR': { color: '#8E44AD', glow: true },
+	'V-UNION': { color: '#6a5acd', glow: true }, 'V': { color: '#E74C3C', glow: true },
+	'GX': { color: '#E67E22', glow: true }, 'ex': { color: '#95a5a6', glow: true },
+	'Tera': { color: '#3498db', glow: true }, 'Radiant': { color: '#FF6B6B', glow: true },
+	'TAG TEAM': { color: '#2980b9', glow: true }, 'Ancient': { color: '#a67b5b', glow: true },
+	'Future': { color: '#8e44ad', glow: true }, 'SP': { color: '#7f8c8d', glow: true },
+	'Dark Pokémon': { color: '#5d6d7e', glow: true }, 'Light Pokémon': { color: '#add8e6', glow: true },
+	'Team Aqua': { color: '#3498db', glow: true }, 'Team Magma': { color: '#e74c3c', glow: true },
+	'Team Plasma': { color: '#00a8ff', glow: true }, 'EX': { color: '#d35400', glow: true },
+	'BREAK': { color: '#e67e22', glow: true }, 'LEGEND': { color: '#CD853F', glow: true },
+	'Prime': { color: '#e67e22', glow: true }, 'ACE SPEC': { color: '#F39C12', glow: true },
+	'Prism Star': { color: '#e91e63', glow: true }, 'Amazing': { color: '#00CED1', glow: true },
+	'Shining': { color: '#00BFFF', glow: true }, 'Baby': { color: '#ffb6c1', glow: true },
+	'Crystal Pokémon': { color: '#AFEEEE', glow: true }, 'Level-Up': { color: '#a9a9a9', glow: true },
+	'Mega': { color: '#b22222', glow: true }, 'Owner\'s Pokémon': { color: '#696969', glow: true },
+	'Restored': { color: '#cd853f', glow: true }, 'Ultra Beast': { color: '#dc143c', glow: true },
+	'Fusion Strike': { color: '#DA70D6', glow: true }, 'Rapid Strike': { color: '#1E90FF', glow: true },
 	'Single Strike': { color: '#c23616', glow: true },
 };
 
@@ -235,94 +111,34 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 
 function getCardPoints(card: TCGCard): number {
 	switch (card.rarity) {
-		// Tier 1: Common Pulls
-		case 'Common':
-		case '1st Edition':
-		case 'Shadowless':
-			return 5;
-		case 'Uncommon':
-			return 10;
-		case 'Reverse Holo':
-			return 15;
-
-		// Tier 2: Standard Rares
-		case 'Rare':
-			return 20;
-		case 'Double Rare':
-		case 'Promo':
-		case 'Black Star Promo':
-			return 25;
-		case 'Rare Holo':
-		case 'Classic Collection':
-			return 30;
-		case 'Rare Holo 1st Edition':
-			return 35;
-
-		// Tier 3: Holo Rule Box Cards (V, GX, EX, etc.)
-		case 'Rare SP':
-			return 40;
-		case 'Rare Holo EX':
-		case 'Rare Holo GX':
-		case 'Rare Holo V':
-			return 45;
-		case 'Rare BREAK':
-		case 'Rare Prime':
-		case 'LEGEND':
-		case 'Prism Star':
-			return 50;
-		case 'Rare Holo VMAX':
-		case 'Rare Holo VSTAR':
-			return 55;
-		case 'Rare ex': // Older, valuable ex cards
-			return 60;
-			
-		// Tier 4: Special Rarity Cards
-		case 'Radiant Rare':
-			return 60;
-		case 'Amazing Rare':
-		case 'Shining':
-			return 65;
-		case 'ACE SPEC Rare':
-		case 'Rare ACE':
-			return 70;
-		
-		// Tier 5: Full Art & Illustration Rares
-		case 'Full Art':
-		case 'Rare Ultra': // Standard Full Arts
-			return 75;
-		case 'Rare Shiny':
-		case 'Shiny Rare':
-			return 80;
-		case 'Trainer Gallery':
-		case 'Character Rare':
-		case 'Rare Shiny GX':
-		case 'Shiny Ultra Rare':
-			return 85;
-		case 'Illustration Rare':
-			return 90;
-		case 'Rare Holo LV.X':
-			return 95;
-		case 'Rare Holo Star':
-			return 100;
-		case 'Character Super Rare':
-			return 110;
-			
-		// Tier 6: Secret & Hyper Rares (Highest Value)
-		case 'Rare Secret':
-			return 120;
-		case 'Special Illustration Rare':
-			return 150;
-		case 'Rare Rainbow':
-			return 160;
-		case 'Gold Full Art':
-		case 'Rare Gold':
-		case 'Hyper Rare': // Gold Cards
-			return 175;
-		case 'Gold Star':
-			return 200;
-
-		default:
-			return 5;
+		case 'Common': case '1st Edition': case 'Shadowless': return 5;
+		case 'Uncommon': return 10;
+		case 'Reverse Holo': return 15;
+		case 'Rare': return 20;
+		case 'Double Rare': case 'Promo': case 'Black Star Promo': return 25;
+		case 'Rare Holo': case 'Classic Collection': return 30;
+		case 'Rare Holo 1st Edition': return 35;
+		case 'Rare SP': return 40;
+		case 'Rare Holo EX': case 'Rare Holo GX': case 'Rare Holo V': return 45;
+		case 'Rare BREAK': case 'Rare Prime': case 'LEGEND': case 'Prism Star': return 50;
+		case 'Rare Holo VMAX': case 'Rare Holo VSTAR': return 55;
+		case 'Rare ex': return 60;
+		case 'Radiant Rare': return 60;
+		case 'Amazing Rare': case 'Shining': return 65;
+		case 'ACE SPEC Rare': case 'Rare ACE': return 70;
+		case 'Full Art': case 'Rare Ultra': return 75;
+		case 'Rare Shiny': case 'Shiny Rare': return 80;
+		case 'Trainer Gallery': case 'Character Rare': case 'Rare Shiny GX': case 'Shiny Ultra Rare': return 85;
+		case 'Illustration Rare': return 90;
+		case 'Rare Holo LV.X': return 95;
+		case 'Rare Holo Star': return 100;
+		case 'Character Super Rare': return 110;
+		case 'Rare Secret': return 120;
+		case 'Special Illustration Rare': return 150;
+		case 'Rare Rainbow': return 160;
+		case 'Gold Full Art': case 'Rare Gold': case 'Hyper Rare': return 175;
+		case 'Gold Star': return 200;
+		default: return 5;
 	}
 }
 
@@ -331,14 +147,9 @@ function hexToRgba(hex: string, alpha: number): string {
 		return `rgba(128, 128, 128, ${alpha})`;
 	}
 	let c = hex.substring(1).split('');
-	if (c.length === 3) {
-		c = [c[0], c[0], c[1], c[1], c[2], c[2]];
-	}
+	if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
 	const num = parseInt(c.join(''), 16);
-	const r = (num >> 16) & 255;
-	const g = (num >> 8) & 255;
-	const b = num & 255;
-
+	const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
@@ -573,10 +384,92 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
-		async openpack(target, room, user) {
+		async daily(target, room, user) {
 			if (!this.runBroadcast()) return;
+			const userId = user.id;
+			const twentyFourHours = 24 * 60 * 60 * 1000;
+
+			try {
+				let collection = await UserCollections.findOne({ userId });
+
+				if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
+					const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
+					const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+					const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+					return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
+				}
+
+				const availableSets = await TCGCards.distinct('set');
+				if (availableSets.length === 0) {
+					return this.errorReply("There are no sets available to open packs from.");
+				}
+				const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
+				
+				const pack = await generatePack(randomSetId);
+				if (!pack) {
+					return this.errorReply(`An error occurred while generating a pack from set "${randomSetId}".`);
+				}
+
+				if (!collection) {
+					collection = {
+						userId,
+						cards: [],
+						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+						lastUpdated: Date.now(),
+					};
+				}
+
+				let pointsGained = 0;
+				for (const card of pack) {
+					pointsGained += getCardPoints(card);
+					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+					if (existingCard) {
+						existingCard.quantity++;
+					} else {
+						collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+					}
+				}
+
+				collection.stats.totalCards = (collection.stats.totalCards || 0) + pack.length;
+				collection.stats.uniqueCards = collection.cards.length;
+				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+				collection.lastUpdated = Date.now();
+				collection.lastDaily = Date.now();
+
+				await UserCollections.upsert({ userId }, collection);
+
+				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
+				const displaySetName = setInfo ? setInfo.name : randomSetId;
+
+				let output = `<div class="themed-table-container">`;
+				output += `<h3 class="themed-table-title">🎁 ${user.name} claimed their daily pack and got cards from ${displaySetName}!</h3>`;
+				output += `<table class="themed-table">`;
+				output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th><th>Type</th></tr>`;
+
+				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+
+				pack.forEach(card => {
+					output += `<tr class="themed-table-row">`;
+					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td>${card.set}</td>`;
+					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
+					output += `<td>${card.type || card.supertype}</td>`;
+					output += `</tr>`;
+				});
+
+				output += `</table></div>`;
+
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error claiming daily pack: ${e.message}`);
+			}
+		},
+		
+		async openpack(target, room, user) {
+			if (!this.can('%')) return false; 
+			
 			if (!target) {
-				return this.errorReply("Please specify a set to open. Usage: /tcg openpack [set ID]");
+				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
 			
 			const userId = user.id;
@@ -840,6 +733,75 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
+		async setprogress(target, room, user) {
+			if (!this.runBroadcast()) return;
+			const parts = target.split(',').map(p => p.trim());
+			const targetUsername = parts[0] || user.name;
+			const setId = parts[1];
+
+			if (!setId) {
+				return this.errorReply("Usage: /tcg setprogress [user], [set ID]");
+			}
+			const targetId = toID(targetUsername);
+			const cleanSetId = toID(setId);
+			
+			try {
+				const setInfo = POKEMON_SETS.find(s => toID(s.code) === cleanSetId);
+				const displaySetName = setInfo ? setInfo.name : setId;
+
+				const [userCollection, allSetCards] = await Promise.all([
+					UserCollections.findOne({ userId: targetId }),
+					TCGCards.find({ set: cleanSetId }),
+				]);
+
+				if (allSetCards.length === 0) {
+					return this.errorReply(`No cards found for the set "${displaySetName}". Make sure cards are imported for this set.`);
+				}
+				
+				const ownedCardIds = new Set(userCollection?.cards.map(c => c.cardId) || []);
+				const missingCards: TCGCard[] = [];
+				let ownedCount = 0;
+
+				for (const card of allSetCards) {
+					if (ownedCardIds.has(card.cardId)) {
+						ownedCount++;
+					} else {
+						missingCards.push(card);
+					}
+				}
+
+				const totalInSet = allSetCards.length;
+				const percentage = totalInSet > 0 ? Math.round((ownedCount / totalInSet) * 100) : 0;
+
+				let output = `<div class="themed-table-container">`;
+				output += `<h3 class="themed-table-title">Set Progress for ${displaySetName}</h3>`;
+				output += `<p><strong>Collector:</strong> ${Impulse.nameColor(targetUsername, true)} | <strong>Completion:</strong> ${ownedCount} / ${totalInSet} cards</p>`;
+				output += `<div style="background: #555; border-radius: 4px; overflow: hidden;"><div style="width:${percentage}%; background: #2ecc71; padding: 4px 0; text-align: center; color: #fff; font-weight: bold;">${percentage}%</div></div>`;
+				
+				if (missingCards.length > 0) {
+					output += `<h4 style="margin-top: 15px;">Missing Cards:</h4>`;
+					output += `<div style="max-height: 280px; overflow-y: auto;">`;
+					output += `<table class="themed-table">`;
+					output += `<tr class="themed-table-header"><th>Card</th><th>Rarity</th></tr>`;
+					missingCards.sort((a, b) => getCardPoints(a) - getCardPoints(b)).forEach(card => {
+						output += `<tr class="themed-table-row">`;
+						output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+						output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity}</span></td>`;
+						output += `</tr>`;
+					});
+					output += `</table></div>`;
+				} else {
+					output += `<p style="text-align:center; font-weight:bold; color:#2ecc71; margin-top:15px;">🎉 Set Complete! 🎉</p>`;
+				}
+
+				output += `</div>`;
+				this.sendReplyBox(output);
+
+			} catch (e: any) {
+				this.errorReply(`Error fetching set progress: ${e.message}`);
+			}
+		},
+
 		async stats(target, room, user) {
 			if (!this.runBroadcast()) return;
 			const sortBy = toID(target) || 'total';
@@ -971,11 +933,8 @@ export const commands: Chat.ChatCommands = {
 			let output = `<div class="themed-table-container">`;
 			output += `<h3 class="themed-table-title">Pokemon TCG Data</h3>`;
 			
-			output += `<h4>Supertypes</h4>`;
-			output += `<p>${SUPERTYPES.join(', ')}</p>`;
-			
-			output += `<h4>Pokemon Types</h4>`;
-			output += `<p>${POKEMON_TYPES.join(', ')}</p>`;
+			output += `<p><strong>Supertypes:</strong> ${SUPERTYPES.join(', ')}</p>`;
+			output += `<p><strong>Pokemon Types:</strong> ${POKEMON_TYPES.join(', ')}</p>`;
 			
 			output += `<h4>Pokemon Subtypes</h4>`;
 			output += `<p>${SUBTYPES.Pokemon.join(', ')}</p>`;
@@ -992,14 +951,16 @@ export const commands: Chat.ChatCommands = {
 	},
 
 	tcghelp: [
+		'/tcg daily - Claim your free random pack of the day.',
 		'/tcg collection [user] - View a user\'s TCG card collection.',
 		'/tcg card [cardId] - View the details of a specific card.',
-		'/tcg openpack [set ID] - Open a pack of 10 cards from a specific set.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
+		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
 		'/tcg stats [total|unique|points] - View global TCG statistics.',
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
-		'% /tcg addcard [id], [name], [set], [rarity], [supertype], [subtypes], [type], [hp] - Add a card to the database.',
+		'% /tcg openpack [set ID] - Open a pack of cards from a specific set (Admin only).',
+		'% /tcg addcard [id], [name], [set]... - Add a card to the database (Admin only).',
 	],
 };
