@@ -9,15 +9,13 @@ import { POKEMON_SETS, TCGSet, ShopState, getRarityColor, getSubtypeColor,
 		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
-import { TCGCards, UserCollections } from './tcg_collections';
+import { TCGCards, UserCollections, ShopStateCollection } from './tcg_collections';
 
 // State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
 const SHOP_PACK_PRICE = 150;
 const SHOP_ROTATION_HOURS = 24;
 const SHOP_PACK_SLOTS = 5;
-let shopStock: string[] = [];
-let lastShopRotation = 0;
 
 // ==================== HELPER FUNCTIONS ====================
 
