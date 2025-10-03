@@ -5,9 +5,7 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
-		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
-		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
+import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor, TCGCard, UserCollection } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 
@@ -15,8 +13,13 @@ import * as TCG_UI from './tcg_ui';
 const TCGCards = MongoDB<TCGCard>('tcg_cards');
 const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
 
-// State variable for pending pack battles
+// State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
+const SHOP_PACK_PRICE = 100;
+const SHOP_ROTATION_HOURS = 24;
+const SHOP_PACK_SLOTS = 5;
+let shopStock: string[] = [];
+let lastShopRotation = 0;
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -76,18 +79,16 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	const usedCardIds = new Set<string>();
 
 	const pickRandom = (pool: TCGCard[]): TCGCard => {
-		// This helper function remains the same
 		let attempts = 0;
 		while (attempts < 50) {
 			const randomCard = pool[Math.floor(Math.random() * pool.length)];
-			if (!pool.length || !randomCard) break; // Failsafe for empty pools
+			if (!pool.length || !randomCard) break;
 			if (!usedCardIds.has(randomCard.cardId)) {
 				usedCardIds.add(randomCard.cardId);
 				return randomCard;
 			}
 			attempts++;
 		}
-		// If we fail to find a unique card, just return a random one
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
 
@@ -100,21 +101,13 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		}
 		return pack;
 	}
-
-	// --- MODIFIED: Create a pool for the Reverse Holo slot ---
+	
 	const reverseHoloPool = [...commons, ...uncommons];
 
-	// Standard Pack Composition
-	// 5 Commons
 	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
-	// 3 Uncommons
 	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
-	
-	// --- MODIFIED: 1 True Reverse Holo slot ---
-	// This card can be a Common or Uncommon, adding point variance.
 	pack.push(pickRandom(reverseHoloPool));
 
-	// The "Rare Slot"
 	const hitRoll = Math.random() * 100;
 	let chosenRarityTier: string;
 
@@ -129,7 +122,6 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	}
 
 	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
-	// Fallback mechanism
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
 	if (hitPool.length === 0) hitPool = raresPool;
@@ -145,11 +137,11 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help tcg');
+			return this.parse('/help pokemontcg');
 		},
 
 		async addcard(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('gdeclare')) return false;
 			const parts = target.split(',').map(x => x.trim());
 			
 			if (parts.length < 6) {
@@ -219,8 +211,9 @@ export const commands: Chat.ChatCommands = {
 
 			try {
 				const collection = await UserCollections.findOne({ userId: targetId });
-				if (!collection || collection.cards.length === 0) {
-					return this.sendReplyBox(`${targetUsername} doesn't have any cards in their collection yet!`);
+				if (!collection || !collection.cards || collection.cards.length === 0) {
+					this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
+					return;
 				}
 
 				query.cardId = { $in: collection.cards.map(c => c.cardId) };
@@ -251,7 +244,7 @@ export const commands: Chat.ChatCommands = {
 				const cardsToDisplay = top100Cards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
 				const quantityMap = new Map(top100Cards.map(item => [item.cardId, item.quantity]));
 				
-				let content = `<p><strong>Total Cards:</strong> ${collection.stats.totalCards} | <strong>Unique Cards:</strong> ${collection.stats.uniqueCards} | <strong>Total Points:</strong> ${totalPoints}</p>`;
+				let content = `<p><strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | <strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | <strong>Total Points:</strong> ${totalPoints}</p>`;
 				content += TCG_UI.generateCardTable(cardsToDisplay, ['name', 'set', 'rarity', 'type', 'quantity'], quantityMap);
 
 				if (filteredUserCards.length > 100) {
@@ -274,7 +267,6 @@ export const commands: Chat.ChatCommands = {
 			try {
 				let collection = await UserCollections.findOne({ userId });
 
-				// --- Cooldown Check ---
 				if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
 					const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
 					const hours = Math.floor(timeLeft / (1000 * 60 * 60));
@@ -293,9 +285,7 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(`An error occurred while generating a pack from set "${randomSetId}".`);
 				}
 
-				// --- MODIFIED: Robust Initialization ---
 				if (!collection) {
-					// Case 1: User is brand new
 					collection = {
 						userId,
 						cards: [],
@@ -303,7 +293,6 @@ export const commands: Chat.ChatCommands = {
 						lastUpdated: Date.now(),
 					};
 				} else {
-					// Case 2: User document exists but might be partial
 					if (!collection.cards) collection.cards = [];
 					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				}
@@ -342,14 +331,14 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`Error claiming daily pack: ${e.message}`);
 			}
 		},
-
+		
 		async openpack(target, room, user) {
 			if (!this.can('%')) return false; 
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
 			
-			const userId = user.id; // Or you could make this command target other users
+			const userId = user.id;
 			const setId = target.trim().toLowerCase();
 
 			try {
@@ -359,8 +348,6 @@ export const commands: Chat.ChatCommands = {
 				}
 
 				let collection = await UserCollections.findOne({ userId });
-
-				// --- MODIFIED: Robust Initialization ---
 				if (!collection) {
 					collection = {
 						userId,
@@ -576,7 +563,7 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(`No cards found for the set "${displaySetName}". Make sure cards are imported for this set.`);
 				}
 				
-				const ownedCardIds = new Set(userCollection?.cards.map(c => c.cardId) || []);
+				const ownedCardIds = new Set(userCollection?.cards?.map(c => c.cardId) || []);
 				const missingCards: TCGCard[] = [];
 				let ownedCount = 0;
 
@@ -607,7 +594,7 @@ export const commands: Chat.ChatCommands = {
 				this.sendReplyBox(output);
 
 			} catch (e: any) {
-				this.errorReply(`Error fetching set progress: ${e.message}`);
+				return this.errorReply(`Error fetching set progress: ${e.message}`);
 			}
 		},
 
@@ -963,7 +950,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async givecurrency(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('%')) return false;
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg givecurrency [user], [amount]");
@@ -987,7 +974,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async takecurrency(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('%')) return false;
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg takecurrency [user], [amount]");
@@ -1011,7 +998,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async setcurrency(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('%')) return false;
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg setcurrency [user], [amount]");
@@ -1062,15 +1049,213 @@ export const commands: Chat.ChatCommands = {
 				this.errorReply(`Payment failed. You may not have enough credits.`);
 			}
 		},
+                
+                async shop(target, room, user) {
+			const [action, ...args] = target.split(',').map(p => p.trim());
+			const userId = user.id;
+
+			// Helper function to rotate the shop stock if needed
+			const rotateShopStock = async () => {
+				const now = Date.now();
+				if (now - lastShopRotation < SHOP_ROTATION_HOURS * 60 * 60 * 1000 && shopStock.length > 0) {
+					return; // Shop doesn't need to be rotated yet
+				}
+
+				const availableSets = await TCGCards.distinct('set');
+				if (availableSets.length === 0) {
+					shopStock = [];
+					return;
+				}
+
+				// Shuffle the available sets to get a random selection
+				for (let i = availableSets.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1));
+					[availableSets[i], availableSets[j]] = [availableSets[j], availableSets[i]];
+				}
+				
+				shopStock = availableSets.slice(0, SHOP_PACK_SLOTS);
+				lastShopRotation = now;
+			};
+
+			try {
+				await rotateShopStock();
+
+				if (toID(action) === 'buy') {
+					const setId = toID(args[0]);
+					if (!setId) {
+						return this.errorReply("Usage: /tcg shop buy, [set ID]");
+					}
+
+					if (!shopStock.includes(setId)) {
+						return this.errorReply(`The set "${setId}" is not currently in stock. Check /tcg shop to see the current rotation.`);
+					}
+
+					const canAfford = await TCG_Economy.deductCurrency(userId, SHOP_PACK_PRICE);
+					if (!canAfford) {
+						return this.errorReply(`You don't have enough credits to buy this pack. You need ${SHOP_PACK_PRICE} Credits.`);
+					}
+					
+					let collection = await UserCollections.findOne({ userId });
+
+					// Robust initialization to prevent conflicts
+					if (!collection) {
+						collection = {
+							userId,
+							cards: [],
+							packs: [],
+							stats: { totalCards: 0, uniqueCards: 0 },
+							lastUpdated: Date.now(),
+						};
+					} else {
+						if (!collection.packs) collection.packs = [];
+					}
+
+					const packEntry = collection.packs.find(p => p.setId === setId);
+					if (packEntry) {
+						packEntry.quantity++;
+					} else {
+						collection.packs.push({ setId, quantity: 1 });
+					}
+					
+					await UserCollections.upsert({ userId }, collection);
+
+					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+					const displaySetName = setInfo ? setInfo.name : setId;
+					
+					return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
+					
+				} else { // View the shop
+					if (!this.runBroadcast()) return;
+					const balance = await TCG_Economy.getUserBalance(userId);
+
+					let content = `<p>Welcome to the TCG Shop! New packs rotate in every 24 hours.</p>`;
+					content += `<p><strong>Your Balance:</strong> ${balance} Credits</p><hr/>`;
+					
+					if (shopStock.length === 0) {
+						content += `<p>The shop is currently empty. Please check back later.</p>`;
+					} else {
+						content += `<h4>Booster Packs for Sale</h4>`;
+						content += `<table class="themed-table">`;
+						content += `<tr class="themed-table-header"><th>Set Name</th><th>Set ID</th><th>Price</th><th></th></tr>`;
+						for (const setId of shopStock) {
+							const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+							const setName = setInfo ? setInfo.name : setId;
+							content += `<tr class="themed-table-row">`;
+							content += `<td><strong>${setName}</strong></td>`;
+							content += `<td>${setId}</td>`;
+							content += `<td>${SHOP_PACK_PRICE} Credits</td>`;
+							content += `<td><button name="send" value="/tcg shop buy, ${setId}">Buy</button></td>`;
+							content += `</tr>`;
+						}
+						content += `</table>`;
+					}
+					const output = TCG_UI.buildPage('TCG Card Shop', content);
+					this.sendReplyBox(output);
+				}
+			} catch (e: any) {
+				return this.errorReply(`An error occurred in the shop: ${e.message}`);
+			}
+		},
+                
+                async packs(target, room, user) {
+			const [action, ...args] = target.split(',').map(p => p.trim());
+			const userId = user.id;
+
+			try {
+				let collection = await UserCollections.findOne({ userId });
+				
+				if (toID(action) === 'open') {
+					if (!this.runBroadcast()) return;
+					const setId = toID(args[0]);
+					if (!setId) return this.errorReply("Usage: /tcg packs open, [set ID]");
+
+					if (!collection || !collection.packs?.length) {
+						return this.errorReply(`You do not have any unopened packs.`);
+					}
+					
+					const packEntry = collection.packs.find(p => p.setId === setId);
+					if (!packEntry || packEntry.quantity < 1) {
+						return this.errorReply(`You do not have any unopened packs from the set "${setId}".`);
+					}
+
+					// --- Pack Opening Logic ---
+					const pack = await generatePack(setId);
+					if (!pack) {
+						return this.errorReply(`An error occurred while generating a pack for "${setId}".`);
+					}
+
+					packEntry.quantity--;
+					if (packEntry.quantity <= 0) {
+						collection.packs = collection.packs.filter(p => p.setId !== setId);
+					}
+
+					// --- ADDED: Robust Initialization for Partial Documents ---
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+					
+					let pointsGained = 0;
+					for (const card of pack) {
+						pointsGained += getCardPoints(card);
+						const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+						if (existingCard) {
+							existingCard.quantity++;
+						} else {
+							collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+						}
+					}
+
+					collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+					collection.stats.uniqueCards = collection.cards.length;
+					collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+					collection.lastUpdated = Date.now();
+					await UserCollections.upsert({ userId }, collection);
+					
+					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+					const displaySetName = setInfo ? setInfo.name : setId;
+					
+					pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+					const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
+					const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
+					this.sendReplyBox(output);
+
+				} else { // View pack inventory
+					if (!this.runBroadcast()) return;
+
+					if (!collection || !collection.packs?.length) {
+						return this.sendReplyBox(TCG_UI.buildPage(`${user.name}'s Unopened Packs`, `You do not have any unopened packs. You can buy some from the <code>/tcg shop</code>.`));
+					}
+
+					let content = `<p>Click a button below to open one pack.</p><hr/>`;
+					content += `<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">`;
+
+					collection.packs.sort((a, b) => a.setId.localeCompare(b.setId));
+
+					for (const pack of collection.packs) {
+						const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(pack.setId));
+						const setName = setInfo ? setInfo.name : pack.setId;
+						content += `<button name="send" value="/tcg packs open, ${pack.setId}" class="button">${setName} (x${pack.quantity})</button>`;
+					}
+					content += `</div>`;
+					
+					const output = TCG_UI.buildPage(`${user.name}'s Unopened Packs`, content);
+					this.sendReplyBox(output);
+				}
+			} catch (e: any) {
+				return this.errorReply(`An error occurred with your packs: ${e.message}`);
+			}
+		},
 	},
 
-	tcghelp: [
+        tcghelp: [
 		'/tcg daily - Claim your free random pack of the day and some credits.',
 		'/tcg currency [user] - Check your or another user\'s credit balance.',
 		'/tcg pay [user], [amount] - Give credits to another user.',
+		'/tcg shop - View the daily rotating card pack shop.',
+		'/tcg shop buy, [set ID] - Buy a booster pack from the shop.',
+		'/tcg packs - View and open your saved packs.',
 		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
 		'/tcg battle accept, [user] - Accept a pack battle challenge.',
-		'/tcg collection [user] - View a user\'s TCG card collection.',
+		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
@@ -1081,10 +1266,34 @@ export const commands: Chat.ChatCommands = {
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
-		'@ /tcg givecurrency [user], [amount] - Give credits to a user.',
-		'@ /tcg takecurrency [user], [amount] - Take credits from a user.',
-		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
-		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
-		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
+		'% /tcg givecurrency [user], [amount] - Give credits to a user.',
+		'% /tcg takecurrency [user], [amount] - Take credits from a user.',
+		'% /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
+		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
+		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
 	],
+
+tcghelp: [
+		'/tcg daily - Claim your free random pack of the day and some credits.',
+		'/tcg currency [user] - Check your or another user\'s credit balance.',
+		'/tcg pay [user], [amount] - Give credits to another user.',
+		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
+		'/tcg battle accept, [user] - Accept a pack battle challenge.',
+		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
+		'/tcg card [cardId] - View the details of a specific card.',
+		'/tcg search [filter]:[value] - Search for cards in the database.',
+		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
+		'/tcg wishlist [user] - View a user\'s wishlist.',
+		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
+		'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
+		'/tcg stats [total|unique|points] - View global TCG statistics.',
+		'/tcg sets - View all Pokemon TCG sets.',
+		'/tcg rarities - View all card rarities.',
+		'/tcg types - View all supertypes, types, and subtypes.',
+		'% /tcg givecurrency [user], [amount] - Give credits to a user.',
+		'% /tcg takecurrency [user], [amount] - Take credits from a user.',
+		'% /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
+		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
+		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
+	],*/
 };
