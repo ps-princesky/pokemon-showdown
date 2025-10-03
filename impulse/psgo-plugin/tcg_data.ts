@@ -1,4 +1,42 @@
-// tcg_data.ts
+/**
+ * TCG Data File
+ * Contains static data arrays, type interfaces, and data-related display functions.
+ */
+
+// --- TYPE INTERFACES ---
+export interface TCGCard {
+	_id?: string;
+	cardId: string;
+	name: string;
+	set: string;
+	rarity: string;
+	supertype: string;
+	subtypes: string[];
+	type?: string;
+	hp?: number;
+	stage?: string;
+	imageUrl?: string;
+}
+
+export interface UserCollection {
+	_id?: string;
+	userId: string;
+	cards: {
+		cardId: string;
+		quantity: number;
+		addedAt: number;
+	}[];
+	stats: {
+		totalCards: number;
+		uniqueCards: number;
+		favoriteType?: string;
+		totalPoints?: number; 
+	};
+	currency?: number;
+	wishlist?: string[];
+	lastUpdated: number;
+	lastDaily?: number;
+}
 
 export interface TCGSet {
 	code: string;
@@ -7,6 +45,7 @@ export interface TCGSet {
 	series: string;
 }
 
+// --- DATA CONSTANTS ---
 export const POKEMON_SETS: TCGSet[] = [
 	// Original Series (1999-2003)
 	{ code: 'BS', name: 'Base Set', year: 1999, series: 'Original' },
@@ -145,19 +184,32 @@ export const POKEMON_SETS: TCGSet[] = [
 	{ code: 'PRE', name: 'Prismatic Evolutions', year: 2025, series: 'Scarlet & Violet' },
 ];
 
+// --- HELPER FUNCTIONS ---
 export function getRarityColor(rarity: string): string {
 	const colors: {[key: string]: string} = {
+		// Core
 		'common': '#808080','uncommon': '#2ECC71','rare': '#3498DB','double rare': '#3CB371',
+		// Holo & Stamped
 		'rare holo': '#9B59B6','reverse holo': '#00CED1','classic collection': '#4682B4','1st edition': '#34495e',
-		'shadowless': '#7f8c8d','rare holo 1st edition': '#8e44ad','shining': '#00BFFF','gold star': '#CD853F',
-		'rare holo star': '#CD853F','rare holo lv.x': '#95a5a6','rare ex': '#bdc3c7','rare sp': '#a1a1a1',
-		'rare prime': '#e67e22','legend': '#CD853F','rare break': '#CD853F','prism star': '#e91e63',
+		'shadowless': '#7f8c8d','rare holo 1st edition': '#8e44ad',
+		// Special Mechanics & Eras
+		'shining': '#00BFFF','gold star': '#CD853F','rare holo star': '#CD853F','rare holo lv.x': '#95a5a6',
+		'rare ex': '#bdc3c7','rare sp': '#a1a1a1','rare prime': '#e67e22','legend': '#CD853F',
+		'rare break': '#CD853F','prism star': '#e91e63',
+		// Modern Rule Box
 		'rare holo ex': '#d35400','rare holo gx': '#E67E22','rare holo v': '#E74C3C','rare holo vmax': '#C0392B',
-		'rare holo vstar': '#8E44AD','full art': '#E74C3C','rare ultra': '#E74C3C','illustration rare': '#4ECDC4',
+		'rare holo vstar': '#8E44AD',
+		// Ultra & Special Arts
+		'full art': '#E74C3C','rare ultra': '#E74C3C','illustration rare': '#4ECDC4',
 		'special illustration rare': '#C71585','character rare': '#ff9ff3','character super rare': '#ff69b4',
-		'trainer gallery': '#1abc9c','shiny rare': '#CD853F','rare shiny': '#CD853F','shiny ultra rare': '#9932CC',
-		'rare shiny gx': '#1E90FF','radiant rare': '#FF6B6B','amazing rare': '#00CED1','rare secret': '#F39C12',
-		'rare rainbow': '#E91E63','gold full art': '#CD853F','rare gold': '#CD853F','hyper rare': '#FF10F0',
+		'trainer gallery': '#1abc9c',
+		// Shiny Tiers
+		'shiny rare': '#CD853F','rare shiny': '#CD853F','shiny ultra rare': '#9932CC',
+		'rare shiny gx': '#1E90FF','radiant rare': '#FF6B6B','amazing rare': '#00CED1',
+		// Secret & Gold Tiers
+		'rare secret': '#F39C12','rare rainbow': '#E91E63','gold full art': '#CD853F',
+		'rare gold': '#CD853F','hyper rare': '#FF10F0',
+		// Promo & Misc
 		'promo': '#c0392b','black star promo': '#2c3e50','ace spec rare': '#F39C12','rare ace': '#F39C12',
 	};
 	return colors[rarity.toLowerCase()] || '';
