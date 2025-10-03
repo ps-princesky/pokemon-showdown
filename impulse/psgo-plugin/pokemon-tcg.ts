@@ -205,7 +205,7 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 	'Future': { color: '#8e44ad', glow: true },
 	'SP': { color: '#7f8c8d', glow: true },
 	'Dark Pokémon': { color: '#5d6d7e', glow: true },
-	'Light Pokémon': { color: '#f1c40f', glow: true },
+	'Light Pokémon': { color: '#add8e6', glow: true },
 	'Team Aqua': { color: '#3498db', glow: true },
 	'Team Magma': { color: '#e74c3c', glow: true },
 	'Team Plasma': { color: '#00a8ff', glow: true },
@@ -213,12 +213,12 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 	// Other Special Types
 	'EX': { color: '#d35400', glow: true },
 	'BREAK': { color: '#e67e22', glow: true },
-	'LEGEND': { color: '#ffd700', glow: true },
+	'LEGEND': { color: '#CD853F', glow: true },
 	'Prime': { color: '#e67e22', glow: true },
 	'ACE SPEC': { color: '#F39C12', glow: true },
 	'Prism Star': { color: '#e91e63', glow: true },
-	'Shining': { color: '#f1c40f', glow: true },
 	'Amazing': { color: '#00CED1', glow: true },
+	'Shining': { color: '#00BFFF', glow: true },
 	'Baby': { color: '#ffb6c1', glow: true },
 	'Crystal Pokémon': { color: '#AFEEEE', glow: true },
 	'Level-Up': { color: '#a9a9a9', glow: true },
@@ -360,22 +360,22 @@ function getRarityColor(rarity: string): string {
 
 		// Holo & Stamped
 		'rare holo': '#9B59B6',
-		'reverse holo': '#f1c40f',
+		'reverse holo': '#00CED1',
 		'classic collection': '#4682B4',
 		'1st edition': '#34495e',
 		'shadowless': '#7f8c8d',
 		'rare holo 1st edition': '#8e44ad',
 		
 		// Special Mechanics & Eras
-		'shining': '#f1c40f',
-		'gold star': '#FFD700',
-		'rare holo star': '#FFD700',
+		'shining': '#00BFFF',
+		'gold star': '#CD853F',
+		'rare holo star': '#CD853F',
 		'rare holo lv.x': '#95a5a6',
 		'rare ex': '#bdc3c7',
 		'rare sp': '#a1a1a1',
 		'rare prime': '#e67e22',
-		'legend': '#DAA520',
-		'rare break': '#DAA520',
+		'legend': '#CD853F',
+		'rare break': '#CD853F',
 		'prism star': '#e91e63',
 
 		// Modern Rule Box
@@ -395,9 +395,9 @@ function getRarityColor(rarity: string): string {
 		'trainer gallery': '#1abc9c',
 		
 		// Shiny Tiers
-		'shiny rare': '#FFD700',
-		'rare shiny': '#FFD700',
-		'shiny ultra rare': '#B8860B',
+		'shiny rare': '#CD853F',
+		'rare shiny': '#CD853F',
+		'shiny ultra rare': '#9932CC',
 		'rare shiny gx': '#1E90FF',
 		'radiant rare': '#FF6B6B',
 		'amazing rare': '#00CED1',
@@ -405,8 +405,8 @@ function getRarityColor(rarity: string): string {
 		// Secret & Gold Tiers
 		'rare secret': '#F39C12',
 		'rare rainbow': '#E91E63',
-		'gold full art': '#FFD700',
-		'rare gold': '#FFD700',
+		'gold full art': '#CD853F',
+		'rare gold': '#CD853F',
 		'hyper rare': '#FF10F0',
 
 		// Promo & Misc
@@ -415,7 +415,7 @@ function getRarityColor(rarity: string): string {
 		'ace spec rare': '#F39C12',
 		'rare ace': '#F39C12',
 	};
-	return colors[rarity.toLowerCase()] || '#FFFFFF'; // Default to white
+	return colors[rarity.toLowerCase()] || ''; // Default to theme color
 }
 
 function getSubtypeColor(subtype: string): string {
@@ -437,18 +437,18 @@ function getSubtypeColor(subtype: string): string {
 		'Future': '#8e44ad',
 		'SP': '#7f8c8d',
 		'Dark Pokémon': '#5d6d7e',
-		'Light Pokémon': '#f1c40f',
+		'Light Pokémon': '#add8e6',
 		'Team Aqua': '#3498db',
 		'Team Magma': '#e74c3c',
 		'Team Plasma': '#00a8ff',
 
 		// Other Special Types
 		'BREAK': '#e67e22',
-		'LEGEND': '#ffd700',
+		'LEGEND': '#CD853F',
 		'Prime': '#e67e22',
 		'ACE SPEC': '#F39C12',
 		'Prism Star': '#e91e63',
-		'Shining': '#f1c40f',
+		'Shining': '#00BFFF',
 		'Amazing': '#00CED1',
 		'Baby': '#ffb6c1',
 		'Crystal Pokémon': '#AFEEEE',
