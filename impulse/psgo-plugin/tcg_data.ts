@@ -1,4 +1,11 @@
-export const POKEMON_SETS = [
+export interface TCGSet {
+	code: string;
+	name: string;
+	year: number;
+	series: string;
+}
+
+export const POKEMON_SETS: TCGSet[] = [
 	// Original Series (1999-2003)
 	{ code: 'BS', name: 'Base Set', year: 1999, series: 'Original' },
 	{ code: 'JU', name: 'Jungle', year: 1999, series: 'Original' },
@@ -135,5 +142,3 @@ export const POKEMON_SETS = [
 	{ code: 'SSP', name: 'Surging Sparks', year: 2024, series: 'Scarlet & Violet' },
 	{ code: 'PRE', name: 'Prismatic Evolutions', year: 2025, series: 'Scarlet & Violet' },
 ];
-
-Impulse.Pokemon_SETS = POKEMON_SETS;
