@@ -335,82 +335,15 @@ export async function startTournament(
 	return { success: true };
 }
 
-export async function setPlayerReady(
-	matchId: string,
-	userId: string
-): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
-	// 1. Find the tournament first to get its ID and check state
-	const tournament = await getActiveTournament();
-	if (!tournament || tournament.status !== 'in_progress') {
-		return { success: false, error: 'No active tournament found.' };
-	}
-
-	// 2. Find the specific match in memory to perform initial checks
-	const match = tournament.matches.find(m => m.matchId === matchId);
-	if (!match) {
-		return { success: false, error: 'Match not found.' };
-	}
-	if (match.winner) {
-		return { success: false, error: 'Match already completed.' };
-	}
-	if (match.player1 !== userId && match.player2 !== userId) {
-		return { success: false, error: 'You are not in this match.' };
-	}
-
-	// 3. Create an atomic update query for the specific player
-	const isPlayer1 = match.player1 === userId;
-	const updateField = isPlayer1 ? "matches.$.player1Ready" : "matches.$.player2Ready";
-	
-	await Tournaments.updateOne(
-		{ _id: tournament._id, "matches.matchId": matchId }, // Filter to find the document and the specific match in the array
-		{ $set: { [updateField]: true } } // Atomically set only the specific ready field to true
-	);
-
-	// 4. After updating, re-fetch the tournament to get the latest state for our check
-	const updatedTournament = await getActiveTournament();
-	if (!updatedTournament) {
-		// This should realistically never happen
-		return { success: false, error: 'Tournament disappeared after update.' };
-	}
-
-	const updatedMatch = updatedTournament.matches.find(m => m.matchId === matchId);
-	if (!updatedMatch) {
-		return { success: false, error: 'Match disappeared after update.' };
-	}
-
-	// 5. Now, perform the check on the guaranteed latest data
-	const bothReady = !!(updatedMatch.player1Ready && updatedMatch.player2Ready);
-
-	if (bothReady) {
-		// If both players are ready, clear the match timeout timer
-		const timerKey = `${tournament._id}-${matchId}`;
-		const timer = matchTimers.get(timerKey);
-		if (timer) {
-			clearTimeout(timer);
-			matchTimers.delete(timerKey);
-		}
-	}
-	
-	return { success: true, bothReady };
-}
-
-export async function playMatch(
+async function playMatch(
 	matchId: string,
 	room: any,
-): Promise<{ success: boolean; error?: string; winner?: string; matchData?: TournamentMatch }> {
-	const tournament = await getActiveTournament();
-	if (!tournament || tournament.status !== 'in_progress') {
-		return { success: false, error: 'No tournament is currently in progress.' };
-	}
+): Promise<void> {
+	let tournament = await getActiveTournament();
+	if (!tournament || tournament.status !== 'in_progress') return;
 
 	const match = tournament.matches.find(m => m.matchId === matchId);
-	if (!match) {
-		return { success: false, error: 'Match not found.' };
-	}
-
-	if (match.winner) {
-		return { success: false, error: 'Match has already been played.' };
-	}
+	if (!match || match.winner) return;
 
 	const [pack1, pack2] = await Promise.all([
 		generatePack(tournament.setId),
@@ -418,26 +351,28 @@ export async function playMatch(
 	]);
 
 	if (!pack1 || !pack2) {
-		return { success: false, error: 'Failed to generate packs for the match.' };
-	}
-
-	const points1 = pack1.reduce((sum, card) => sum + getCardPoints(card), 0);
-	const points2 = pack2.reduce((sum, card) => sum + getCardPoints(card), 0);
-
-	match.player1Pack = pack1.map(c => c.cardId);
-	match.player2Pack = pack2.map(c => c.cardId);
-	match.player1Points = points1;
-	match.player2Points = points2;
-	match.completedAt = Date.now();
-
-	if (points1 > points2) {
-		match.winner = match.player1;
-	} else if (points2 > points1) {
-		match.winner = match.player2;
-	} else {
+		console.error(`Failed to generate packs for match ${matchId}`);
+		// In case of pack generation failure, disqualify a random player to not stall the tour
 		match.winner = Math.random() < 0.5 ? match.player1 : match.player2;
+	} else {
+		const points1 = pack1.reduce((sum, card) => sum + getCardPoints(card), 0);
+		const points2 = pack2.reduce((sum, card) => sum + getCardPoints(card), 0);
+	
+		match.player1Pack = pack1.map(c => c.cardId);
+		match.player2Pack = pack2.map(c => c.cardId);
+		match.player1Points = points1;
+		match.player2Points = points2;
+	
+		if (points1 > points2) {
+			match.winner = match.player1;
+		} else if (points2 > points1) {
+			match.winner = match.player2;
+		} else {
+			match.winner = Math.random() < 0.5 ? match.player1 : match.player2;
+		}
 	}
 
+	match.completedAt = Date.now();
 	const loserId = match.winner === match.player1 ? match.player2 : match.player1;
 	const loser = tournament.participants.find(p => p.userId === loserId);
 	if (loser) loser.eliminated = true;
@@ -448,9 +383,79 @@ export async function playMatch(
 	if (allMatchesComplete) {
 		await advanceRound(room);
 	}
-
-	return { success: true, winner: match.winner, matchData: match };
 }
+
+/**
+ * Marks a player as ready. If both players become ready, it automatically simulates the match.
+ * This is the new, robust function that prevents race conditions.
+ */
+export async function processPlayerReady(matchId: string, userId: string, room: any): Promise<{
+	success: boolean;
+	error?: string;
+	matchStarted: boolean;
+}> {
+	// 1. Find the tournament first to get its ID and check state
+	const tournament = await getActiveTournament();
+	if (!tournament || tournament.status !== 'in_progress') {
+		return { success: false, error: 'No active tournament found.', matchStarted: false };
+	}
+
+	// 2. Find the specific match in memory to perform initial checks
+	const match = tournament.matches.find(m => m.matchId === matchId);
+	if (!match) {
+		return { success: false, error: 'Match not found.', matchStarted: false };
+	}
+	if (match.winner) {
+		return { success: false, error: 'Match already completed.', matchStarted: false };
+	}
+	if (match.player1 !== userId && match.player2 !== userId) {
+		return { success: false, error: 'You are not in this match.', matchStarted: false };
+	}
+	
+	// Check if player is already marked as ready
+	const isPlayer1 = match.player1 === userId;
+	if ((isPlayer1 && match.player1Ready) || (!isPlayer1 && match.player2Ready)) {
+		return { success: true, matchStarted: false }; // Already ready, do nothing
+	}
+
+	// 3. Create an atomic update query for the specific player
+	const updateField = isPlayer1 ? "matches.$.player1Ready" : "matches.$.player2Ready";
+	
+	await Tournaments.updateOne(
+		{ _id: tournament._id, "matches.matchId": matchId },
+		{ $set: { [updateField]: true } }
+	);
+
+	// 4. After updating, re-fetch the tournament to get the latest state for our check
+	const updatedTournament = await getActiveTournament();
+	if (!updatedTournament) {
+		return { success: false, error: 'Tournament disappeared after update.', matchStarted: false };
+	}
+
+	const updatedMatch = updatedTournament.matches.find(m => m.matchId === matchId);
+	if (!updatedMatch) {
+		return { success: false, error: 'Match disappeared after update.', matchStarted: false };
+	}
+
+	// 5. Now, perform the check on the guaranteed latest data
+	const bothReady = !!(updatedMatch.player1Ready && updatedMatch.player2Ready);
+
+	if (bothReady) {
+		// Clear the match timeout timer
+		const timerKey = `${tournament._id}-${matchId}`;
+		const timer = matchTimers.get(timerKey);
+		if (timer) {
+			clearTimeout(timer);
+			matchTimers.delete(timerKey);
+		}
+		// Simulate the match
+		await playMatch(matchId, room);
+		return { success: true, matchStarted: true };
+	}
+	
+	return { success: true, matchStarted: false };
+}
+
 
 async function advanceRound(room: any): Promise<void> {
 	const tournament = await getActiveTournament();
