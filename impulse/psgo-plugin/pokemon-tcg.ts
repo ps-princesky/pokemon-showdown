@@ -15,7 +15,7 @@ const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
 
 // State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
-const SHOP_PACK_PRICE = 100;
+const SHOP_PACK_PRICE = 150;
 const SHOP_ROTATION_HOURS = 24;
 const SHOP_PACK_SLOTS = 5;
 let shopStock: string[] = [];
@@ -137,11 +137,11 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help pokemontcg');
+			return this.parse('/help tcg');
 		},
 
 		async addcard(target, room, user) {
-			if (!this.can('gdeclare')) return false;
+			this.checkCan('globalban');
 			const parts = target.split(',').map(x => x.trim());
 			
 			if (parts.length < 6) {
@@ -333,7 +333,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		
 		async openpack(target, room, user) {
-			if (!this.can('%')) return false; 
+			this.checkCan('globalban');
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
@@ -950,7 +950,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async givecurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg givecurrency [user], [amount]");
@@ -974,7 +974,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async takecurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg takecurrency [user], [amount]");
@@ -998,7 +998,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async setcurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg setcurrency [user], [amount]");
@@ -1049,8 +1049,8 @@ export const commands: Chat.ChatCommands = {
 				this.errorReply(`Payment failed. You may not have enough credits.`);
 			}
 		},
-                
-                async shop(target, room, user) {
+		
+		async shop(target, room, user) {
 			const [action, ...args] = target.split(',').map(p => p.trim());
 			const userId = user.id;
 
@@ -1156,8 +1156,8 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`An error occurred in the shop: ${e.message}`);
 			}
 		},
-                
-                async packs(target, room, user) {
+		
+		async packs(target, room, user) {
 			const [action, ...args] = target.split(',').map(p => p.trim());
 			const userId = user.id;
 
@@ -1245,8 +1245,8 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 	},
-
-        tcghelp: [
+	
+	tcghelp: [
 		'/tcg daily - Claim your free random pack of the day and some credits.',
 		'/tcg currency [user] - Check your or another user\'s credit balance.',
 		'/tcg pay [user], [amount] - Give credits to another user.',
@@ -1272,28 +1272,4 @@ export const commands: Chat.ChatCommands = {
 		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
 		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
 	],
-
-tcghelp: [
-		'/tcg daily - Claim your free random pack of the day and some credits.',
-		'/tcg currency [user] - Check your or another user\'s credit balance.',
-		'/tcg pay [user], [amount] - Give credits to another user.',
-		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
-		'/tcg battle accept, [user] - Accept a pack battle challenge.',
-		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
-		'/tcg card [cardId] - View the details of a specific card.',
-		'/tcg search [filter]:[value] - Search for cards in the database.',
-		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
-		'/tcg wishlist [user] - View a user\'s wishlist.',
-		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
-		'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
-		'/tcg stats [total|unique|points] - View global TCG statistics.',
-		'/tcg sets - View all Pokemon TCG sets.',
-		'/tcg rarities - View all card rarities.',
-		'/tcg types - View all supertypes, types, and subtypes.',
-		'% /tcg givecurrency [user], [amount] - Give credits to a user.',
-		'% /tcg takecurrency [user], [amount] - Take credits from a user.',
-		'% /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
-		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
-		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
-	],*/
 };
