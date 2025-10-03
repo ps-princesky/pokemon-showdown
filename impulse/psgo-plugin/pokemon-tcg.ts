@@ -4,7 +4,7 @@
  * @license MIT
  */
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
+import { POKEMON_SETS, TCGSet, ShopState, getRarityColor, getSubtypeColor,
 		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
 		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
