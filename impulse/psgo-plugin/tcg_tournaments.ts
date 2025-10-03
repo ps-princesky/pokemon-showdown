@@ -339,44 +339,58 @@ export async function setPlayerReady(
 	matchId: string,
 	userId: string
 ): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
+	// 1. Find the tournament first to get its ID and check state
 	const tournament = await getActiveTournament();
 	if (!tournament || tournament.status !== 'in_progress') {
 		return { success: false, error: 'No active tournament found.' };
 	}
 
+	// 2. Find the specific match in memory to perform initial checks
 	const match = tournament.matches.find(m => m.matchId === matchId);
 	if (!match) {
 		return { success: false, error: 'Match not found.' };
 	}
-
 	if (match.winner) {
 		return { success: false, error: 'Match already completed.' };
 	}
-
 	if (match.player1 !== userId && match.player2 !== userId) {
 		return { success: false, error: 'You are not in this match.' };
 	}
 
-	if (match.player1 === userId) {
-		match.player1Ready = true;
-	} else {
-		match.player2Ready = true;
+	// 3. Create an atomic update query for the specific player
+	const isPlayer1 = match.player1 === userId;
+	const updateField = isPlayer1 ? "matches.$.player1Ready" : "matches.$.player2Ready";
+	
+	await Tournaments.updateOne(
+		{ _id: tournament._id, "matches.matchId": matchId }, // Filter to find the document and the specific match in the array
+		{ $set: { [updateField]: true } } // Atomically set only the specific ready field to true
+	);
+
+	// 4. After updating, re-fetch the tournament to get the latest state for our check
+	const updatedTournament = await getActiveTournament();
+	if (!updatedTournament) {
+		// This should realistically never happen
+		return { success: false, error: 'Tournament disappeared after update.' };
 	}
-	
-	const bothReady = !!(match.player1Ready && match.player2Ready);
-	
-	// Clear timer if both are ready
+
+	const updatedMatch = updatedTournament.matches.find(m => m.matchId === matchId);
+	if (!updatedMatch) {
+		return { success: false, error: 'Match disappeared after update.' };
+	}
+
+	// 5. Now, perform the check on the guaranteed latest data
+	const bothReady = !!(updatedMatch.player1Ready && updatedMatch.player2Ready);
+
 	if (bothReady) {
-		const timerKey = `${tournament._id}-${match.matchId}`;
+		// If both players are ready, clear the match timeout timer
+		const timerKey = `${tournament._id}-${matchId}`;
 		const timer = matchTimers.get(timerKey);
 		if (timer) {
 			clearTimeout(timer);
 			matchTimers.delete(timerKey);
 		}
 	}
-
-	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
-
+	
 	return { success: true, bothReady };
 }
 
@@ -605,7 +619,7 @@ async function handleMatchTimeout(tournamentId: any, matchId: string, room: any)
 		
 		const updatedTournament = await Tournaments.findById(tournamentId);
 		if (updatedTournament) {
-			const updatedHtml = await generateTournamentHTML(updatedTournament, '');
+			const updatedHtml = await generateTournamentHTML(updatedTournament);
 			room.add(`|uhtmlchange|tournament-active|${updatedHtml}`).update();
 		}
 	}
@@ -613,7 +627,7 @@ async function handleMatchTimeout(tournamentId: any, matchId: string, room: any)
 
 // --- UI GENERATION ---
 
-export async function generateTournamentHTML(tournament: Tournament, viewerId: string): Promise<string> {
+export async function generateTournamentHTML(tournament: Tournament): Promise<string> {
 	const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(tournament.setId));
 	const displaySetName = setInfo ? setInfo.name : tournament.setId;
 
@@ -635,26 +649,9 @@ export async function generateTournamentHTML(tournament: Tournament, viewerId: s
 			content += `<p>${playerList}</p>`;
 		}
 
-		// This block handles different viewer contexts to prevent UI bugs
-		const isParticipant = viewerId ? tournament.participants.some((p: any) => p.userId === viewerId) : false;
-		const isHost = viewerId ? tournament.host === viewerId : false;
-
+		// This block now contains only static, instructional text for all users.
 		content += `<div style="margin-top: 10px;">`;
-		if (viewerId) {
-			// This HTML is for a specific user viewing their options (e.g., via /tcg tournament view)
-			if (!isParticipant) {
-				content += `<button class="button" name="send" value="/tcg tournament join">Join Tournament</button> `;
-			} else {
-				content += `<button class="button" name="send" value="/tcg tournament leave">Leave Tournament</button> `;
-			}
-			if (isHost) {
-				content += `<button class="button" name="send" value="/tcg tournament start">Start Tournament</button> `;
-				content += `<button class="button" name="send" value="/tcg tournament cancel">Cancel Tournament</button>`;
-			}
-		} else {
-			// This HTML is for the generic public broadcast
-			content += `<i>Use <code>/tcg tournament join</code> to enter or <code>/tcg tournament view</code> to see your options.</i>`;
-		}
+		content += `<i>Use commands to interact: <code>/tcg tournament join</code>, <code>/tcg tournament leave</code>. The host can use <code>/tcg tournament start</code>.</i>`;
 		content += `</div>`;
 	}
 
@@ -676,22 +673,14 @@ export async function generateTournamentHTML(tournament: Tournament, viewerId: s
 				const winner = tournament.participants.find((p: any) => p.userId === match.winner);
 				content += `<td><button name="send" value="/tcg tournament match, ${match.matchId}">Winner: ${winner ? winner.username : 'Unknown'}</button></td>`;
 			} else {
-				const isPlayer = match.player1 === viewerId || match.player2 === viewerId;
-				const playerReady = (match.player1 === viewerId && match.player1Ready) || (match.player2 === viewerId && match.player2Ready);
-				
-				if (isPlayer) {
-					if (playerReady) {
-						content += `<td>Waiting for opponent...</td>`;
-					} else {
-						content += `<td><button name="send" value="/tcg tournament ready, ${match.matchId}">I'm Ready</button></td>`;
-					}
-				} else {
-					content += `<td>Match in progress</td>`;
-				}
+				// The status is now the same for everyone, instructing players to use the command.
+				content += `<td>In Progress</td>`;
 			}
 			content += `</tr>`;
 		}
 		content += `</table>`;
+		content += `<div style="margin-top: 5px; text-align: center;"><i>Players in a match use <code>/tcg tournament ready, [match ID]</code> to play.</i></div>`;
+
 
 		if (tournament.status === 'completed' && tournament.winner) {
 			const winner = tournament.participants.find((p: any) => p.userId === tournament.winner);
