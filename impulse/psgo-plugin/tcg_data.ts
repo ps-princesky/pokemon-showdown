@@ -1,3 +1,5 @@
+// tcg_data.ts
+
 export interface TCGSet {
 	code: string;
 	name: string;
@@ -142,3 +144,35 @@ export const POKEMON_SETS: TCGSet[] = [
 	{ code: 'SSP', name: 'Surging Sparks', year: 2024, series: 'Scarlet & Violet' },
 	{ code: 'PRE', name: 'Prismatic Evolutions', year: 2025, series: 'Scarlet & Violet' },
 ];
+
+export function getRarityColor(rarity: string): string {
+	const colors: {[key: string]: string} = {
+		'common': '#808080','uncommon': '#2ECC71','rare': '#3498DB','double rare': '#3CB371',
+		'rare holo': '#9B59B6','reverse holo': '#00CED1','classic collection': '#4682B4','1st edition': '#34495e',
+		'shadowless': '#7f8c8d','rare holo 1st edition': '#8e44ad','shining': '#00BFFF','gold star': '#CD853F',
+		'rare holo star': '#CD853F','rare holo lv.x': '#95a5a6','rare ex': '#bdc3c7','rare sp': '#a1a1a1',
+		'rare prime': '#e67e22','legend': '#CD853F','rare break': '#CD853F','prism star': '#e91e63',
+		'rare holo ex': '#d35400','rare holo gx': '#E67E22','rare holo v': '#E74C3C','rare holo vmax': '#C0392B',
+		'rare holo vstar': '#8E44AD','full art': '#E74C3C','rare ultra': '#E74C3C','illustration rare': '#4ECDC4',
+		'special illustration rare': '#C71585','character rare': '#ff9ff3','character super rare': '#ff69b4',
+		'trainer gallery': '#1abc9c','shiny rare': '#CD853F','rare shiny': '#CD853F','shiny ultra rare': '#9932CC',
+		'rare shiny gx': '#1E90FF','radiant rare': '#FF6B6B','amazing rare': '#00CED1','rare secret': '#F39C12',
+		'rare rainbow': '#E91E63','gold full art': '#CD853F','rare gold': '#CD853F','hyper rare': '#FF10F0',
+		'promo': '#c0392b','black star promo': '#2c3e50','ace spec rare': '#F39C12','rare ace': '#F39C12',
+	};
+	return colors[rarity.toLowerCase()] || '';
+}
+
+export function getSubtypeColor(subtype: string): string {
+	const colors: {[key: string]: string} = {
+		'VMAX': '#C0392B','VSTAR': '#8E44AD','V-UNION': '#6a5acd','V': '#E74C3C','GX': '#E67E22',
+		'EX': '#d35400','ex': '#95a5a6','Tera': '#3498db','Radiant': '#FF6B6B','TAG TEAM': '#2980b9',
+		'Ancient': '#a67b5b','Future': '#8e44ad','SP': '#7f8c8d','Dark Pokémon': '#5d6d7e','Light Pokémon': '#add8e6',
+		'Team Aqua': '#3498db','Team Magma': '#e74c3c','Team Plasma': '#00a8ff','BREAK': '#e67e22','LEGEND': '#CD853F',
+		'Prime': '#e67e22','ACE SPEC': '#F39C12','Prism Star': '#e91e63','Shining': '#00BFFF','Amazing': '#00CED1',
+		'Baby': '#ffb6c1','Crystal Pokémon': '#AFEEEE','Level-Up': '#a9a9a9','Mega': '#b22222',
+		'Owner\'s Pokémon': '#696969','Restored': '#cd853f','Ultra Beast': '#dc143c','Fusion Strike': '#DA70D6',
+		'Rapid Strike': '#1E90FF','Single Strike': '#c23616',
+	};
+	return colors[subtype] || '';
+}
