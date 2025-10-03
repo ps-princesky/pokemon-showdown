@@ -65,7 +65,10 @@ export const Tournaments = MongoDB<Tournament>('tcg_tournaments');
 // --- HELPER FUNCTIONS ---
 
 function generateMatchId(round: number, matchNum: number): string {
-	// FIX: Standardize to lowercase to prevent case-sensitivity issues with toID()
+	// ==================================================================
+	// CRITICAL FIX: Standardize to lowercase to prevent case-sensitivity bugs.
+	// This ensures "r1m1" is used everywhere.
+	// ==================================================================
 	return `r${round}m${matchNum}`;
 }
 
@@ -388,7 +391,7 @@ async function playMatch(
 
 /**
  * Marks a player as ready. If both players become ready, it automatically simulates the match.
- * This is the new, robust function that prevents race conditions.
+ * This is the robust function that prevents race conditions and handles the ready->play flow.
  */
 export async function processPlayerReady(matchId: string, userId: string, room: any): Promise<{
 	success: boolean;
