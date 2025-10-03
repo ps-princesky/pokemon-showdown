@@ -4,7 +4,7 @@
  * @license MIT
  */
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, ShopState, getRarityColor, getSubtypeColor,
+import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
 		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
 		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
@@ -1047,36 +1047,54 @@ export const commands: Chat.ChatCommands = {
 				this.errorReply(`Payment failed. You may not have enough credits.`);
 			}
 		},
-		
+
 		async shop(target, room, user) {
 			const [action, ...args] = target.split(',').map(p => p.trim());
 			const userId = user.id;
 
 			// Helper function to rotate the shop stock if needed
-			const rotateShopStock = async () => {
+			const rotateShopStock = async (): Promise<string[]> => {
 				const now = Date.now();
-				if (now - lastShopRotation < SHOP_ROTATION_HOURS * 60 * 60 * 1000 && shopStock.length > 0) {
-					return; // Shop doesn't need to be rotated yet
+		
+				// Fetch current shop state from database
+				let shopState = await ShopStateCollection.findOne({ _id: 'main' });
+		
+				// Check if rotation is needed
+				if (shopState && now - shopState.lastRotation < SHOP_ROTATION_HOURS * 60 * 60 * 1000 && shopState.stock.length > 0) {
+					return shopState.stock; // No rotation needed, return current stock
 				}
 
+				// Need to rotate - get available sets
 				const availableSets = await TCGCards.distinct('set');
 				if (availableSets.length === 0) {
-					shopStock = [];
-					return;
+					// No sets available, update database with empty stock
+					await ShopStateCollection.upsert(
+						{ _id: 'main' },
+						{ stock: [], lastRotation: now }
+					);
+					return [];
 				}
 
-				// Shuffle the available sets to get a random selection
+					// Shuffle the available sets to get a random selection
 				for (let i = availableSets.length - 1; i > 0; i--) {
 					const j = Math.floor(Math.random() * (i + 1));
 					[availableSets[i], availableSets[j]] = [availableSets[j], availableSets[i]];
 				}
-				
-				shopStock = availableSets.slice(0, SHOP_PACK_SLOTS);
-				lastShopRotation = now;
+		
+				// Get random sets for shop slots
+				const newStock = availableSets.slice(0, SHOP_PACK_SLOTS);
+		
+				// Update database with new stock and rotation time
+				await ShopStateCollection.upsert(
+					{ _id: 'main' },
+					{ stock: newStock, lastRotation: now }
+				);
+		
+				return newStock;
 			};
 
 			try {
-				await rotateShopStock();
+				const currentStock = await rotateShopStock();
 
 				if (toID(action) === 'buy') {
 					const setId = toID(args[0]);
@@ -1084,7 +1102,7 @@ export const commands: Chat.ChatCommands = {
 						return this.errorReply("Usage: /tcg shop buy, [set ID]");
 					}
 
-					if (!shopStock.includes(setId)) {
+					if (!currentStock.includes(setId)) {
 						return this.errorReply(`The set "${setId}" is not currently in stock. Check /tcg shop to see the current rotation.`);
 					}
 
@@ -1092,7 +1110,7 @@ export const commands: Chat.ChatCommands = {
 					if (!canAfford) {
 						return this.errorReply(`You don't have enough credits to buy this pack. You need ${SHOP_PACK_PRICE} Credits.`);
 					}
-					
+			
 					let collection = await UserCollections.findOne({ userId });
 
 					if (!collection) {
@@ -1115,28 +1133,28 @@ export const commands: Chat.ChatCommands = {
 					} else {
 						collection.packs.push({ setId, quantity: 1 });
 					}
-					
+			
 					await UserCollections.upsert({ userId }, collection);
 
 					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 					const displaySetName = setInfo ? setInfo.name : setId;
-					
+			
 					return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
-					
+			
 				} else { // View the shop
 					if (!this.runBroadcast()) return;
 					const balance = await TCG_Economy.getUserBalance(userId);
 
 					let content = `<p>Welcome to the TCG Shop! New packs rotate in every 24 hours.</p>`;
 					content += `<p><strong>Your Balance:</strong> ${balance} Credits</p><hr/>`;
-					
-					if (shopStock.length === 0) {
+			
+					if (currentStock.length === 0) {
 						content += `<p>The shop is currently empty. Please check back later.</p>`;
 					} else {
 						content += `<h4>Booster Packs for Sale</h4>`;
 						content += `<table class="themed-table">`;
 						content += `<tr class="themed-table-header"><th>Set Name</th><th>Set ID</th><th>Price</th><th></th></tr>`;
-						for (const setId of shopStock) {
+						for (const setId of currentStock) {
 							const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 							const setName = setInfo ? setInfo.name : setId;
 							content += `<tr class="themed-table-row">`;
