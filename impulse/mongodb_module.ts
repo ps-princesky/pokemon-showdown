@@ -37,15 +37,6 @@ interface PendingOperation {
 	throttleTimer: NodeJS.Timeout | null;
 }
 
-// Enhanced UpdateResult interface with backward compatibility
-export interface UpdateResult {
-	modifiedCount: number;
-	upsertedCount: number;
-	upsertedId?: any;
-	matchedCount: number;
-	valueOf(): number; // For backward compatibility with numeric comparisons
-}
-
 declare const __mongoState: {
 	client: MongoClient | null;
 	db: Db | null;
@@ -74,20 +65,6 @@ export class MongoDBError extends Error {
 		super(message);
 		this.name = 'MongoDBError';
 	}
-}
-
-// Helper function to create backward-compatible UpdateResult
-function createUpdateResult(result: any): UpdateResult {
-	const updateResult = {
-		modifiedCount: result.modifiedCount || 0,
-		upsertedCount: result.upsertedCount || 0,
-		upsertedId: result.upsertedId,
-		matchedCount: result.matchedCount || 0,
-		valueOf() {
-			return this.modifiedCount;
-		}
-	};
-	return updateResult as UpdateResult;
 }
 
 export class MongoDBPath<T extends Document = Document> {
@@ -154,43 +131,25 @@ export class MongoDBPath<T extends Document = Document> {
 		return Object.values(result.insertedIds);
 	}
 
-	async updateOne(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async updateOne(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
-	async updateMany(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async updateMany(filter: Filter<T>, update: UpdateFilter<T>, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const result = await collection.updateMany(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
-	async replaceOne(filter: Filter<T>, document: Omit<T, '_id'>, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async replaceOne(filter: Filter<T>, document: Omit<T, '_id'>, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const result = await collection.replaceOne(filter, document as any, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
 	async deleteOne(filter: Filter<T>, options?: DeleteOptions): Promise<number> {
@@ -222,60 +181,36 @@ export class MongoDBPath<T extends Document = Document> {
 
 	// ATOMIC OPERATIONS (safer for concurrent scenarios)
 
-	async increment(filter: Filter<T>, field: string, value: number = 1, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async increment(filter: Filter<T>, field: string, value: number = 1, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const update = { $inc: { [field]: value } } as UpdateFilter<T>;
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
-	async push(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async push(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const update = { $push: { [field]: value } } as UpdateFilter<T>;
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
-	async pull(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async pull(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const update = { $pull: { [field]: value } } as UpdateFilter<T>;
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
-	async addToSet(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async addToSet(filter: Filter<T>, field: string, value: any, options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const update = { $addToSet: { [field]: value } } as UpdateFilter<T>;
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
 	async setOnInsert(filter: Filter<T>, document: Partial<T>, options?: UpdateOptions): Promise<boolean> {
@@ -289,19 +224,13 @@ export class MongoDBPath<T extends Document = Document> {
 		return result.upsertedCount > 0;
 	}
 
-	async unset(filter: Filter<T>, fields: string[], options?: UpdateOptions): Promise<UpdateResult> {
-		if (!this.checkWritePermission()) {
-			return createUpdateResult({ 
-				modifiedCount: 0, 
-				upsertedCount: 0, 
-				matchedCount: 0 
-			});
-		}
+	async unset(filter: Filter<T>, fields: string[], options?: UpdateOptions): Promise<number> {
+		if (!this.checkWritePermission()) return Promise.resolve(0);
 		const collection = await this.getCollection();
 		const unsetObj = Object.fromEntries(fields.map(f => [f, ""]));
 		const update = { $unset: unsetObj } as UpdateFilter<T>;
 		const result = await collection.updateOne(filter, update, options);
-		return createUpdateResult(result);
+		return result.modifiedCount;
 	}
 
 	// FIND AND MODIFY (atomic read-modify-write)
