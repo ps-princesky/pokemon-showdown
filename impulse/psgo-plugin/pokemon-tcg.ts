@@ -1468,7 +1468,7 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`An error occurred with your packs: ${e.message}`);
 			}
 		},
-
+		
 		tournament: {
 			'': 'view',
 			async create(target, room, user) {
@@ -1504,7 +1504,7 @@ export const commands: Chat.ChatCommands = {
 				this.sendReply(`Tournament "${name}" created successfully!`);
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+					const html = await TCG_Tournament.generateTournamentHTML(tournament);
 					room.add(`|uhtml|tournament-active|${html}`).update();
 				}
 			},
@@ -1519,8 +1519,7 @@ export const commands: Chat.ChatCommands = {
 				// Update the public view for everyone
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					// Pass an empty viewerId to generate a generic view for the broadcast
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, ''); 
+					const html = await TCG_Tournament.generateTournamentHTML(tournament); 
 					room.add(`|uhtmlchange|tournament-active|${html}`).update();
 				}
 			},
@@ -1535,12 +1534,11 @@ export const commands: Chat.ChatCommands = {
 				// Update the public view for everyone
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					// Pass an empty viewerId to generate a generic view for the broadcast
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, '');
+					const html = await TCG_Tournament.generateTournamentHTML(tournament);
 					room.add(`|uhtmlchange|tournament-active|${html}`).update();
 				}
 			},
-			
+
 			async start(target, room, user) {
 				this.checkCan('globalban');
 				const result = await TCG_Tournament.startTournament(user.id, room);
@@ -1550,7 +1548,7 @@ export const commands: Chat.ChatCommands = {
 				this.sendReply(`Tournament has been started! The bracket has been generated.`);
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+					const html = await TCG_Tournament.generateTournamentHTML(tournament);
 					room.add(`|uhtmlchange|tournament-active|${html}`).update();
 				}
 			},
@@ -1561,7 +1559,7 @@ export const commands: Chat.ChatCommands = {
 				if (!tournament) {
 					return this.sendReplyBox(TCG_UI.buildPage('Active Tournament', '<p>No active tournament at this time.</p>'));
 				}
-				const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+				const html = await TCG_Tournament.generateTournamentHTML(tournament);
 				this.sendReplyBox(html);
 			},
 
@@ -1575,25 +1573,27 @@ export const commands: Chat.ChatCommands = {
 				}
 
 				let tournament = await TCG_Tournament.getActiveTournament();
-				if (tournament) {
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
-					room.add(`|uhtmlchange|tournament-active|${html}`).update();
-				}
 				
 				if (result.bothReady) {
 					const matchResult = await TCG_Tournament.playMatch(matchId, room);
 					if (matchResult.success) {
-						tournament = await TCG_Tournament.getActiveTournament(); // Refetch
+						// Refetch the tournament state after the match has been played and the round may have advanced
+						tournament = await TCG_Tournament.getActiveTournament(); 
 						if (tournament) {
 							const resultHtml = await TCG_Tournament.generateMatchResultHTML(tournament, matchId);
 							room.add(`|uhtml|match-result-${matchId}|${resultHtml}`).update();
 							
-							const tournamentHtml = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+							const tournamentHtml = await TCG_Tournament.generateTournamentHTML(tournament);
 							room.add(`|uhtmlchange|tournament-active|${tournamentHtml}`).update();
 						}
 					}
 				} else {
 					this.sendReply('You are ready! Waiting for your opponent...');
+					// Update the UI to show the 'Ready' status (even though it's not visible, this keeps the state consistent)
+					if (tournament) {
+						const html = await TCG_Tournament.generateTournamentHTML(tournament);
+						room.add(`|uhtmlchange|tournament-active|${html}`).update();
+					}
 				}
 			},
 			
