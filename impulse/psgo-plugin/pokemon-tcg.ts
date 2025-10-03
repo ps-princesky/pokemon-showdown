@@ -234,19 +234,197 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 // ==================== HELPER FUNCTIONS ====================
 
 function getCardPoints(card: TCGCard): number {
-	// ... (function content is complete, omitted here for brevity but included in the final file)
+	switch (card.rarity) {
+		// Tier 1: Common Pulls
+		case 'Common':
+		case '1st Edition':
+		case 'Shadowless':
+			return 5;
+		case 'Uncommon':
+			return 10;
+		case 'Reverse Holo':
+			return 15;
+
+		// Tier 2: Standard Rares
+		case 'Rare':
+			return 20;
+		case 'Double Rare':
+		case 'Promo':
+		case 'Black Star Promo':
+			return 25;
+		case 'Rare Holo':
+		case 'Classic Collection':
+			return 30;
+		case 'Rare Holo 1st Edition':
+			return 35;
+
+		// Tier 3: Holo Rule Box Cards (V, GX, EX, etc.)
+		case 'Rare SP':
+			return 40;
+		case 'Rare Holo EX':
+		case 'Rare Holo GX':
+		case 'Rare Holo V':
+			return 45;
+		case 'Rare BREAK':
+		case 'Rare Prime':
+		case 'LEGEND':
+		case 'Prism Star':
+			return 50;
+		case 'Rare Holo VMAX':
+		case 'Rare Holo VSTAR':
+			return 55;
+		case 'Rare ex': // Older, valuable ex cards
+			return 60;
+			
+		// Tier 4: Special Rarity Cards
+		case 'Radiant Rare':
+			return 60;
+		case 'Amazing Rare':
+		case 'Shining':
+			return 65;
+		case 'ACE SPEC Rare':
+		case 'Rare ACE':
+			return 70;
+		
+		// Tier 5: Full Art & Illustration Rares
+		case 'Full Art':
+		case 'Rare Ultra': // Standard Full Arts
+			return 75;
+		case 'Rare Shiny':
+		case 'Shiny Rare':
+			return 80;
+		case 'Trainer Gallery':
+		case 'Character Rare':
+		case 'Rare Shiny GX':
+		case 'Shiny Ultra Rare':
+			return 85;
+		case 'Illustration Rare':
+			return 90;
+		case 'Rare Holo LV.X':
+			return 95;
+		case 'Rare Holo Star':
+			return 100;
+		case 'Character Super Rare':
+			return 110;
+			
+		// Tier 6: Secret & Hyper Rares (Highest Value)
+		case 'Rare Secret':
+			return 120;
+		case 'Special Illustration Rare':
+			return 150;
+		case 'Rare Rainbow':
+			return 160;
+		case 'Gold Full Art':
+		case 'Rare Gold':
+		case 'Hyper Rare': // Gold Cards
+			return 175;
+		case 'Gold Star':
+			return 200;
+
+		default:
+			return 5;
+	}
 }
+
 function hexToRgba(hex: string, alpha: number): string {
-	// ... (function content is complete, omitted here for brevity but included in the final file)
+	if (!/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
+		return `rgba(128, 128, 128, ${alpha})`;
+	}
+	let c = hex.substring(1).split('');
+	if (c.length === 3) {
+		c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+	}
+	const num = parseInt(c.join(''), 16);
+	const r = (num >> 16) & 255;
+	const g = (num >> 8) & 255;
+	const b = num & 255;
+
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
 function getRarityColor(rarity: string): string {
-	// ... (function content is complete, omitted here for brevity but included in the final file)
+	const colors: {[key: string]: string} = {
+		'common': '#808080','uncommon': '#2ECC71','rare': '#3498DB','double rare': '#3CB371',
+		'rare holo': '#9B59B6','reverse holo': '#00CED1','classic collection': '#4682B4','1st edition': '#34495e',
+		'shadowless': '#7f8c8d','rare holo 1st edition': '#8e44ad','shining': '#00BFFF','gold star': '#CD853F',
+		'rare holo star': '#CD853F','rare holo lv.x': '#95a5a6','rare ex': '#bdc3c7','rare sp': '#a1a1a1',
+		'rare prime': '#e67e22','legend': '#CD853F','rare break': '#CD853F','prism star': '#e91e63',
+		'rare holo ex': '#d35400','rare holo gx': '#E67E22','rare holo v': '#E74C3C','rare holo vmax': '#C0392B',
+		'rare holo vstar': '#8E44AD','full art': '#E74C3C','rare ultra': '#E74C3C','illustration rare': '#4ECDC4',
+		'special illustration rare': '#C71585','character rare': '#ff9ff3','character super rare': '#ff69b4',
+		'trainer gallery': '#1abc9c','shiny rare': '#CD853F','rare shiny': '#CD853F','shiny ultra rare': '#9932CC',
+		'rare shiny gx': '#1E90FF','radiant rare': '#FF6B6B','amazing rare': '#00CED1','rare secret': '#F39C12',
+		'rare rainbow': '#E91E63','gold full art': '#CD853F','rare gold': '#CD853F','hyper rare': '#FF10F0',
+		'promo': '#c0392b','black star promo': '#2c3e50','ace spec rare': '#F39C12','rare ace': '#F39C12',
+	};
+	return colors[rarity.toLowerCase()] || '';
 }
+
 function getSubtypeColor(subtype: string): string {
-	// ... (function content is complete, omitted here for brevity but included in the final file)
+	const colors: {[key: string]: string} = {
+		'VMAX': '#C0392B','VSTAR': '#8E44AD','V-UNION': '#6a5acd','V': '#E74C3C','GX': '#E67E22',
+		'EX': '#d35400','ex': '#95a5a6','Tera': '#3498db','Radiant': '#FF6B6B','TAG TEAM': '#2980b9',
+		'Ancient': '#a67b5b','Future': '#8e44ad','SP': '#7f8c8d','Dark Pokémon': '#5d6d7e','Light Pokémon': '#add8e6',
+		'Team Aqua': '#3498db','Team Magma': '#e74c3c','Team Plasma': '#00a8ff','BREAK': '#e67e22','LEGEND': '#CD853F',
+		'Prime': '#e67e22','ACE SPEC': '#F39C12','Prism Star': '#e91e63','Shining': '#00BFFF','Amazing': '#00CED1',
+		'Baby': '#ffb6c1','Crystal Pokémon': '#AFEEEE','Level-Up': '#a9a9a9','Mega': '#b22222',
+		'Owner\'s Pokémon': '#696969','Restored': '#cd853f','Ultra Beast': '#dc143c','Fusion Strike': '#DA70D6',
+		'Rapid Strike': '#1E90FF','Single Strike': '#c23616',
+	};
+	return colors[subtype] || '';
 }
+
 async function generatePack(setId: string): Promise<TCGCard[] | null> {
-	// ... (function content is complete, omitted here for brevity but included in the final file)
+	const setCards = await TCGCards.find({ set: setId });
+	if (setCards.length === 0) return null;
+
+	const commons = setCards.filter(c => c.rarity === 'Common');
+	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
+	const raresPool = setCards.filter(c => c.rarity.includes('Rare'));
+
+	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) return null;
+
+	const pack: TCGCard[] = [];
+	const usedCardIds = new Set<string>();
+
+	const pickRandom = (pool: TCGCard[]): TCGCard => {
+		let attempts = 0;
+		while (attempts < 50) {
+			const randomCard = pool[Math.floor(Math.random() * pool.length)];
+			if (!usedCardIds.has(randomCard.cardId)) {
+				usedCardIds.add(randomCard.cardId);
+				return randomCard;
+			}
+			attempts++;
+		}
+		return pool[Math.floor(Math.random() * pool.length)];
+	};
+
+	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
+	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
+	pack.push(pickRandom(uncommons));
+
+	const hitRoll = Math.random() * 100;
+	let chosenRarityTier: string;
+
+	if (hitRoll <= 50) chosenRarityTier = 'Rare';
+	else if (hitRoll <= 75) chosenRarityTier = 'Rare Holo';
+	else if (hitRoll <= 90) {
+		const ultraRares = ['Rare Ultra', 'Illustration Rare', 'Rare Holo V', 'Rare Holo VMAX', 'Rare Holo VSTAR'];
+		chosenRarityTier = ultraRares[Math.floor(Math.random() * ultraRares.length)];
+	} else {
+		const secretRares = ['Rare Secret', 'Special Illustration Rare', 'Hyper Rare', 'Rare Rainbow'];
+		chosenRarityTier = secretRares[Math.floor(Math.random() * secretRares.length)];
+	}
+
+	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
+	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
+	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
+	if (hitPool.length === 0) hitPool = raresPool;
+
+	pack.push(pickRandom(hitPool));
+	
+	return pack;
 }
 
 // ==================== COMMANDS ====================
@@ -402,12 +580,12 @@ export const commands: Chat.ChatCommands = {
 			}
 			
 			const userId = user.id;
-			const setId = toID(target);
+			const setId = target.trim().toLowerCase();
 
 			try {
 				const pack = await generatePack(setId);
 				if (!pack) {
-					return this.errorReply(`Set with ID "${setId}" not found or is missing required card rarities. Use /tcg sets to see a list of sets.`);
+					return this.errorReply(`Set with ID "${target.trim()}" not found or is missing required card rarities. Use /tcg sets to see a list of sets.`);
 				}
 
 				const collection = await UserCollections.findOne({ userId }) || {
