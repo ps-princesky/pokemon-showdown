@@ -252,6 +252,7 @@ export const commands: Chat.ChatCommands = {
 			try {
 				let collection = await UserCollections.findOne({ userId });
 
+				// --- Cooldown Check ---
 				if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
 					const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
 					const hours = Math.floor(timeLeft / (1000 * 60 * 60));
@@ -270,13 +271,19 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(`An error occurred while generating a pack from set "${randomSetId}".`);
 				}
 
+				// --- MODIFIED: Robust Initialization ---
 				if (!collection) {
+					// Case 1: User is brand new
 					collection = {
 						userId,
 						cards: [],
 						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
 						lastUpdated: Date.now(),
 					};
+				} else {
+					// Case 2: User document exists but might be partial
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				}
 
 				let pointsGained = 0;
@@ -290,7 +297,7 @@ export const commands: Chat.ChatCommands = {
 					}
 				}
 
-				collection.stats.totalCards = (collection.stats.totalCards || 0) + pack.length;
+				collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
 				collection.stats.uniqueCards = collection.cards.length;
 				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
 				collection.currency = (collection.currency || 0) + DAILY_CURRENCY_AWARD;
@@ -313,14 +320,14 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`Error claiming daily pack: ${e.message}`);
 			}
 		},
-		
+
 		async openpack(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('%')) return false; 
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
 			
-			const userId = user.id;
+			const userId = user.id; // Or you could make this command target other users
 			const setId = target.trim().toLowerCase();
 
 			try {
@@ -329,12 +336,20 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(`Set with ID "${target.trim()}" not found or is missing required card rarities. Use /tcg sets to see a list of sets.`);
 				}
 
-				const collection = await UserCollections.findOne({ userId }) || {
-					userId,
-					cards: [],
-					stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
-					lastUpdated: Date.now(),
-				};
+				let collection = await UserCollections.findOne({ userId });
+
+				// --- MODIFIED: Robust Initialization ---
+				if (!collection) {
+					collection = {
+						userId,
+						cards: [],
+						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+						lastUpdated: Date.now(),
+					};
+				} else {
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+				}
 
 				let pointsGained = 0;
 				for (const card of pack) {
@@ -347,7 +362,7 @@ export const commands: Chat.ChatCommands = {
 					}
 				}
 
-				collection.stats.totalCards = (collection.stats.totalCards || 0) + pack.length;
+				collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
 				collection.stats.uniqueCards = collection.cards.length;
 				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
 				collection.lastUpdated = Date.now();
