@@ -3,17 +3,13 @@
  * Core command logic file.
  * @license MIT
  */
-
 import { MongoDB } from '../../impulse/mongodb_module';
 import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
 		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
 		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
-
-// Initialize collections
-const TCGCards = MongoDB<TCGCard>('tcg_cards');
-const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
+import { TCGCards, UserCollections } from './tcg_collections';
 
 // State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
