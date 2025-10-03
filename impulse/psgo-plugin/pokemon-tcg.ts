@@ -1468,6 +1468,351 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`An error occurred with your packs: ${e.message}`);
 			}
 		},
+
+		
+		async tournament(target, room, user) {
+			const [action, ...args] = target.split(',').map(p => p.trim());
+
+			switch (toID(action)) {
+				case 'create': {
+					this.checkCan('globalban');
+					const [name, entryFeeStr, setId, maxParticipantsStr] = args;
+					
+					if (!name || !entryFeeStr || !setId || !maxParticipantsStr) {
+						return this.errorReply('Usage: /tcg tournament create, [name], [entry fee], [set ID], [max participants]');
+					}
+
+					const entryFee = parseInt(entryFeeStr);
+					const maxParticipants = parseInt(maxParticipantsStr);
+
+					if (isNaN(entryFee) || isNaN(maxParticipants)) {
+						return this.errorReply('Entry fee and max participants must be numbers.');
+					}
+
+					try {
+						const result = await TCG_Tournament.createTournament(
+							name,
+							user.id,
+							entryFee,
+							toID(setId),
+							maxParticipants
+						);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to create tournament.');
+						}
+
+						this.sendReply(`Tournament "${name}" created successfully! ID: ${result.tournamentId}`);
+						
+						const tournament = await TCG_Tournament.getTournamentDetails(result.tournamentId!);
+						if (tournament) {
+							const html = await generateTournamentHTML(tournament, user.id);
+							room.add(`|uhtml|tournament-${tournament.tournamentId}|${html}`).update();
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error creating tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'join': {
+					const [tournamentId] = args;
+					if (!tournamentId) {
+						return this.errorReply('Usage: /tcg tournament join, [tournament ID]');
+					}
+
+					try {
+						const result = await TCG_Tournament.joinTournament(tournamentId, user.id, user.name);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to join tournament.');
+						}
+
+						this.sendReply(`You have successfully joined the tournament!`);
+						
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (tournament) {
+							const html = await generateTournamentHTML(tournament, user.id);
+							room.add(`|uhtmlchange|tournament-${tournamentId}|${html}`).update();
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error joining tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'leave': {
+					const [tournamentId] = args;
+					if (!tournamentId) {
+						return this.errorReply('Usage: /tcg tournament leave, [tournament ID]');
+					}
+
+					try {
+						const result = await TCG_Tournament.leaveTournament(tournamentId, user.id);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to leave tournament.');
+						}
+
+						this.sendReply(`You have left the tournament and your entry fee has been refunded.`);
+						
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (tournament) {
+							const html = await generateTournamentHTML(tournament, user.id);
+							room.add(`|uhtmlchange|tournament-${tournamentId}|${html}`).update();
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error leaving tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'start': {
+					this.checkCan('globalban');
+					const [tournamentId] = args;
+					if (!tournamentId) {
+						return this.errorReply('Usage: /tcg tournament start, [tournament ID]');
+					}
+
+					try {
+						const result = await TCG_Tournament.startTournament(tournamentId, user.id);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to start tournament.');
+						}
+
+						this.sendReply(`Tournament has been started! The bracket has been generated.`);
+						
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (tournament) {
+							const html = await generateTournamentHTML(tournament, user.id);
+							room.add(`|uhtmlchange|tournament-${tournamentId}|${html}`).update();
+							
+							// Start timers for all matches
+							await startMatchTimersInternal(tournamentId, room);
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error starting tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'view': {
+					if (!this.runBroadcast()) return;
+					const [tournamentId] = args;
+					if (!tournamentId) {
+						return this.errorReply('Usage: /tcg tournament view, [tournament ID]');
+					}
+
+					try {
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (!tournament) {
+							return this.errorReply('Tournament not found.');
+						}
+
+						const html = await generateTournamentHTML(tournament, user.id);
+						this.sendReplyBox(html);
+					} catch (e: any) {
+						return this.errorReply(`Error viewing tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'ready': {
+					const [tournamentId, matchId] = args;
+					if (!tournamentId || !matchId) {
+						return this.errorReply('Usage: /tcg tournament ready, [tournament ID], [match ID]');
+					}
+
+					try {
+						const result = await TCG_Tournament.setPlayerReady(tournamentId, matchId, user.id);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to set ready status.');
+						}
+
+						// Update tournament display immediately
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (tournament) {
+							const html = await generateTournamentHTML(tournament, user.id);
+							room.add(`|uhtmlchange|tournament-${tournamentId}|${html}`).update();
+						}
+
+						// If both players are ready, play the match
+						if (result.bothReady) {
+							const matchResult = await TCG_Tournament.playMatch(tournamentId, matchId);
+							
+							if (matchResult.success && matchResult.matchData) {
+								const updatedTournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+								if (updatedTournament) {
+									const match = updatedTournament.matches.find(m => m.matchId === matchId);
+									if (match) {
+										const resultHtml = await generateMatchResultHTML(updatedTournament, match, matchResult.matchData);
+										room.add(`|uhtml|match-result-${matchId}|${resultHtml}`).update();
+										
+										// Update tournament display
+										const tournamentHtml = await generateTournamentHTML(updatedTournament, user.id);
+										room.add(`|uhtmlchange|tournament-${tournamentId}|${tournamentHtml}`).update();
+										
+										// Check if we need to advance to next round
+										if (updatedTournament.status === 'in_progress' && updatedTournament.currentRound > tournament.currentRound) {
+											await startMatchTimersInternal(tournamentId, room);
+										}
+									}
+								}
+							}
+						} else {
+							this.sendReply('You are ready! Waiting for opponent...');
+						}
+					} catch (e: any) {
+						return this.errorReply(`Error setting ready: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'match': {
+					if (!this.runBroadcast()) return;
+					const [tournamentId, matchId] = args;
+					if (!tournamentId || !matchId) {
+						return this.errorReply('Usage: /tcg tournament match, [tournament ID], [match ID]');
+					}
+
+					try {
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (!tournament) {
+							return this.errorReply('Tournament not found.');
+						}
+
+						let match = null;
+						for (const roundMatches of tournament.bracketHistory) {
+							const found = roundMatches.find(m => m.matchId === matchId);
+							if (found) {
+								match = found;
+								break;
+							}
+						}
+
+						if (!match || !match.winner) {
+							return this.errorReply('Match not found or not yet played.');
+						}
+
+						const html = await generateMatchResultHTML(tournament, match, match);
+						this.sendReplyBox(html);
+					} catch (e: any) {
+						return this.errorReply(`Error viewing match: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'list': {
+					if (!this.runBroadcast()) return;
+					try {
+						const tournaments = await TCG_Tournament.listActiveTournaments();
+
+						if (tournaments.length === 0) {
+							return this.sendReplyBox(TCG_UI.buildPage('Active Tournaments', '<p>No active tournaments at this time.</p>'));
+						}
+
+						let content = `<table class="themed-table">`;
+						content += `<tr class="themed-table-header"><th>Name</th><th>Host</th><th>Players</th><th>Entry Fee</th><th>Prize Pool</th><th>Status</th><th></th></tr>`;
+
+						for (const t of tournaments) {
+							content += `<tr class="themed-table-row">`;
+							content += `<td><strong>${t.name}</strong></td>`;
+							content += `<td>${Impulse.nameColor(t.host, true)}</td>`;
+							content += `<td>${t.participants.length}/${t.maxParticipants}</td>`;
+							content += `<td>${t.entryFee} Credits</td>`;
+							content += `<td>${t.prizePool} Credits</td>`;
+							content += `<td>${t.status === 'registration' ? 'Open' : 'In Progress'}</td>`;
+							content += `<td><button name="send" value="/tcg tournament view, ${t.tournamentId}">View</button></td>`;
+							content += `</tr>`;
+						}
+						content += `</table>`;
+
+						const output = TCG_UI.buildPage('Active Tournaments', content);
+						this.sendReplyBox(output);
+					} catch (e: any) {
+						return this.errorReply(`Error listing tournaments: ${e.message}`);
+					}
+					break;
+				}
+
+				case 'history': {
+					if (!this.runBroadcast()) return;
+					const targetUser = args[0] ? toID(args[0]) : user.id;
+					const targetUsername = args[0] || user.name;
+
+					try {
+						const tournaments = await TCG_Tournament.getUserTournamentHistory(targetUser);
+
+						if (tournaments.length === 0) {
+							return this.sendReplyBox(TCG_UI.buildPage(`${targetUsername}'s Tournament History`, '<p>No tournament history found.</p>'));
+						}
+
+						let content = `<table class="themed-table">`;
+						content += `<tr class="themed-table-header"><th>Tournament</th><th>Placement</th><th>Prize Pool</th><th>Date</th></tr>`;
+
+						for (const t of tournaments) {
+							const placement = t.winner === targetUser ? '1st' : 
+											  t.bracketHistory.length > 0 && 
+											  t.bracketHistory[t.bracketHistory.length - 1].some(m => 
+												  (m.player1 === targetUser || m.player2 === targetUser) && !m.winner
+											  ) ? '2nd' : 'Eliminated';
+
+							content += `<tr class="themed-table-row">`;
+							content += `<td><strong>${t.name}</strong></td>`;
+							content += `<td>${placement}</td>`;
+							content += `<td>${t.prizePool} Credits</td>`;
+							content += `<td>${new Date(t.completedAt || t.createdAt).toLocaleDateString()}</td>`;
+							content += `</tr>`;
+						}
+						content += `</table>`;
+
+						const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s Tournament History`, content);
+						this.sendReplyBox(output);
+					} catch (e: any) {
+						return this.errorReply(`Error fetching history: ${e.message}`);
+					}
+					break;
+				}
+				case 'cancel': {
+					this.checkCan('globalban');
+					const [tournamentId] = args;
+					if (!tournamentId) {
+						return this.errorReply('Usage: /tcg tournament cancel, [tournament ID]');
+					}
+
+					try {
+						// Clear all timers for this tournament
+						const tournament = await TCG_Tournament.getTournamentDetails(tournamentId);
+						if (tournament) {
+							for (const match of tournament.matches) {
+								const timerKey = `${tournamentId}-${match.matchId}`;
+								const timer = matchTimers.get(timerKey);
+								if (timer) {
+									clearTimeout(timer);
+									matchTimers.delete(timerKey);
+								}
+							}
+						}
+
+						const result = await TCG_Tournament.cancelTournament(tournamentId, user.id);
+
+						if (!result.success) {
+							return this.errorReply(result.error || 'Failed to cancel tournament.');
+						}
+						this.sendReply(`Tournament has been cancelled. All entry fees have been refunded.`);
+						room.add(`|uhtmlchange|tournament-${tournamentId}|<div class="infobox"><h3>Tournament Cancelled</h3><p>This tournament has been cancelled by the host.</p></div>`).update();
+					} catch (e: any) {
+						return this.errorReply(`Error cancelling tournament: ${e.message}`);
+					}
+					break;
+				}
+
+				default:
+					return this.errorReply('Invalid tournament action. Use: create, join, leave, start, view, ready, match, list, history, or cancel.');
+			}
+		},
 	},
 	
 	tcghelp: [
