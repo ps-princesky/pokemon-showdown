@@ -72,8 +72,6 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
 	const raresPool = setCards.filter(c => c.rarity.includes('Rare'));
 
-	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) return null;
-
 	const pack: TCGCard[] = [];
 	const usedCardIds = new Set<string>();
 
@@ -90,10 +88,29 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
 
+	// --- NEW: Handle special sets that lack standard rarities ---
+	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
+		// This is likely a special set (like a Trainer Gallery). Generate 10 random cards from the whole set.
+		if (setCards.length < 10) {
+			// If the set has fewer than 10 cards, just return them all.
+			return setCards;
+		}
+		for (let i = 0; i < 10; i++) {
+			pack.push(pickRandom(setCards));
+		}
+		return pack;
+	}
+
+	// --- Original Logic for standard sets ---
+	// 5 Commons
 	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
+	// 3 Uncommons
 	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
+	
+	// 1 Reverse Holo slot (simplified: we'll pick another Uncommon)
 	pack.push(pickRandom(uncommons));
 
+	// The "Rare Slot" - with weighted probabilities
 	const hitRoll = Math.random() * 100;
 	let chosenRarityTier: string;
 
@@ -108,6 +125,7 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	}
 
 	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
+	// Fallback mechanism
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
 	if (hitPool.length === 0) hitPool = raresPool;
