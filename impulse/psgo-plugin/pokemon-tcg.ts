@@ -76,23 +76,23 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	const usedCardIds = new Set<string>();
 
 	const pickRandom = (pool: TCGCard[]): TCGCard => {
+		// This helper function remains the same
 		let attempts = 0;
 		while (attempts < 50) {
 			const randomCard = pool[Math.floor(Math.random() * pool.length)];
+			if (!pool.length || !randomCard) break; // Failsafe for empty pools
 			if (!usedCardIds.has(randomCard.cardId)) {
 				usedCardIds.add(randomCard.cardId);
 				return randomCard;
 			}
 			attempts++;
 		}
+		// If we fail to find a unique card, just return a random one
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
 
-	// --- NEW: Handle special sets that lack standard rarities ---
 	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
-		// This is likely a special set (like a Trainer Gallery). Generate 10 random cards from the whole set.
 		if (setCards.length < 10) {
-			// If the set has fewer than 10 cards, just return them all.
 			return setCards;
 		}
 		for (let i = 0; i < 10; i++) {
@@ -101,16 +101,20 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		return pack;
 	}
 
-	// --- Original Logic for standard sets ---
+	// --- MODIFIED: Create a pool for the Reverse Holo slot ---
+	const reverseHoloPool = [...commons, ...uncommons];
+
+	// Standard Pack Composition
 	// 5 Commons
 	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
 	// 3 Uncommons
 	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
 	
-	// 1 Reverse Holo slot (simplified: we'll pick another Uncommon)
-	pack.push(pickRandom(uncommons));
+	// --- MODIFIED: 1 True Reverse Holo slot ---
+	// This card can be a Common or Uncommon, adding point variance.
+	pack.push(pickRandom(reverseHoloPool));
 
-	// The "Rare Slot" - with weighted probabilities
+	// The "Rare Slot"
 	const hitRoll = Math.random() * 100;
 	let chosenRarityTier: string;
 
