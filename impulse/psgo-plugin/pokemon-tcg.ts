@@ -5,7 +5,9 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor, TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES, SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
+import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
+		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
+		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 
@@ -125,7 +127,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async addcard(target, room, user) {
-			if (!this.can('gdeclare')) return false;
+			this.checkCan('globalban');
 			const parts = target.split(',').map(x => x.trim());
 			
 			if (parts.length < 6) {
@@ -313,7 +315,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		
 		async openpack(target, room, user) {
-			if (!this.can('%')) return false; 
+			this.checkCan('globalban');
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
@@ -924,7 +926,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async givecurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg givecurrency [user], [amount]");
@@ -948,7 +950,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async takecurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg takecurrency [user], [amount]");
@@ -972,7 +974,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async setcurrency(target, room, user) {
-			if (!this.can('%')) return false;
+			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg setcurrency [user], [amount]");
@@ -1042,10 +1044,10 @@ export const commands: Chat.ChatCommands = {
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
-		'% /tcg givecurrency [user], [amount] - Give credits to a user.',
-		'% /tcg takecurrency [user], [amount] - Take credits from a user.',
-		'% /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
-		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
-		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
+		'@ /tcg givecurrency [user], [amount] - Give credits to a user.',
+		'@ /tcg takecurrency [user], [amount] - Take credits from a user.',
+		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
+		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
+		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
 	],
 };
