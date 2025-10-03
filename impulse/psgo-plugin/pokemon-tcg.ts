@@ -89,6 +89,7 @@ const SUBTYPES = {
 		'Restored',
 		'Shining',
 		'Single Strike',
+		'SP', // Special Pokémon from Diamond & Pearl / Platinum
 		'Stage 1',
 		'Stage 2',
 		'TAG TEAM',
@@ -188,13 +189,46 @@ const RARITIES = [
 ];
 
 const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
-	VMAX: { color: '#C0392B', glow: true },
-	VSTAR: { color: '#8E44AD', glow: true },
-	GX: { color: '#E67E22', glow: true },
-	EX: { color: '#E74C3C', glow: true },
+	// Modern Mechanics
+	'VMAX': { color: '#C0392B', glow: true },
+	'VSTAR': { color: '#8E44AD', glow: true },
+	'V-UNION': { color: '#6a5acd', glow: true },
+	'V': { color: '#E74C3C', glow: true },
+	'GX': { color: '#E67E22', glow: true },
+	'ex': { color: '#95a5a6', glow: true },
+	'Tera': { color: '#3498db', glow: true },
+	'Radiant': { color: '#FF6B6B', glow: true },
+	'TAG TEAM': { color: '#2980b9', glow: true },
+	
+	// Eras & Themes
+	'Ancient': { color: '#a67b5b', glow: true },
+	'Future': { color: '#8e44ad', glow: true },
+	'SP': { color: '#7f8c8d', glow: true },
+	'Dark Pokémon': { color: '#5d6d7e', glow: true },
+	'Light Pokémon': { color: '#f1c40f', glow: true },
+	'Team Aqua': { color: '#3498db', glow: true },
+	'Team Magma': { color: '#e74c3c', glow: true },
+	'Team Plasma': { color: '#00a8ff', glow: true },
+
+	// Other Special Types
+	'EX': { color: '#d35400', glow: true },
+	'BREAK': { color: '#e67e22', glow: true },
+	'LEGEND': { color: '#ffd700', glow: true },
+	'Prime': { color: '#e67e22', glow: true },
 	'ACE SPEC': { color: '#F39C12', glow: true },
-	'Radiant Rare': { color: '#FF6B6B', glow: true },
-	'Amazing Rare': { color: '#00CED1', glow: true },
+	'Prism Star': { color: '#e91e63', glow: true },
+	'Shining': { color: '#f1c40f', glow: true },
+	'Amazing': { color: '#00CED1', glow: true },
+	'Baby': { color: '#ffb6c1', glow: true },
+	'Crystal Pokémon': { color: '#AFEEEE', glow: true },
+	'Level-Up': { color: '#a9a9a9', glow: true },
+	'Mega': { color: '#b22222', glow: true },
+	'Owner\'s Pokémon': { color: '#696969', glow: true },
+	'Restored': { color: '#cd853f', glow: true },
+	'Ultra Beast': { color: '#dc143c', glow: true },
+	'Fusion Strike': { color: '#DA70D6', glow: true },
+	'Rapid Strike': { color: '#1E90FF', glow: true },
+	'Single Strike': { color: '#c23616', glow: true },
 };
 
 // ==================== HELPER FUNCTIONS ====================
@@ -319,21 +353,33 @@ function hexToRgba(hex: string, alpha: number): string {
 function getRarityColor(rarity: string): string {
 	const colors: {[key: string]: string} = {
 		// Core
-		common: '#808080',
-		uncommon: '#2ECC71',
-		rare: '#3498DB',
+		'common': '#808080',
+		'uncommon': '#2ECC71',
+		'rare': '#3498DB',
+		'double rare': '#3CB371',
+
+		// Holo & Stamped
 		'rare holo': '#9B59B6',
 		'reverse holo': '#f1c40f',
+		'classic collection': '#4682B4',
+		'1st edition': '#34495e',
+		'shadowless': '#7f8c8d',
+		'rare holo 1st edition': '#8e44ad',
 		
-		// Special Mechanics
+		// Special Mechanics & Eras
+		'shining': '#f1c40f',
 		'gold star': '#FFD700',
+		'rare holo star': '#FFD700',
 		'rare holo lv.x': '#95a5a6',
 		'rare ex': '#bdc3c7',
+		'rare sp': '#a1a1a1',
 		'rare prime': '#e67e22',
+		'legend': '#DAA520',
+		'rare break': '#DAA520',
 		'prism star': '#e91e63',
 
 		// Modern Rule Box
-		'rare holo ex': '#E74C3C',
+		'rare holo ex': '#d35400',
 		'rare holo gx': '#E67E22',
 		'rare holo v': '#E74C3C',
 		'rare holo vmax': '#C0392B',
@@ -343,56 +389,97 @@ function getRarityColor(rarity: string): string {
 		'full art': '#E74C3C',
 		'rare ultra': '#E74C3C',
 		'illustration rare': '#4ECDC4',
-		'special illustration rare': '#FFE66D',
+		'special illustration rare': '#C71585',
 		'character rare': '#ff9ff3',
+		'character super rare': '#ff69b4',
 		'trainer gallery': '#1abc9c',
-
-		// Shiny
-		'shining': '#f1c40f',
+		
+		// Shiny Tiers
+		'shiny rare': '#FFD700',
 		'rare shiny': '#FFD700',
+		'shiny ultra rare': '#B8860B',
+		'rare shiny gx': '#1E90FF',
 		'radiant rare': '#FF6B6B',
 		'amazing rare': '#00CED1',
-		
-		// Top Tier
+
+		// Secret & Gold Tiers
 		'rare secret': '#F39C12',
 		'rare rainbow': '#E91E63',
+		'gold full art': '#FFD700',
 		'rare gold': '#FFD700',
 		'hyper rare': '#FF10F0',
 
 		// Promo & Misc
-		promo: '#c0392b',
+		'promo': '#c0392b',
 		'black star promo': '#2c3e50',
+		'ace spec rare': '#F39C12',
+		'rare ace': '#F39C12',
 	};
-	return colors[rarity.toLowerCase()] || '#FFFFFF';
+	return colors[rarity.toLowerCase()] || '#FFFFFF'; // Default to white
+}
+
+function getSubtypeColor(subtype: string): string {
+	const colors: {[key: string]: string} = {
+		// Modern Mechanics
+		'VMAX': '#C0392B',
+		'VSTAR': '#8E44AD',
+		'V-UNION': '#6a5acd',
+		'V': '#E74C3C',
+		'GX': '#E67E22',
+		'EX': '#d35400', // Uppercase for older EX
+		'ex': '#95a5a6',   // Lowercase for modern ex
+		'Tera': '#3498db',
+		'Radiant': '#FF6B6B',
+		'TAG TEAM': '#2980b9',
+		
+		// Eras & Themes
+		'Ancient': '#a67b5b',
+		'Future': '#8e44ad',
+		'SP': '#7f8c8d',
+		'Dark Pokémon': '#5d6d7e',
+		'Light Pokémon': '#f1c40f',
+		'Team Aqua': '#3498db',
+		'Team Magma': '#e74c3c',
+		'Team Plasma': '#00a8ff',
+
+		// Other Special Types
+		'BREAK': '#e67e22',
+		'LEGEND': '#ffd700',
+		'Prime': '#e67e22',
+		'ACE SPEC': '#F39C12',
+		'Prism Star': '#e91e63',
+		'Shining': '#f1c40f',
+		'Amazing': '#00CED1',
+		'Baby': '#ffb6c1',
+		'Crystal Pokémon': '#AFEEEE',
+		'Level-Up': '#a9a9a9',
+		'Mega': '#b22222',
+		'Owner\'s Pokémon': '#696969',
+		'Restored': '#cd853f',
+		'Ultra Beast': '#dc143c',
+		'Fusion Strike': '#DA70D6',
+		'Rapid Strike': '#1E90FF',
+		'Single Strike': '#c23616',
+	};
+	return colors[subtype] || ''; // Return empty string to use default theme color
 }
 
 /**
  * Generates a realistic, 10-card booster pack from a specific set.
- * This simulates rarity slots for a balanced and authentic experience.
- * @param setId The ID of the set to generate a pack from (e.g., 'base1').
- * @returns An array of TCGCard objects, or null if the set is not found.
  */
 async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	const setCards = await TCGCards.find({ set: toID(setId) });
-	if (setCards.length === 0) {
-		return null; // Set not found or has no cards
-	}
+	if (setCards.length === 0) return null;
 
-	// 1. Create pools of cards based on rarity
 	const commons = setCards.filter(c => c.rarity === 'Common');
 	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
-	// Pool for the "Rare slot" - anything 'Rare' or better
 	const raresPool = setCards.filter(c => c.rarity.includes('Rare'));
 
-	// Simple fallback if pools are empty
-	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
-		return null; // Set is missing cards of required rarities
-	}
+	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) return null;
 
 	const pack: TCGCard[] = [];
 	const usedCardIds = new Set<string>();
 
-	// Helper to pick a random card without duplicates
 	const pickRandom = (pool: TCGCard[]): TCGCard => {
 		let attempts = 0;
 		while (attempts < 50) {
@@ -403,42 +490,30 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 			}
 			attempts++;
 		}
-		// If we can't find a unique card after 50 tries, just return a random one
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
 
-	// 2. Define pack structure and fill slots
-	// We'll simplify to 5 commons, 3 uncommons, 1 "reverse holo" slot, 1 rare slot
-	
-	// 5 Commons
 	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
-	// 3 Uncommons
 	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
-	
-	// 1 Reverse Holo slot (simplified: we'll pick another Uncommon)
 	pack.push(pickRandom(uncommons));
 
-	// 3. The "Rare Slot" - with weighted probabilities
 	const hitRoll = Math.random() * 100;
 	let chosenRarityTier: string;
 
-	if (hitRoll <= 50) { // 50% chance for a regular Rare
-		chosenRarityTier = 'Rare';
-	} else if (hitRoll <= 75) { // 25% chance for a Rare Holo
-		chosenRarityTier = 'Rare Holo';
-	} else if (hitRoll <= 90) { // 15% chance for an "Ultra Rare" tier
+	if (hitRoll <= 50) chosenRarityTier = 'Rare';
+	else if (hitRoll <= 75) chosenRarityTier = 'Rare Holo';
+	else if (hitRoll <= 90) {
 		const ultraRares = ['Rare Ultra', 'Illustration Rare', 'Rare Holo V', 'Rare Holo VMAX', 'Rare Holo VSTAR'];
 		chosenRarityTier = ultraRares[Math.floor(Math.random() * ultraRares.length)];
-	} else { // 5% chance for a "Secret Rare" tier
+	} else {
 		const secretRares = ['Rare Secret', 'Special Illustration Rare', 'Hyper Rare', 'Rare Rainbow'];
 		chosenRarityTier = secretRares[Math.floor(Math.random() * secretRares.length)];
 	}
 
 	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
-	// Fallback mechanism if the chosen rarity doesn't exist in the set
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
 	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
-	if (hitPool.length === 0) hitPool = raresPool; // Last resort
+	if (hitPool.length === 0) hitPool = raresPool;
 
 	pack.push(pickRandom(hitPool));
 	
@@ -470,12 +545,7 @@ export const commands: Chat.ChatCommands = {
 				await TCGCards.upsert(
 					{ cardId },
 					{
-						cardId,
-						name,
-						set,
-						rarity,
-						supertype,
-						subtypes,
+						cardId, name, set, rarity, supertype, subtypes,
 						type: type || undefined,
 						hp: hp ? parseInt(hp) : undefined,
 						stage: subtypes.includes('Basic') ? 'basic' : subtypes.includes('Stage 1') ? 'stage1' : subtypes.includes('Stage 2') ? 'stage2' : undefined,
@@ -494,16 +564,12 @@ export const commands: Chat.ChatCommands = {
 
 			const query: any = {};
 
-			// --- Filter Parsing ---
 			if (parts.length > 1) {
 				const filters = parts.slice(1);
 				for (const filter of filters) {
 					const [key, ...valueParts] = filter.split(':');
 					const value = valueParts.join(':').trim();
-
 					if (!key || !value) continue;
-
-					// Reuse search logic for filters
 					switch (toID(key)) {
 						case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
 							query[toID(key)] = { $regex: value, $options: 'i' };
@@ -537,8 +603,7 @@ export const commands: Chat.ChatCommands = {
 					return this.sendReplyBox(`${targetUsername} doesn't have any cards in their collection yet!`);
 				}
 
-				const userCardIds = collection.cards.map(c => c.cardId);
-				query.cardId = { $in: userCardIds };
+				query.cardId = { $in: collection.cards.map(c => c.cardId) };
 				
 				const allOwnedCards = await TCGCards.find(query);
 				const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
@@ -553,7 +618,6 @@ export const commands: Chat.ChatCommands = {
 
 				const filteredUserCards = collection.cards.filter(item => cardMap.has(item.cardId));
 
-				// --- Sort by points, then rarity name ---
 				filteredUserCards.sort((a, b) => {
 					const cardA = cardMap.get(a.cardId);
 					const cardB = cardMap.get(b.cardId);
@@ -563,7 +627,6 @@ export const commands: Chat.ChatCommands = {
 					return cardA.rarity.localeCompare(cardB.rarity);
 				});
 
-				// --- Limit to the top 100 cards ---
 				const top100Cards = filteredUserCards.slice(0, 100);
 
 				let output = `<div class="themed-table-container">`;
@@ -625,7 +688,7 @@ export const commands: Chat.ChatCommands = {
 
 				let pointsGained = 0;
 				for (const card of pack) {
-					pointsGained += getCardPoints(card); // Track points from this pack
+					pointsGained += getCardPoints(card);
 					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
 					if (existingCard) {
 						existingCard.quantity++;
@@ -634,7 +697,6 @@ export const commands: Chat.ChatCommands = {
 					}
 				}
 
-				// Update all stats
 				collection.stats.totalCards = (collection.stats.totalCards || 0) + pack.length;
 				collection.stats.uniqueCards = collection.cards.length;
 				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
@@ -692,6 +754,11 @@ export const commands: Chat.ChatCommands = {
 					glowEffect = `box-shadow: 0 0 12px ${borderColor}50;`;
 				}
 			}
+			
+			const formattedSubtypes = card.subtypes.map(s => {
+				const color = getSubtypeColor(s);
+				return color ? `<strong style="color: ${color}">${s}</strong>` : s;
+			}).join(', ');
 
 			let output = `<div style="border: 2px solid ${borderColor}; ${glowEffect} border-radius: 8px; padding: 16px; overflow: hidden; ${backgroundStyle}">`;
 			output += `<table style="width: 100%; border-collapse: collapse;"><tr>`;
@@ -708,6 +775,9 @@ export const commands: Chat.ChatCommands = {
 			output += `<div style="margin-bottom: 10px;"><strong>Set:</strong> ${card.set} #${cardNumber}</div>`;
 			output += `<div style="margin-bottom: 10px;"><strong>ID:</strong> ${card.cardId}</div>`;
 			output += `<div style="margin-bottom: 10px;"><strong>Type:</strong> ${card.type || card.supertype}</div>`;
+			if (card.subtypes.length > 0) {
+				output += `<div style="margin-bottom: 10px;"><strong>Subtypes:</strong> ${formattedSubtypes}</div>`;
+			}
 			if (card.hp) {
 				output += `<div style="margin-bottom: 10px;"><strong>HP:</strong> ${card.hp}</div>`;
 			}
@@ -816,13 +886,18 @@ export const commands: Chat.ChatCommands = {
 				output += `<tr class="themed-table-header"><th>Card ID</th><th>Name</th><th>Set</th><th>Rarity</th><th>Type</th><th>Subtypes</th><th>HP</th></tr>`;
 
 				paginatedResults.forEach(card => {
+					const formattedSubtypes = card.subtypes.map(s => {
+						const color = getSubtypeColor(s);
+						return color ? `<strong style="color: ${color}">${s}</strong>` : s;
+					}).join(', ');
+
 					output += `<tr class="themed-table-row">`;
 					output += `<td>${card.cardId}</td>`;
 					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
-					output += `<td>${card.subtypes.join(', ')}</td>`;
+					output += `<td>${formattedSubtypes}</td>`;
 					output += `<td>${card.hp || 'N/A'}</td>`;
 					output += `</tr>`;
 				});
