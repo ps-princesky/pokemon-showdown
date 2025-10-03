@@ -1567,33 +1567,27 @@ export const commands: Chat.ChatCommands = {
 				const matchId = toID(target);
 				if (!matchId) return this.errorReply('Usage: /tcg tournament ready, [match ID]');
 
-				const result = await TCG_Tournament.setPlayerReady(matchId, user.id);
+				// Call the new, consolidated function
+				const result = await TCG_Tournament.processPlayerReady(matchId, user.id, room);
+				
 				if (!result.success) {
-					return this.errorReply(result.error || 'Failed to set ready status.');
+					return this.errorReply(result.error || 'Failed to process ready status.');
 				}
 
-				let tournament = await TCG_Tournament.getActiveTournament();
-				
-				if (result.bothReady) {
-					const matchResult = await TCG_Tournament.playMatch(matchId, room);
-					if (matchResult.success) {
-						// Refetch the tournament state after the match has been played and the round may have advanced
-						tournament = await TCG_Tournament.getActiveTournament(); 
-						if (tournament) {
-							const resultHtml = await TCG_Tournament.generateMatchResultHTML(tournament, matchId);
-							room.add(`|uhtml|match-result-${matchId}|${resultHtml}`).update();
-							
-							const tournamentHtml = await TCG_Tournament.generateTournamentHTML(tournament);
-							room.add(`|uhtmlchange|tournament-active|${tournamentHtml}`).update();
-						}
+				if (result.matchStarted) {
+					// If the match started and finished, we only need to update the UI.
+					// A success message is implicit in the match results being displayed.
+					const tournament = await TCG_Tournament.getActiveTournament();
+					if (tournament) {
+						const resultHtml = await TCG_Tournament.generateMatchResultHTML(tournament, matchId);
+						room.add(`|uhtml|match-result-${matchId}|${resultHtml}`).update();
+						
+						const tournamentHtml = await TCG_Tournament.generateTournamentHTML(tournament);
+						room.add(`|uhtmlchange|tournament-active|${tournamentHtml}`).update();
 					}
 				} else {
+					// If the match didn't start, it means we're waiting for the opponent.
 					this.sendReply('You are ready! Waiting for your opponent...');
-					// Update the UI to show the 'Ready' status (even though it's not visible, this keeps the state consistent)
-					if (tournament) {
-						const html = await TCG_Tournament.generateTournamentHTML(tournament);
-						room.add(`|uhtmlchange|tournament-active|${html}`).update();
-					}
 				}
 			},
 			
