@@ -197,8 +197,6 @@ export const commands: Chat.ChatCommands = {
 
 			try {
 				const collection = await UserCollections.findOne({ userId: targetId });
-				console.log('Collection result:', collection); // DEBUG
-        console.log('Collection type:', typeof collection); // DEBUG
 				if (!collection || collection.cards.length === 0) {
 					return this.sendReplyBox(`${targetUsername} doesn't have any cards in their collection yet!`);
 				}
