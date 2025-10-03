@@ -65,7 +65,8 @@ export const Tournaments = MongoDB<Tournament>('tcg_tournaments');
 // --- HELPER FUNCTIONS ---
 
 function generateMatchId(round: number, matchNum: number): string {
-	return `R${round}-M${matchNum}`;
+	// FIX: Standardize to lowercase to prevent case-sensitivity issues with toID()
+	return `r${round}m${matchNum}`;
 }
 
 function isPowerOfTwo(n: number): boolean {
@@ -670,7 +671,7 @@ export async function generateTournamentHTML(tournament: Tournament): Promise<st
 			const p2 = tournament.participants.find((p: any) => p.userId === match.player2);
 
 			content += `<tr class="themed-table-row">`;
-			content += `<td>${match.matchId}</td>`;
+			content += `<td>${match.matchId.toUpperCase()}</td>`; // Display as uppercase for readability
 			content += `<td>${p1 ? Impulse.nameColor(p1.username, true) : 'Unknown'}</td>`;
 			content += `<td>${p2 ? Impulse.nameColor(p2.username, true) : 'Unknown'}</td>`;
 
@@ -723,7 +724,7 @@ export async function generateMatchResultHTML(tournament: Tournament, matchId: s
 	p2Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
 	let output = `<div class="infobox">`;
-	output += `<h2 style="text-align:center;">Match Results: ${match.matchId}</h2>`;
+	output += `<h2 style="text-align:center;">Match Results: ${match.matchId.toUpperCase()}</h2>`;
 	output += `<table style="width:100%;"><tr>`;
 	output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
 	output += `<strong>${p1 ? Impulse.nameColor(p1.username, true) : 'Player 1'}'s Pack (${match.player1Points} Points)</strong>`;
