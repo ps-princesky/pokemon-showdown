@@ -5,6 +5,7 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
+import { POKEMON_SETS, TCGSet } from './tcg_data'; // Import the sets data
 
 interface TCGCard {
 	_id?: string;
@@ -195,9 +196,6 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 	'Radiant Rare': { color: '#FF6B6B', glow: true },
 	'Amazing Rare': { color: '#00CED1', glow: true },
 };
-
-// Moved hardcoded sets data to separate file and impulse global.
-const POKEMON_SETS = Impulse.POKEMON_SETS;
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -929,7 +927,7 @@ export const commands: Chat.ChatCommands = {
 			
 			output += `<div style="max-height: 380px; overflow-y: auto;">`;
 			
-			const seriesGroups = new Map<string, typeof POKEMON_SETS>();
+			const seriesGroups = new Map<string, TCGSet[]>();
 			POKEMON_SETS.forEach(set => {
 				if (!seriesGroups.has(set.series)) {
 					seriesGroups.set(set.series, []);
