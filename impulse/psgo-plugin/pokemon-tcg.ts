@@ -5,7 +5,7 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet } from './tcg_data'; // Import the sets data
+import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor } from './tcg_data'; 
 
 interface TCGCard {
 	_id?: string;
@@ -153,38 +153,6 @@ function hexToRgba(hex: string, alpha: number): string {
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function getRarityColor(rarity: string): string {
-	const colors: {[key: string]: string} = {
-		'common': '#808080','uncommon': '#2ECC71','rare': '#3498DB','double rare': '#3CB371',
-		'rare holo': '#9B59B6','reverse holo': '#00CED1','classic collection': '#4682B4','1st edition': '#34495e',
-		'shadowless': '#7f8c8d','rare holo 1st edition': '#8e44ad','shining': '#00BFFF','gold star': '#CD853F',
-		'rare holo star': '#CD853F','rare holo lv.x': '#95a5a6','rare ex': '#bdc3c7','rare sp': '#a1a1a1',
-		'rare prime': '#e67e22','legend': '#CD853F','rare break': '#CD853F','prism star': '#e91e63',
-		'rare holo ex': '#d35400','rare holo gx': '#E67E22','rare holo v': '#E74C3C','rare holo vmax': '#C0392B',
-		'rare holo vstar': '#8E44AD','full art': '#E74C3C','rare ultra': '#E74C3C','illustration rare': '#4ECDC4',
-		'special illustration rare': '#C71585','character rare': '#ff9ff3','character super rare': '#ff69b4',
-		'trainer gallery': '#1abc9c','shiny rare': '#CD853F','rare shiny': '#CD853F','shiny ultra rare': '#9932CC',
-		'rare shiny gx': '#1E90FF','radiant rare': '#FF6B6B','amazing rare': '#00CED1','rare secret': '#F39C12',
-		'rare rainbow': '#E91E63','gold full art': '#CD853F','rare gold': '#CD853F','hyper rare': '#FF10F0',
-		'promo': '#c0392b','black star promo': '#2c3e50','ace spec rare': '#F39C12','rare ace': '#F39C12',
-	};
-	return colors[rarity.toLowerCase()] || '';
-}
-
-function getSubtypeColor(subtype: string): string {
-	const colors: {[key: string]: string} = {
-		'VMAX': '#C0392B','VSTAR': '#8E44AD','V-UNION': '#6a5acd','V': '#E74C3C','GX': '#E67E22',
-		'EX': '#d35400','ex': '#95a5a6','Tera': '#3498db','Radiant': '#FF6B6B','TAG TEAM': '#2980b9',
-		'Ancient': '#a67b5b','Future': '#8e44ad','SP': '#7f8c8d','Dark Pokémon': '#5d6d7e','Light Pokémon': '#add8e6',
-		'Team Aqua': '#3498db','Team Magma': '#e74c3c','Team Plasma': '#00a8ff','BREAK': '#e67e22','LEGEND': '#CD853F',
-		'Prime': '#e67e22','ACE SPEC': '#F39C12','Prism Star': '#e91e63','Shining': '#00BFFF','Amazing': '#00CED1',
-		'Baby': '#ffb6c1','Crystal Pokémon': '#AFEEEE','Level-Up': '#a9a9a9','Mega': '#b22222',
-		'Owner\'s Pokémon': '#696969','Restored': '#cd853f','Ultra Beast': '#dc143c','Fusion Strike': '#DA70D6',
-		'Rapid Strike': '#1E90FF','Single Strike': '#c23616',
-	};
-	return colors[subtype] || '';
-}
-
 async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	const setCards = await TCGCards.find({ set: setId });
 	if (setCards.length === 0) return null;
@@ -244,7 +212,7 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help pokemontcg');
+			return this.parse('/help tcg');
 		},
 
 		async addcard(target, room, user) {
@@ -928,6 +896,56 @@ export const commands: Chat.ChatCommands = {
 			this.sendReplyBox(output);
 		},
 
+		async wishlist(target, room, user) {
+			if (!this.runBroadcast()) return;
+			const parts = target.split(',').map(p => p.trim());
+			const action = parts.length > 1 ? toID(parts[0]) : 'view';
+			
+			try {
+				if (action === 'add' || action === 'remove') {
+					const cardId = parts[1];
+					if (!cardId) return this.errorReply(`You must specify a card ID.`);
+					const card = await TCGCards.findOne({ cardId: cardId });
+					if (!card) return this.errorReply(`Card with ID "${cardId}" not found.`);
+
+					if (action === 'add') {
+						await UserCollections.updateOne({ userId: user.id }, { $addToSet: { wishlist: card.cardId } });
+						return this.sendReply(`Added ${card.name} to your wishlist.`);
+					} else { // remove
+						await UserCollections.updateOne({ userId: user.id }, { $pull: { wishlist: card.cardId } });
+						return this.sendReply(`Removed ${card.name} from your wishlist.`);
+					}
+				} else { // view
+					const targetUsername = parts[0] || user.name;
+					const targetId = toID(targetUsername);
+					const collection = await UserCollections.findOne({ userId: targetId });
+					
+					if (!collection?.wishlist?.length) {
+						return this.sendReplyBox(`${targetUsername} does not have a wishlist.`);
+					}
+
+					const cards = await TCGCards.find({ cardId: { $in: collection.wishlist } });
+					cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+
+					let output = `<div class="themed-table-container">`;
+					output += `<h3 class="themed-table-title">${Impulse.nameColor(targetUsername, true)}'s Wishlist</h3>`;
+					output += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
+					output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th></tr>`;
+					cards.forEach(card => {
+						output += `<tr class="themed-table-row">`;
+						output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+						output += `<td>${card.set}</td>`;
+						output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity}</span></td>`;
+						output += `</tr>`;
+					});
+					output += `</table></div></div>`;
+					this.sendReplyBox(output);
+				}
+			} catch (e: any) {
+				return this.errorReply(`Error managing wishlist: ${e.message}`);
+			}
+		},
+
 		async types(target, room, user) {
 			if (!this.runBroadcast()) return;
 			let output = `<div class="themed-table-container">`;
@@ -956,6 +974,8 @@ export const commands: Chat.ChatCommands = {
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
+		'/tcg wishlist [user] - View a user\'s wishlist.',
+		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
 		'/tcg stats [total|unique|points] - View global TCG statistics.',
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
