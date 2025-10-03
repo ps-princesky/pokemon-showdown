@@ -1274,7 +1274,7 @@ async tournament(target, room, user) {
 
 	switch (toID(action)) {
 		case 'create': {
-			this.checkCan('mute', null, room);
+			this.checkCan('globalban');
 			const [name, entryFeeStr, setId, maxParticipantsStr] = args;
 			
 			if (!name || !entryFeeStr || !setId || !maxParticipantsStr) {
@@ -1351,6 +1351,7 @@ async tournament(target, room, user) {
 		}
 
 		case 'start': {
+			this.checkCan('globalban');
 			const [tournamentId] = args;
 			if (!tournamentId) {
 				return this.errorReply('Usage: /tcg tournament start, [tournament ID]');
@@ -1681,6 +1682,7 @@ async tournament(target, room, user) {
 		}
 
 		case 'cancel': {
+			this.checkCan('globalban');
 			const [tournamentId] = args;
 			if (!tournamentId) {
 				return this.errorReply('Usage: /tcg tournament cancel, [tournament ID]');
@@ -1731,15 +1733,15 @@ async tournament(target, room, user) {
 		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
 		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
 		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
-		'/tcg tournament create, [name], [entry fee], [set ID], [max participants] - Create a tournament (requires room staff).',
+		'@ /tcg tournament create, [name], [entry fee], [set ID], [max participants] - Create a tournament',
 		'/tcg tournament join, [tournament ID] - Join a tournament.',
 		'/tcg tournament leave, [tournament ID] - Leave a tournament before it starts.',
-		'/tcg tournament start, [tournament ID] - Start a tournament (host only).',
+		'@ /tcg tournament start, [tournament ID] - Start a tournament (host only).',
 		'/tcg tournament view, [tournament ID] - View tournament details and bracket.',
 		'/tcg tournament play, [tournament ID], [match ID] - Play your tournament match.',
 		'/tcg tournament match, [tournament ID], [match ID] - View results of a completed match.',
 		'/tcg tournament list - View all active tournaments.',
 		'/tcg tournament history [user] - View tournament history for a user.',
-		'/tcg tournament cancel, [tournament ID] - Cancel a tournament (host only).',
+		'@ /tcg tournament cancel, [tournament ID] - Cancel a tournament (host only).',
 	],
 };
