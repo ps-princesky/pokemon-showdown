@@ -4,7 +4,12 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { UserCollection } from './tcg_data';
+
+// A simplified interface for type safety within this module.
+interface UserCollection {
+	userId: string;
+	currency?: number;
+}
 
 const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
 
@@ -62,7 +67,9 @@ export async function setCurrency(userId: string, amount: number): Promise<boole
  */
 export async function transferCurrency(fromUserId: string, toUserId: string, amount: number): Promise<boolean> {
 	if (amount <= 0) return false;
+	
 	const didDeduct = await deductCurrency(fromUserId, amount);
+
 	if (didDeduct) {
 		await grantCurrency(toUserId, amount);
 		return true;

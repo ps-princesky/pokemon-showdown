@@ -8,7 +8,7 @@ import { MongoDB } from '../../impulse/mongodb_module';
 import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
 		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
 		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
-import * as TCGEconomy from './tcg_economy';
+import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 
 // Initialize collections
@@ -265,133 +265,127 @@ export const commands: Chat.ChatCommands = {
 			const userId = user.id;
 			const twentyFourHours = 24 * 60 * 60 * 1000;
 			const DAILY_CURRENCY_AWARD = 50;
+
 			try {
-				const collection = await UserCollections.findOne({ userId });
+				let collection = await UserCollections.findOne({ userId });
 
 				if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
 					const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
 					const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-					const minutes = Math.floor((timeLeft / (1000 * 60)) % 60);
+					const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
 					return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
 				}
 
 				const availableSets = await TCGCards.distinct('set');
 				if (availableSets.length === 0) {
-					return this.errorReply(`There are no sets available to open packs from.`);
+					return this.errorReply("There are no sets available to open packs from.");
 				}
 				const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
+				
 				const pack = await generatePack(randomSetId);
 				if (!pack) {
-					return this.errorReply(`An error occurred while generating a pack from set ${randomSetId}.`);
+					return this.errorReply(`An error occurred while generating a pack from set "${randomSetId}".`);
+				}
+
+				if (!collection) {
+					collection = {
+						userId,
+						cards: [],
+						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+						lastUpdated: Date.now(),
+					};
+				} else {
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				}
 
 				let pointsGained = 0;
-				const cardUpdates = [];
 				for (const card of pack) {
 					pointsGained += getCardPoints(card);
-					cardUpdates.push({
-						updateOne: {
-							filter: { userId, 'cards.cardId': card.cardId },
-							update: { $inc: { 'cards.$.quantity': 1 } }
-						}
-					}, {
-						updateOne: {
-							filter: { userId, 'cards.cardId': { $ne: card.cardId } },
-							update: { $push: { cards: { cardId: card.cardId, quantity: 1, addedAt: Date.now() } } }
-						}
-					});
+					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+					if (existingCard) {
+						existingCard.quantity++;
+					} else {
+						collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+					}
 				}
-        
-				await UserCollections.bulkWrite(cardUpdates);
-				await TCGEconomy.grantCurrency(userId, DAILY_CURRENCY_AWARD);
-        
-				const finalCollectionUpdate = {
-					$set: { lastDaily: Date.now(), lastUpdated: Date.now() },
-					$inc: { 'stats.totalPoints': pointsGained }
-				};
-				await UserCollections.updateOne({ userId }, finalCollectionUpdate, { upsert: true });
+
+				collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+				collection.stats.uniqueCards = collection.cards.length;
+				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+				collection.currency = (collection.currency || 0) + DAILY_CURRENCY_AWARD;
+				collection.lastUpdated = Date.now();
+				collection.lastDaily = Date.now();
+
+				await UserCollections.upsert({ userId }, collection);
 
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
 				const displaySetName = setInfo ? setInfo.name : randomSetId;
 
 				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+				
 				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
-				const pageContent = `<p style="text-align:center">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CURRENCY_AWARD} Credits</strong>!</p><hr />${tableHtml}`;
-				const output = TCG_UI.buildPage(`You claimed your daily pack!`, pageContent);
+				const pageContent = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CURRENCY_AWARD} Credits</strong>!</p><hr/>${tableHtml}`;
+				const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, pageContent);
+				
 				this.sendReplyBox(output);
 			} catch (e: any) {
 				return this.errorReply(`Error claiming daily pack: ${e.message}`);
 			}
 		},
-
+		
 		async openpack(target, room, user) {
 			this.checkCan('globalban');
-			if (!target) return this.errorReply(`Usage: /tcg openpack [set ID]. This is an admin command.`);
-
+			if (!target) {
+				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
+			}
+			
 			const userId = user.id;
-			const setId = toID(target);
+			const setId = target.trim().toLowerCase();
 
 			try {
 				const pack = await generatePack(setId);
 				if (!pack) {
-					return this.errorReply(`Set with ID '${setId}' not found or is missing required card rarities. Use \`/tcg sets\` to see a list of sets.`);
+					return this.errorReply(`Set with ID "${target.trim()}" not found or is missing required card rarities. Use /tcg sets to see a list of sets.`);
+				}
+
+				let collection = await UserCollections.findOne({ userId });
+				if (!collection) {
+					collection = {
+						userId,
+						cards: [],
+						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+						lastUpdated: Date.now(),
+					};
+				} else {
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				}
 
 				let pointsGained = 0;
-				let newUniqueCards = 0;
-
-				// Atomically add each card to the user's collection
 				for (const card of pack) {
 					pointsGained += getCardPoints(card);
-
-					// First, try to increment the quantity of a card that already exists
-					const res = await UserCollections.updateOne(
-						{ userId, 'cards.cardId': card.cardId },
-						{ $inc: { 'cards.$.quantity': 1 } }
-					);
-
-					// If no card was found to update (modifiedCount is 0), push it as a new card
-					if (res.modifiedCount === 0) {
-						await UserCollections.updateOne(
-							{ userId },
-							{ 
-								$push: { 
-									cards: { 
-										cardId: card.cardId, 
-										quantity: 1, 
-										addedAt: Date.now() 
-									} 
-								} 
-							},
-							{ upsert: true } // This ensures the user document is created if it's their very first card
-							);
-						newUniqueCards++; // A new unique card was added
+					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+					if (existingCard) {
+						existingCard.quantity++;
+					} else {
+						collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
 					}
 				}
-        
-				// Atomically update all user stats in a final operation
-				await UserCollections.updateOne(
-					{ userId },
-					{
-						$set: { lastUpdated: Date.now() },
-						$inc: { 
-							'stats.totalPoints': pointsGained,
-							'stats.totalCards': pack.length, // The total number of cards increases by the pack size
-							'stats.uniqueCards': newUniqueCards,
-						}
-					},
-					{ upsert: true } // This handles the case where the stats object doesn't exist yet
-					);
 
-				// Display the results to the user
-				const setInfo = POKEMON_SETS.find(s => toID(s.code) === setId);
-				const displaySetName = setInfo ? setInfo.name : setId;
+				collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+				collection.stats.uniqueCards = collection.cards.length;
+				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+				collection.lastUpdated = Date.now();
 
+				await UserCollections.upsert({ userId }, collection);
+				
 				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
-				const output = TCG_UI.buildPage(`${user.name} opened a ${displaySetName} Pack!`, tableHtml);
-				this.sendReplyBox(output);
 
+				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
+				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${target.trim()} Pack!`, tableHtml);
+
+				this.sendReplyBox(output);
 			} catch (e: any) {
 				return this.errorReply(`Error opening pack: ${e.message}`);
 			}
@@ -1175,59 +1169,57 @@ export const commands: Chat.ChatCommands = {
 				if (toID(action) === 'open') {
 					if (!this.runBroadcast()) return;
 					const setId = toID(args[0]);
-					if (!setId) return this.errorReply(`Usage: /tcg packs open, [set ID]`);
+					if (!setId) return this.errorReply("Usage: /tcg packs open, [set ID]");
 
-					const collection = await UserCollections.findOne({ userId });
-					const packEntry = collection?.packs?.find(p => p.setId === setId);
-
+					if (!collection || !collection.packs?.length) {
+						return this.errorReply(`You do not have any unopened packs.`);
+					}
+					
+					const packEntry = collection.packs.find(p => p.setId === setId);
 					if (!packEntry || packEntry.quantity < 1) {
-						return this.errorReply(`You do not have any unopened packs from the set ${setId}.`);
+						return this.errorReply(`You do not have any unopened packs from the set "${setId}".`);
 					}
 
+					// --- Pack Opening Logic ---
 					const pack = await generatePack(setId);
 					if (!pack) {
-						return this.errorReply(`An error occurred while generating a pack for ${setId}.`);
+						return this.errorReply(`An error occurred while generating a pack for "${setId}".`);
 					}
 
-					// Atomically decrement pack quantity
 					packEntry.quantity--;
-					const newPacks = packEntry.quantity > 0 ? 
-						collection.packs : 
-						collection.packs.filter(p => p.setId !== setId);
+					if (packEntry.quantity <= 0) {
+						collection.packs = collection.packs.filter(p => p.setId !== setId);
+					}
 
+					// --- ADDED: Robust Initialization for Partial Documents ---
+					if (!collection.cards) collection.cards = [];
+					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+					
 					let pointsGained = 0;
-					const cardUpdates = [];
 					for (const card of pack) {
 						pointsGained += getCardPoints(card);
-						cardUpdates.push({
-							updateOne: {
-								filter: { userId, 'cards.cardId': card.cardId },
-								update: { $inc: { 'cards.$.quantity': 1 } }
-							}
-						}, {
-							updateOne: {
-								filter: { userId, 'cards.cardId': { $ne: card.cardId } },
-								update: { $push: { cards: { cardId: card.cardId, quantity: 1, addedAt: Date.now() } } }
-							}
-						});
+						const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+						if (existingCard) {
+							existingCard.quantity++;
+						} else {
+							collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+						}
 					}
 
-					await UserCollections.bulkWrite(cardUpdates);
-    
-					const finalCollectionUpdate = {
-						$set: { packs: newPacks, lastUpdated: Date.now() },
-						$inc: { 'stats.totalPoints': pointsGained }
-					};
-
-					await UserCollections.updateOne({ userId }, finalCollectionUpdate, { upsert: true });
-
+					collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+					collection.stats.uniqueCards = collection.cards.length;
+					collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+					collection.lastUpdated = Date.now();
+					await UserCollections.upsert({ userId }, collection);
+					
 					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 					const displaySetName = setInfo ? setInfo.name : setId;
+					
 					pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 					const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
-					const output = TCG_UI.buildPage(`${user.name} opened a ${displaySetName} Pack!`, tableHtml);
+					const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
 					this.sendReplyBox(output);
-				
+
 				} else { // View pack inventory
 					if (!this.runBroadcast()) return;
 
