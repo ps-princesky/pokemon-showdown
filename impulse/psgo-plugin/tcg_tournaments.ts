@@ -23,6 +23,10 @@ export interface TournamentMatch {
 	matchId: string;
 	player1: string;
 	player2: string;
+	player1Ready?: boolean;
+	player2Ready?: boolean;
+	timeRemaining?: number;
+	timerStarted?: number;
 	winner?: string;
 	player1Pack?: string[];
 	player2Pack?: string[];
@@ -66,6 +70,43 @@ function generateMatchId(tournamentId: string, round: number, matchNum: number):
 
 function isPowerOfTwo(n: number): boolean {
 	return n > 0 && (n & (n - 1)) === 0;
+}
+
+export async function setPlayerReady(
+	tournamentId: string,
+	matchId: string,
+	userId: string
+): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
+	const tournament = await Tournaments.findOne({ tournamentId });
+
+	if (!tournament) {
+		return { success: false, error: 'Tournament not found.' };
+	}
+
+	const match = tournament.matches.find(m => m.matchId === matchId);
+	if (!match) {
+		return { success: false, error: 'Match not found.' };
+	}
+
+	if (match.winner) {
+		return { success: false, error: 'Match already completed.' };
+	}
+
+	if (match.player1 !== userId && match.player2 !== userId) {
+		return { success: false, error: 'You are not in this match.' };
+	}
+
+	if (match.player1 === userId) {
+		match.player1Ready = true;
+	} else {
+		match.player2Ready = true;
+	}
+
+	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+
+	const bothReady = match.player1Ready && match.player2Ready;
+
+	return { success: true, bothReady };
 }
 
 function getCardPoints(card: TCGCard): number {
