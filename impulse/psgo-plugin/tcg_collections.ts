@@ -8,3 +8,4 @@ import { TCGCard, UserCollection } from './tcg_data';
 
 export const TCGCards = MongoDB<TCGCard>('tcg_cards');
 export const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
+export const ShopStateCollection = MongoDB<ShopState>('tcg_shop_state');
