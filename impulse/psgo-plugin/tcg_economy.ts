@@ -4,12 +4,7 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-
-// A simplified interface for type safety within this module.
-interface UserCollection {
-	userId: string;
-	currency?: number;
-}
+import { UserCollection } from './tcg_data';
 
 const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
 
@@ -31,7 +26,7 @@ export async function grantCurrency(userId: string, amount: number): Promise<boo
 		{ $inc: { currency: amount } },
 		{ upsert: true }
 	);
-	// MODIFIED: Assume success if no error is thrown, to correctly handle upserts.
+	// Assume success if no error is thrown, to correctly handle upserts.
 	return true;
 }
 
@@ -44,7 +39,6 @@ export async function deductCurrency(userId: string, amount: number): Promise<bo
 		{ userId, currency: { $gte: amount } },
 		{ $inc: { currency: -amount } }
 	);
-	// This was already correct because it only relies on modifiedCount.
 	return result > 0;
 }
 
@@ -58,7 +52,7 @@ export async function setCurrency(userId: string, amount: number): Promise<boole
 		{ $set: { currency: amount } },
 		{ upsert: true }
 	);
-	// MODIFIED: Assume success if no error is thrown, to correctly handle upserts.
+	// Assume success if no error is thrown, to correctly handle upserts.
 	return true;
 }
 
