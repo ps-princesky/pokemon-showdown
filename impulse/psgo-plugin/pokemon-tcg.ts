@@ -1515,9 +1515,12 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(result.error || 'Failed to join tournament.');
 				}
 				this.sendReply(`You have successfully joined the tournament!`);
+				
+				// Update the public view for everyone
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+					// Pass an empty viewerId to generate a generic view for the broadcast
+					const html = await TCG_Tournament.generateTournamentHTML(tournament, ''); 
 					room.add(`|uhtmlchange|tournament-active|${html}`).update();
 				}
 			},
@@ -1528,13 +1531,16 @@ export const commands: Chat.ChatCommands = {
 					return this.errorReply(result.error || 'Failed to leave tournament.');
 				}
 				this.sendReply(`You have left the tournament and your entry fee has been refunded.`);
+
+				// Update the public view for everyone
 				const tournament = await TCG_Tournament.getActiveTournament();
 				if (tournament) {
-					const html = await TCG_Tournament.generateTournamentHTML(tournament, user.id);
+					// Pass an empty viewerId to generate a generic view for the broadcast
+					const html = await TCG_Tournament.generateTournamentHTML(tournament, '');
 					room.add(`|uhtmlchange|tournament-active|${html}`).update();
 				}
 			},
-
+			
 			async start(target, room, user) {
 				this.checkCan('globalban');
 				const result = await TCG_Tournament.startTournament(user.id, room);
