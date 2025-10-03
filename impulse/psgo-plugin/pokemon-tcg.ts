@@ -10,6 +10,7 @@ import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 import { TCGCards, UserCollections, ShopStateCollection } from './tcg_collections';
+import * as TCG_Tournament from './tcg_tournaments';
 
 // State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
