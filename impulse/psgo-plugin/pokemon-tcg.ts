@@ -204,7 +204,7 @@ export const commands: Chat.ChatCommands = {
 					}
 				}
 			}
-			
+
 			try {
 				const collection = await UserCollections.findOne({ userId: targetId });
 				if (!collection || !collection.cards || collection.cards.length === 0) {
@@ -213,7 +213,7 @@ export const commands: Chat.ChatCommands = {
 				}
 
 				query.cardId = { $in: collection.cards.map(c => c.cardId) };
-		
+				
 				const allOwnedCards = await TCGCards.find(query);
 				const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
 
@@ -222,19 +222,6 @@ export const commands: Chat.ChatCommands = {
 					const card = cardMap.get(item.cardId);
 					if (card) {
 						totalPoints += getCardPoints(card) * item.quantity;
-					}
-				}
-
-				// Calculate sets completed
-				const allSets = await TCGCards.distinct('set');
-				const ownedCardIds = new Set(collection.cards.map(c => c.cardId));
-				let setsCompleted = 0;
-
-				for (const setId of allSets) {
-					const setCards = await TCGCards.find({ set: setId });
-					const allOwned = setCards.every(card => ownedCardIds.has(card.cardId));
-					if (allOwned && setCards.length > 0) {
-						setsCompleted++;
 					}
 				}
 
@@ -252,14 +239,14 @@ export const commands: Chat.ChatCommands = {
 				const top100Cards = filteredUserCards.slice(0, 100);
 				const cardsToDisplay = top100Cards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
 				const quantityMap = new Map(top100Cards.map(item => [item.cardId, item.quantity]));
-		
-				let content = `<p><strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | <strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | <strong>Total Points:</strong> ${totalPoints} | <strong>Sets Completed:</strong> ${setsCompleted}/${allSets.length}</p>`;
+				
+				let content = `<p><strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | <strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | <strong>Total Points:</strong> ${totalPoints}</p>`;
 				content += TCG_UI.generateCardTable(cardsToDisplay, ['name', 'set', 'rarity', 'type', 'quantity'], quantityMap);
 
 				if (filteredUserCards.length > 100) {
 					content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top 100 of ${filteredUserCards.length} matching cards.</em></p>`;
 				}
-		
+				
 				const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, content);
 				this.sendReplyBox(output);
 			} catch (e: any) {
