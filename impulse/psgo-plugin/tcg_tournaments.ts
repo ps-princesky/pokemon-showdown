@@ -1,14 +1,18 @@
 /**
  * TCG Tournament Module
  * Handles tournament creation, management, and bracket-style elimination battles.
- * Modified to support single active tournament at a time.
+ * Modified to support a single active tournament at a time.
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 import { TCGCards } from './tcg_collections';
-import { TCGCard } from './tcg_data';
+import { TCGCard, POKEMON_SETS } from './tcg_data';
+import { getRarityColor } from './tcg_data';
+
+// --- STATE & CONSTANTS ---
+const matchTimers = new Map<string, NodeJS.Timeout>();
 
 // --- TYPE INTERFACES ---
 
@@ -37,7 +41,7 @@ export interface TournamentMatch {
 }
 
 export interface Tournament {
-	_id?: string;
+	_id?: any;
 	name: string;
 	host: string;
 	entryFee: number;
@@ -66,42 +70,6 @@ function generateMatchId(round: number, matchNum: number): string {
 
 function isPowerOfTwo(n: number): boolean {
 	return n > 0 && (n & (n - 1)) === 0;
-}
-
-export async function setPlayerReady(
-	matchId: string,
-	userId: string
-): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
-	const tournament = await Tournaments.findOne({ status: { $in: ['in_progress'] } });
-
-	if (!tournament) {
-		return { success: false, error: 'No active tournament found.' };
-	}
-
-	const match = tournament.matches.find(m => m.matchId === matchId);
-	if (!match) {
-		return { success: false, error: 'Match not found.' };
-	}
-
-	if (match.winner) {
-		return { success: false, error: 'Match already completed.' };
-	}
-
-	if (match.player1 !== userId && match.player2 !== userId) {
-		return { success: false, error: 'You are not in this match.' };
-	}
-
-	if (match.player1 === userId) {
-		match.player1Ready = true;
-	} else {
-		match.player2Ready = true;
-	}
-
-	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
-
-	const bothReady = match.player1Ready && match.player2Ready;
-
-	return { success: true, bothReady };
 }
 
 function getCardPoints(card: TCGCard): number {
@@ -203,9 +171,9 @@ export async function createTournament(
 	host: string,
 	entryFee: number,
 	setId: string,
-	maxParticipants: number
+	maxParticipants: number,
+	prizePool?: number,
 ): Promise<{ success: boolean; error?: string }> {
-	// Check if there's already an active tournament
 	const existingTournament = await Tournaments.findOne({ 
 		status: { $in: ['registration', 'in_progress'] } 
 	});
@@ -238,7 +206,7 @@ export async function createTournament(
 		setId,
 		maxParticipants,
 		participants: [],
-		prizePool: 0,
+		prizePool: (entryFee === 0 && prizePool) ? prizePool : 0,
 		status: 'registration',
 		currentRound: 0,
 		matches: [],
@@ -269,9 +237,12 @@ export async function joinTournament(
 		return { success: false, error: 'Tournament is full.' };
 	}
 
-	const canAfford = await TCG_Economy.deductCurrency(userId, tournament.entryFee);
-	if (!canAfford) {
-		return { success: false, error: `You need ${tournament.entryFee} Credits to join this tournament.` };
+	if (tournament.entryFee > 0) {
+		const canAfford = await TCG_Economy.deductCurrency(userId, tournament.entryFee);
+		if (!canAfford) {
+			return { success: false, error: `You need ${tournament.entryFee} Credits to join this tournament.` };
+		}
+		tournament.prizePool += tournament.entryFee;
 	}
 
 	tournament.participants.push({
@@ -280,8 +251,6 @@ export async function joinTournament(
 		joinedAt: Date.now(),
 		eliminated: false,
 	});
-
-	tournament.prizePool += tournament.entryFee;
 
 	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
@@ -303,16 +272,20 @@ export async function leaveTournament(
 	}
 
 	tournament.participants = tournament.participants.filter(p => p.userId !== userId);
-	tournament.prizePool -= tournament.entryFee;
+	
+	if (tournament.entryFee > 0) {
+		tournament.prizePool -= tournament.entryFee;
+		await TCG_Economy.grantCurrency(userId, tournament.entryFee);
+	}
 
 	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
-	await TCG_Economy.grantCurrency(userId, tournament.entryFee);
 
 	return { success: true };
 }
 
 export async function startTournament(
-	hostId: string
+	hostId: string,
+	room: any
 ): Promise<{ success: boolean; error?: string }> {
 	const tournament = await Tournaments.findOne({ status: 'registration' });
 
@@ -357,16 +330,62 @@ export async function startTournament(
 	tournament.bracketHistory = [matches];
 
 	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
+	await startMatchTimers(tournament, room);
 
 	return { success: true };
 }
 
-export async function playMatch(
-	matchId: string
-): Promise<{ success: boolean; error?: string; winner?: string; matchData?: TournamentMatch }> {
-	const tournament = await Tournaments.findOne({ status: 'in_progress' });
+export async function setPlayerReady(
+	matchId: string,
+	userId: string
+): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
+	const tournament = await getActiveTournament();
+	if (!tournament || tournament.status !== 'in_progress') {
+		return { success: false, error: 'No active tournament found.' };
+	}
 
-	if (!tournament) {
+	const match = tournament.matches.find(m => m.matchId === matchId);
+	if (!match) {
+		return { success: false, error: 'Match not found.' };
+	}
+
+	if (match.winner) {
+		return { success: false, error: 'Match already completed.' };
+	}
+
+	if (match.player1 !== userId && match.player2 !== userId) {
+		return { success: false, error: 'You are not in this match.' };
+	}
+
+	if (match.player1 === userId) {
+		match.player1Ready = true;
+	} else {
+		match.player2Ready = true;
+	}
+	
+	const bothReady = !!(match.player1Ready && match.player2Ready);
+	
+	// Clear timer if both are ready
+	if (bothReady) {
+		const timerKey = `${tournament._id}-${match.matchId}`;
+		const timer = matchTimers.get(timerKey);
+		if (timer) {
+			clearTimeout(timer);
+			matchTimers.delete(timerKey);
+		}
+	}
+
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
+
+	return { success: true, bothReady };
+}
+
+export async function playMatch(
+	matchId: string,
+	room: any,
+): Promise<{ success: boolean; error?: string; winner?: string; matchData?: TournamentMatch }> {
+	const tournament = await getActiveTournament();
+	if (!tournament || tournament.status !== 'in_progress') {
 		return { success: false, error: 'No tournament is currently in progress.' };
 	}
 
@@ -379,7 +398,6 @@ export async function playMatch(
 		return { success: false, error: 'Match has already been played.' };
 	}
 
-	// Generate packs for both players
 	const [pack1, pack2] = await Promise.all([
 		generatePack(tournament.setId),
 		generatePack(tournament.setId),
@@ -398,50 +416,42 @@ export async function playMatch(
 	match.player2Points = points2;
 	match.completedAt = Date.now();
 
-	// Determine winner (no ties in tournaments)
 	if (points1 > points2) {
 		match.winner = match.player1;
 	} else if (points2 > points1) {
 		match.winner = match.player2;
 	} else {
-		// Tiebreaker: coin flip
 		match.winner = Math.random() < 0.5 ? match.player1 : match.player2;
 	}
 
-	// Mark loser as eliminated
 	const loserId = match.winner === match.player1 ? match.player2 : match.player1;
 	const loser = tournament.participants.find(p => p.userId === loserId);
 	if (loser) loser.eliminated = true;
 
 	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
-	// Check if round is complete
 	const allMatchesComplete = tournament.matches.every(m => m.winner);
 	if (allMatchesComplete) {
-		await advanceRound();
+		await advanceRound(room);
 	}
 
 	return { success: true, winner: match.winner, matchData: match };
 }
 
-async function advanceRound(): Promise<void> {
-	const tournament = await Tournaments.findOne({ status: 'in_progress' });
-	if (!tournament) return;
+async function advanceRound(room: any): Promise<void> {
+	const tournament = await getActiveTournament();
+	if (!tournament || tournament.status !== 'in_progress') return;
 
 	const winners = tournament.matches
 		.filter(m => m.winner)
 		.map(m => m.winner!);
 
 	if (winners.length === 1) {
-		// Tournament complete
 		tournament.status = 'completed';
 		tournament.winner = winners[0];
 		tournament.completedAt = Date.now();
-
-		// Distribute prizes
 		await distributePrizes(tournament);
 	} else {
-		// Create next round
 		tournament.currentRound++;
 		const nextMatches: TournamentMatch[] = [];
 
@@ -455,13 +465,14 @@ async function advanceRound(): Promise<void> {
 
 		tournament.matches = nextMatches;
 		tournament.bracketHistory.push(nextMatches);
+		await startMatchTimers(tournament, room);
 	}
 
 	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 }
 
 async function distributePrizes(tournament: Tournament): Promise<void> {
-	if (!tournament.winner) return;
+	if (!tournament.winner || tournament.prizePool <= 0) return;
 
 	// Prize distribution: 60% to winner, 30% to runner-up, 10% to semi-finalists
 	const winnerPrize = Math.floor(tournament.prizePool * 0.6);
@@ -492,10 +503,7 @@ async function distributePrizes(tournament: Tournament): Promise<void> {
 export async function cancelTournament(
 	userId: string
 ): Promise<{ success: boolean; error?: string }> {
-	const tournament = await Tournaments.findOne({ 
-		status: { $in: ['registration', 'in_progress'] } 
-	});
-
+	const tournament = await getActiveTournament();
 	if (!tournament) {
 		return { success: false, error: 'No active tournament found.' };
 	}
@@ -504,9 +512,19 @@ export async function cancelTournament(
 		return { success: false, error: 'Only the host can cancel the tournament.' };
 	}
 
-	// Refund all participants
+	for (const match of tournament.matches) {
+		const timerKey = `${tournament._id}-${match.matchId}`;
+		const timer = matchTimers.get(timerKey);
+		if (timer) {
+			clearTimeout(timer);
+			matchTimers.delete(timerKey);
+		}
+	}
+
 	for (const participant of tournament.participants) {
-		await TCG_Economy.grantCurrency(participant.userId, tournament.entryFee);
+		if (tournament.entryFee > 0) {
+			await TCG_Economy.grantCurrency(participant.userId, tournament.entryFee);
+		}
 	}
 
 	await Tournaments.deleteOne({ _id: tournament._id });
@@ -525,4 +543,203 @@ export async function getUserTournamentHistory(userId: string): Promise<Tourname
 		'participants.userId': userId,
 		status: 'completed'
 	});
+}
+
+// --- TIMER & TIMEOUT LOGIC ---
+
+async function startMatchTimers(tournament: Tournament, room: any): Promise<void> {
+	for (const match of tournament.matches) {
+		const timerKey = `${tournament._id}-${match.matchId}`;
+		match.timerStarted = Date.now();
+		match.timeRemaining = 60000; // 1 minute
+		
+		const timer = setTimeout(() => {
+			void handleMatchTimeout(tournament._id, match.matchId, room);
+		}, 60000);
+		
+		matchTimers.set(timerKey, timer);
+	}
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: { matches: tournament.matches } });
+}
+
+async function handleMatchTimeout(tournamentId: any, matchId: string, room: any): Promise<void> {
+	const tournament = await Tournaments.findById(tournamentId);
+	if (!tournament || tournament.status !== 'in_progress') return;
+
+	const match = tournament.matches.find(m => m.matchId === matchId);
+	if (!match || match.winner) return;
+
+	let winner: string | undefined;
+	let disqualified: string | undefined;
+	
+	if (match.player1Ready && !match.player2Ready) {
+		winner = match.player1;
+		disqualified = match.player2;
+	} else if (match.player2Ready && !match.player1Ready) {
+		winner = match.player2;
+		disqualified = match.player1;
+	} else {
+		winner = Math.random() < 0.5 ? match.player1 : match.player2;
+		disqualified = winner === match.player1 ? match.player2 : match.player1;
+	}
+
+	if (winner) {
+		match.winner = winner;
+		match.completedAt = Date.now();
+		
+		const loserId = winner === match.player1 ? match.player2 : match.player1;
+		const loser = tournament.participants.find(p => p.userId === loserId);
+		if (loser) loser.eliminated = true;
+
+		await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
+
+		const disqualifiedParticipant = tournament.participants.find((p: any) => p.userId === disqualified);
+		const winnerParticipant = tournament.participants.find((p: any) => p.userId === winner);
+		
+		room.add(`|html|<div class="infobox"><strong>Match Timeout:</strong> ${disqualifiedParticipant?.username} was disqualified for inactivity. ${winnerParticipant?.username} advances!</div>`).update();
+		
+		const allMatchesComplete = tournament.matches.every(m => m.winner);
+		if (allMatchesComplete) {
+			await advanceRound(room);
+		}
+		
+		const updatedTournament = await Tournaments.findById(tournamentId);
+		if (updatedTournament) {
+			const updatedHtml = await generateTournamentHTML(updatedTournament, '');
+			room.add(`|uhtmlchange|tournament-active|${updatedHtml}`).update();
+		}
+	}
+}
+
+// --- UI GENERATION ---
+
+export async function generateTournamentHTML(tournament: Tournament, viewerId: string): Promise<string> {
+	const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(tournament.setId));
+	const displaySetName = setInfo ? setInfo.name : tournament.setId;
+
+	let content = `<div style="margin-bottom: 10px;">`;
+	content += `<strong>Host:</strong> ${Impulse.nameColor(tournament.host, true)} | `;
+	content += `<strong>Entry Fee:</strong> ${tournament.entryFee} Credits | `;
+	content += `<strong>Prize Pool:</strong> ${tournament.prizePool} Credits<br/>`;
+	content += `<strong>Set:</strong> ${displaySetName} | `;
+	content += `<strong>Status:</strong> ${tournament.status.toUpperCase()} | `;
+	content += `<strong>Participants:</strong> ${tournament.participants.length}/${tournament.maxParticipants}`;
+	content += `</div>`;
+
+	if (tournament.status === 'registration') {
+		content += `<h4>Registered Players:</h4>`;
+		if (tournament.participants.length === 0) {
+			content += `<p><em>No players registered yet.</em></p>`;
+		} else {
+			const playerList = tournament.participants.map(p => Impulse.nameColor(p.username, true)).join(', ');
+			content += `<p>${playerList}</p>`;
+		}
+
+		const isParticipant = tournament.participants.some((p: any) => p.userId === viewerId);
+		const isHost = tournament.host === viewerId;
+
+		content += `<div style="margin-top: 10px;">`;
+		if (!isParticipant) {
+			content += `<button class="button" name="send" value="/tcg tournament join">Join Tournament</button> `;
+		} else {
+			content += `<button class="button" name="send" value="/tcg tournament leave">Leave Tournament</button> `;
+		}
+		if (isHost) {
+			content += `<button class="button" name="send" value="/tcg tournament start">Start Tournament</button> `;
+			content += `<button class="button" name="send" value="/tcg tournament cancel">Cancel Tournament</button>`;
+		}
+		content += `</div>`;
+	}
+
+	if (tournament.status === 'in_progress' || tournament.status === 'completed') {
+		content += `<h4>Round ${tournament.currentRound} Matches:</h4>`;
+		content += `<table class="themed-table">`;
+		content += `<tr class="themed-table-header"><th>Match</th><th>Player 1</th><th>Player 2</th><th>Status</th></tr>`;
+
+		for (const match of tournament.matches) {
+			const p1 = tournament.participants.find((p: any) => p.userId === match.player1);
+			const p2 = tournament.participants.find((p: any) => p.userId === match.player2);
+
+			content += `<tr class="themed-table-row">`;
+			content += `<td>${match.matchId}</td>`;
+			content += `<td>${p1 ? Impulse.nameColor(p1.username, true) : 'Unknown'}</td>`;
+			content += `<td>${p2 ? Impulse.nameColor(p2.username, true) : 'Unknown'}</td>`;
+
+			if (match.winner) {
+				const winner = tournament.participants.find((p: any) => p.userId === match.winner);
+				content += `<td><button name="send" value="/tcg tournament match, ${match.matchId}">Winner: ${winner ? winner.username : 'Unknown'}</button></td>`;
+			} else {
+				const isPlayer = match.player1 === viewerId || match.player2 === viewerId;
+				const playerReady = (match.player1 === viewerId && match.player1Ready) || (match.player2 === viewerId && match.player2Ready);
+				
+				if (isPlayer) {
+					if (playerReady) {
+						content += `<td>Waiting for opponent...</td>`;
+					} else {
+						content += `<td><button name="send" value="/tcg tournament ready, ${match.matchId}">I'm Ready</button></td>`;
+					}
+				} else {
+					content += `<td>Match in progress</td>`;
+				}
+			}
+			content += `</tr>`;
+		}
+		content += `</table>`;
+
+		if (tournament.status === 'completed' && tournament.winner) {
+			const winner = tournament.participants.find((p: any) => p.userId === tournament.winner);
+			content += `<div style="margin-top: 15px; padding: 10px; background: #2ecc7140; border-radius: 5px; text-align: center;">`;
+			content += `<h3 style="color: #2ecc71; margin: 0;">Tournament Winner: ${winner ? Impulse.nameColor(winner.username, true) : 'Unknown'}</h3>`;
+			content += `</div>`;
+		}
+	}
+
+	return TCG_UI.buildPage(tournament.name, content);
+}
+
+export async function generateMatchResultHTML(tournament: Tournament, matchId: string): Promise<string> {
+    let match: TournamentMatch | undefined;
+    for (const round of tournament.bracketHistory) {
+        const foundMatch = round.find(m => m.matchId === matchId);
+        if (foundMatch) {
+            match = foundMatch;
+            break;
+        }
+    }
+
+    if (!match || !match.winner) {
+        return TCG_UI.buildPage('Error', 'Match not found or not completed.');
+    }
+
+	const p1 = tournament.participants.find((p: any) => p.userId === match!.player1);
+	const p2 = tournament.participants.find((p: any) => p.userId === match!.player2);
+	const winner = tournament.participants.find((p: any) => p.userId === match!.winner);
+
+	const p1Cards = await TCGCards.find({ cardId: { $in: match.player1Pack || [] } });
+	const p2Cards = await TCGCards.find({ cardId: { $in: match.player2Pack || [] } });
+
+	p1Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+	p2Cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+
+	let output = `<div class="infobox">`;
+	output += `<h2 style="text-align:center;">Match Results: ${match.matchId}</h2>`;
+	output += `<table style="width:100%;"><tr>`;
+	output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+	output += `<strong>${p1 ? Impulse.nameColor(p1.username, true) : 'Player 1'}'s Pack (${match.player1Points} Points)</strong>`;
+	output += `<table class="themed-table">`;
+	p1Cards.forEach(c => {
+		output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+	});
+	output += `</table></td>`;
+	output += `<td style="width:50%; vertical-align:top; padding-left:5px;">`;
+	output += `<strong>${p2 ? Impulse.nameColor(p2.username, true) : 'Player 2'}'s Pack (${match.player2Points} Points)</strong>`;
+	output += `<table class="themed-table">`;
+	p2Cards.forEach(c => {
+		output += `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`;
+	});
+	output += `</table></td></tr></table><hr/>`;
+	output += `<h3 style="text-align:center; color:#2ecc71;">${winner ? winner.username : 'Unknown'} wins and advances!</h3>`;
+	output += `</div>`;
+
+	return output;
 }
