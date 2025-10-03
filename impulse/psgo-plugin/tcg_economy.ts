@@ -5,8 +5,7 @@
 
 import { MongoDB } from '../../impulse/mongodb_module';
 import { UserCollection } from './tcg_data';
-
-const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
+import { UserCollections } from './tcg_collections';
 
 /**
  * Gets the currency balance for a specific user.
