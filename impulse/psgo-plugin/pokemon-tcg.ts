@@ -449,7 +449,7 @@ export const commands: Chat.ChatCommands = {
 
 		async search(target, room, user) {
 			if (!this.runBroadcast()) return;
-			const CARDS_PER_PAGE = 20;
+			const CARDS_PER_PAGE = 60;
 
 			const filters = target.split(',').map(f => f.trim());
 			const query: any = {};
