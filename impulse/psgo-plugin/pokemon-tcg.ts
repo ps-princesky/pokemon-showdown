@@ -1,111 +1,20 @@
 /**
  * Pokemon TCG Collection Plugin
- * Allows users to collect and manage Pokemon TCG cards
+ * Core command logic file.
  * @license MIT
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor } from './tcg_data'; 
-
-interface TCGCard {
-	_id?: string;
-	cardId: string;
-	name: string;
-	set: string;
-	rarity: string;
-	supertype: string;
-	subtypes: string[];
-	type?: string;
-	hp?: number;
-	stage?: string;
-	imageUrl?: string;
-}
-
-interface UserCollection {
-	_id?: string;
-	userId: string;
-	cards: {
-		cardId: string;
-		quantity: number;
-		addedAt: number;
-	}[];
-	stats: {
-		totalCards: number;
-		uniqueCards: number;
-		favoriteType?: string;
-		totalPoints?: number; 
-	};
-	wishlist?: string[];
-	lastUpdated: number;
-	lastDaily?: number;
-}
+import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor, TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES, SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
+import * as TCG_Economy from './tcg_economy';
+import * as TCG_UI from './tcg_ui';
 
 // Initialize collections
 const TCGCards = MongoDB<TCGCard>('tcg_cards');
 const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
 
-// Pokemon TCG Data
-const SUPERTYPES = [
-	'Pokémon',
-	'Trainer',
-	'Energy',
-];
-
-const POKEMON_TYPES = [
-	'Grass', 'Fire', 'Water', 'Lightning', 'Psychic', 'Fighting',
-	'Darkness', 'Metal', 'Fairy', 'Dragon', 'Colorless',
-];
-
-const SUBTYPES = {
-	Pokemon: [
-		'Amazing', 'Ancient', 'Baby', 'Basic', 'BREAK', 'Crystal Pokémon',
-		'Dark Pokémon', 'ex', 'EX', 'Fusion Strike', 'Future', 'GX', 'LEGEND',
-		'Level-Up', 'Light Pokémon', 'Mega', 'Owner\'s Pokémon', 'Prime', 'Prism Star',
-		'Radiant', 'Rapid Strike', 'Restored', 'Shining', 'Single Strike', 'SP',
-		'Stage 1', 'Stage 2', 'TAG TEAM', 'Team Aqua', 'Team Magma', 'Team Plasma',
-		'Tera', 'Ultra Beast', 'V', 'V-UNION', 'VMAX', 'VSTAR',
-	],
-	Trainer: [
-		'ACE SPEC', 'Ancient', 'Fossil', 'Future', 'Goldenrod Game Corner', 'Item',
-		'Pokémon Tool', 'Rocket\'s Secret Machine', 'Stadium', 'Supporter', 'Technical Machine',
-	],
-	Energy: [
-		'Basic', 'Special',
-	],
-};
-
-const RARITIES = [
-	'Common', 'Uncommon', 'Rare', 'Rare Holo', 'Reverse Holo', '1st Edition',
-	'Shadowless', 'Rare Holo 1st Edition', 'Shining', 'Gold Star', 'Rare Holo LV.X',
-	'Rare ex', 'Rare SP', 'Rare Prime', 'LEGEND', 'Rare BREAK', 'Prism Star', 'Rare Holo EX',
-	'Rare Holo GX', 'Rare Holo V', 'Rare Holo VMAX', 'Rare Holo VSTAR', 'Full Art',
-	'Rare Ultra', 'Illustration Rare', 'Special Illustration Rare', 'Character Rare',
-	'Character Super Rare', 'Trainer Gallery', 'Shiny Rare', 'Rare Shiny', 'Shiny Ultra Rare',
-	'Rare Shiny GX', 'Radiant Rare', 'Amazing Rare', 'Rare Secret', 'Rare Rainbow',
-	'Gold Full Art', 'Rare Gold', 'Hyper Rare', 'Promo', 'Black Star Promo',
-	'Classic Collection', 'ACE SPEC Rare', 'Rare ACE', 'Double Rare',
-];
-
-const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
-	'VMAX': { color: '#C0392B', glow: true }, 'VSTAR': { color: '#8E44AD', glow: true },
-	'V-UNION': { color: '#6a5acd', glow: true }, 'V': { color: '#E74C3C', glow: true },
-	'GX': { color: '#E67E22', glow: true }, 'ex': { color: '#95a5a6', glow: true },
-	'Tera': { color: '#3498db', glow: true }, 'Radiant': { color: '#FF6B6B', glow: true },
-	'TAG TEAM': { color: '#2980b9', glow: true }, 'Ancient': { color: '#a67b5b', glow: true },
-	'Future': { color: '#8e44ad', glow: true }, 'SP': { color: '#7f8c8d', glow: true },
-	'Dark Pokémon': { color: '#5d6d7e', glow: true }, 'Light Pokémon': { color: '#add8e6', glow: true },
-	'Team Aqua': { color: '#3498db', glow: true }, 'Team Magma': { color: '#e74c3c', glow: true },
-	'Team Plasma': { color: '#00a8ff', glow: true }, 'EX': { color: '#d35400', glow: true },
-	'BREAK': { color: '#e67e22', glow: true }, 'LEGEND': { color: '#CD853F', glow: true },
-	'Prime': { color: '#e67e22', glow: true }, 'ACE SPEC': { color: '#F39C12', glow: true },
-	'Prism Star': { color: '#e91e63', glow: true }, 'Amazing': { color: '#00CED1', glow: true },
-	'Shining': { color: '#00BFFF', glow: true }, 'Baby': { color: '#ffb6c1', glow: true },
-	'Crystal Pokémon': { color: '#AFEEEE', glow: true }, 'Level-Up': { color: '#a9a9a9', glow: true },
-	'Mega': { color: '#b22222', glow: true }, 'Owner\'s Pokémon': { color: '#696969', glow: true },
-	'Restored': { color: '#cd853f', glow: true }, 'Ultra Beast': { color: '#dc143c', glow: true },
-	'Fusion Strike': { color: '#DA70D6', glow: true }, 'Rapid Strike': { color: '#1E90FF', glow: true },
-	'Single Strike': { color: '#c23616', glow: true },
-};
+// State variable for pending pack battles
+const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -212,7 +121,7 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help tcg');
+			return this.parse('/help pokemontcg');
 		},
 
 		async addcard(target, room, user) {
@@ -287,7 +196,8 @@ export const commands: Chat.ChatCommands = {
 			try {
 				const collection = await UserCollections.findOne({ userId: targetId });
 				if (!collection || collection.cards.length === 0) {
-					return this.sendReplyBox(`${targetUsername} doesn't have any cards in their collection yet!`);
+					this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
+					return;
 				}
 
 				query.cardId = { $in: collection.cards.map(c => c.cardId) };
@@ -315,37 +225,17 @@ export const commands: Chat.ChatCommands = {
 				});
 
 				const top100Cards = filteredUserCards.slice(0, 100);
-
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">${Impulse.nameColor(targetUsername, true)}'s TCG Collection</h3>`;
-				output += `<p><strong>Total Cards:</strong> ${collection.stats.totalCards} | <strong>Unique Cards:</strong> ${collection.stats.uniqueCards} | <strong>Total Points:</strong> ${totalPoints}</p>`;
+				const cardsToDisplay = top100Cards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
+				const quantityMap = new Map(top100Cards.map(item => [item.cardId, item.quantity]));
 				
-				output += `<div style="max-height: 380px; overflow-y: auto;">`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th><th>Type</th><th>Quantity</th></tr>`;
-
-				top100Cards.forEach(item => {
-					const card = cardMap.get(item.cardId);
-					if (!card) return;
-					
-					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-					output += `<td>${card.set}</td>`;
-					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
-					output += `<td>${card.type || card.supertype}</td>`;
-					output += `<td>${item.quantity}</td>`;
-					output += `</tr>`;
-				});
-
-				output += `</table>`;
-				output += `</div>`;
+				let content = `<p><strong>Total Cards:</strong> ${collection.stats.totalCards} | <strong>Unique Cards:</strong> ${collection.stats.uniqueCards} | <strong>Total Points:</strong> ${totalPoints}</p>`;
+				content += TCG_UI.generateCardTable(cardsToDisplay, ['name', 'set', 'rarity', 'type', 'quantity'], quantityMap);
 
 				if (filteredUserCards.length > 100) {
-					output += `<p style="text-align:center; margin-top: 8px;"><em>Showing top 100 of ${filteredUserCards.length} matching cards.</em></p>`;
+					content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top 100 of ${filteredUserCards.length} matching cards.</em></p>`;
 				}
 				
-				output += `</div>`;
-
+				const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, content);
 				this.sendReplyBox(output);
 			} catch (e: any) {
 				return this.errorReply(`Error fetching collection: ${e.message}`);
@@ -356,6 +246,7 @@ export const commands: Chat.ChatCommands = {
 			if (!this.runBroadcast()) return;
 			const userId = user.id;
 			const twentyFourHours = 24 * 60 * 60 * 1000;
+			const DAILY_CURRENCY_AWARD = 50;
 
 			try {
 				let collection = await UserCollections.findOne({ userId });
@@ -401,6 +292,7 @@ export const commands: Chat.ChatCommands = {
 				collection.stats.totalCards = (collection.stats.totalCards || 0) + pack.length;
 				collection.stats.uniqueCards = collection.cards.length;
 				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+				collection.currency = (collection.currency || 0) + DAILY_CURRENCY_AWARD;
 				collection.lastUpdated = Date.now();
 				collection.lastDaily = Date.now();
 
@@ -409,24 +301,12 @@ export const commands: Chat.ChatCommands = {
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
 				const displaySetName = setInfo ? setInfo.name : randomSetId;
 
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">🎁 ${user.name} claimed their daily pack and got cards from ${displaySetName}!</h3>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th><th>Type</th></tr>`;
-
 				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-
-				pack.forEach(card => {
-					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-					output += `<td>${card.set}</td>`;
-					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
-					output += `<td>${card.type || card.supertype}</td>`;
-					output += `</tr>`;
-				});
-
-				output += `</table></div>`;
-
+				
+				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
+				const pageContent = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CURRENCY_AWARD} Credits</strong>!</p><hr/>${tableHtml}`;
+				const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, pageContent);
+				
 				this.sendReplyBox(output);
 			} catch (e: any) {
 				return this.errorReply(`Error claiming daily pack: ${e.message}`);
@@ -435,7 +315,6 @@ export const commands: Chat.ChatCommands = {
 		
 		async openpack(target, room, user) {
 			if (!this.can('%')) return false; 
-			
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
@@ -473,24 +352,11 @@ export const commands: Chat.ChatCommands = {
 				collection.lastUpdated = Date.now();
 
 				await UserCollections.upsert({ userId }, collection);
-
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">🎴 ${user.name} opened a ${target.trim()} Pack!</h3>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th><th>Type</th></tr>`;
-
+				
 				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
-				pack.forEach(card => {
-					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-					output += `<td>${card.set}</td>`;
-					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
-					output += `<td>${card.type || card.supertype}</td>`;
-					output += `</tr>`;
-				});
-
-				output += `</table></div>`;
+				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
+				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${target.trim()} Pack!`, tableHtml);
 
 				this.sendReplyBox(output);
 			} catch (e: any) {
@@ -503,10 +369,7 @@ export const commands: Chat.ChatCommands = {
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg card [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
-
-			if (!card) {
-				return this.errorReply(`Card with ID "${target}" not found.`);
-			}
+			if (!card) return this.errorReply(`Card with ID "${target}" not found.`);
 
 			const rarityColorHex = getRarityColor(card.rarity);
 			const startColor = hexToRgba(rarityColorHex, 0.25);
@@ -565,10 +428,6 @@ export const commands: Chat.ChatCommands = {
 			if (!this.runBroadcast()) return;
 			const CARDS_PER_PAGE = 20;
 
-			if (!target) {
-				return this.errorReply(`Usage: /tcg search [filter]:[value], [filter]:[value], ...`);
-			}
-
 			const filters = target.split(',').map(f => f.trim());
 			const query: any = {};
 			const searchTerms: string[] = [];
@@ -578,26 +437,16 @@ export const commands: Chat.ChatCommands = {
 			for (const filter of filters) {
 				const [key, ...valueParts] = filter.split(':');
 				const value = valueParts.join(':').trim();
-
 				if (!key || !value) continue;
-
 				if (toID(key) === 'page') {
 					const pageNum = parseInt(value);
-					if (!isNaN(pageNum) && pageNum > 0) {
-						page = pageNum;
-					}
+					if (!isNaN(pageNum) && pageNum > 0) page = pageNum;
 					continue; 
 				}
-
 				commandArgs.push(filter);
 				searchTerms.push(`<strong>${key}</strong>: "${value}"`);
-
 				switch (toID(key)) {
-					case 'name':
-					case 'set':
-					case 'rarity':
-					case 'supertype':
-					case 'stage':
+					case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
 						query[toID(key)] = { $regex: value, $options: 'i' };
 						break;
 					case 'type':
@@ -612,7 +461,6 @@ export const commands: Chat.ChatCommands = {
 							const operator = match[1] || '=';
 							const amount = parseInt(match[2]);
 							if (isNaN(amount)) break;
-
 							if (operator === '>') query.hp = { $gt: amount };
 							else if (operator === '>=') query.hp = { $gte: amount };
 							else if (operator === '<') query.hp = { $lt: amount };
@@ -621,21 +469,17 @@ export const commands: Chat.ChatCommands = {
 						}
 						break;
 					default:
-						return this.errorReply(`Invalid filter: "${key}". Valid filters are: name, set, rarity, type, supertype, subtype, hp, stage.`);
+						return this.errorReply(`Invalid filter: "${key}".`);
 				}
 			}
 
 			if (Object.keys(query).length === 0) {
-				return this.errorReply('No valid filters provided. Usage: /tcg search [filter]:[value]');
+				return this.errorReply('No valid filters provided.');
 			}
 
 			try {
 				const { data: paginatedResults, total: totalResults, pages: totalPages } = await TCGCards.findWithPagination(
-					query,
-					{
-						page: page,
-						limit: CARDS_PER_PAGE,
-					}
+					query, { page, limit: CARDS_PER_PAGE }
 				);
 
 				if (totalResults === 0) {
@@ -648,59 +492,27 @@ export const commands: Chat.ChatCommands = {
 					return a.name.localeCompare(b.name);
 				});
 
-
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">Search Results</h3>`;
-				output += `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
-
-				output += `<div style="max-height: 370px; overflow-y: auto;">`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Card ID</th><th>Name</th><th>Set</th><th>Rarity</th><th>Type</th><th>Subtypes</th><th>HP</th></tr>`;
-
-				paginatedResults.forEach(card => {
-					const formattedSubtypes = card.subtypes.map(s => {
-						const color = getSubtypeColor(s);
-						return color ? `<strong style="color: ${color}">${s}</strong>` : s;
-					}).join(', ');
-
-					output += `<tr class="themed-table-row">`;
-					output += `<td>${card.cardId}</td>`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-					output += `<td>${card.set}</td>`;
-					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
-					output += `<td>${card.type || card.supertype}</td>`;
-					output += `<td>${formattedSubtypes}</td>`;
-					output += `<td>${card.hp || 'N/A'}</td>`;
-					output += `</tr>`;
-				});
-
-				output += `</table>`;
-				output += `</div>`;
-
-				output += `<p style="text-align:center; margin-top: 8px;">`;
-				output += `Showing ${paginatedResults.length} of ${totalResults} results.`;
-				output += `</p>`;
-
+				let content = `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
+				content += TCG_UI.generateCardTable(paginatedResults, ['id', 'name', 'set', 'rarity', 'type', 'subtypes', 'hp']);
+				content += `<p style="text-align:center; margin-top: 8px;">Showing ${paginatedResults.length} of ${totalResults} results.</p>`;
 				const commandString = `/tcg search ${commandArgs.join(', ')}`;
-
-				output += `<div style="text-align: center; margin-top: 5px;">`;
+				content += `<div style="text-align: center; margin-top: 5px;">`;
 				if (page > 1) {
-					output += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
+					content += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
 				}
-				output += `<strong>Page ${page} of ${totalPages}</strong>`;
+				content += `<strong>Page ${page} of ${totalPages}</strong>`;
 				if ((page * CARDS_PER_PAGE) < totalResults) {
-					output += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
+					content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
 				}
-				output += `</div>`;
+				content += `</div>`;
 
-				output += `</div>`;
-
+				const output = TCG_UI.buildPage('Search Results', content);
 				this.sendReplyBox(output);
 			} catch (e: any) {
 				return this.errorReply(`Error searching: ${e.message}`);
 			}
 		},
-
+		
 		async setprogress(target, room, user) {
 			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
@@ -740,33 +552,24 @@ export const commands: Chat.ChatCommands = {
 
 				const totalInSet = allSetCards.length;
 				const percentage = totalInSet > 0 ? Math.round((ownedCount / totalInSet) * 100) : 0;
-
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">Set Progress for ${displaySetName}</h3>`;
-				output += `<p><strong>Collector:</strong> ${Impulse.nameColor(targetUsername, true)} | <strong>Completion:</strong> ${ownedCount} / ${totalInSet} cards</p>`;
-				output += `<div style="background: #555; border-radius: 4px; overflow: hidden;"><div style="width:${percentage}%; background: #2ecc71; padding: 4px 0; text-align: center; color: #fff; font-weight: bold;">${percentage}%</div></div>`;
 				
+				let content = `<p><strong>Collector:</strong> ${Impulse.nameColor(targetUsername, true)} | <strong>Completion:</strong> ${ownedCount} / ${totalInSet} cards</p>`;
+				content += `<div style="background: #555; border-radius: 4px; overflow: hidden;"><div style="width:${percentage}%; background: #2ecc71; padding: 4px 0; text-align: center; color: #fff; font-weight: bold;">${percentage}%</div></div>`;
+
 				if (missingCards.length > 0) {
-					output += `<h4 style="margin-top: 15px;">Missing Cards:</h4>`;
-					output += `<div style="max-height: 280px; overflow-y: auto;">`;
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header"><th>Card</th><th>Rarity</th></tr>`;
-					missingCards.sort((a, b) => getCardPoints(a) - getCardPoints(b)).forEach(card => {
-						output += `<tr class="themed-table-row">`;
-						output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-						output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity}</span></td>`;
-						output += `</tr>`;
-					});
-					output += `</table></div>`;
+					content += `<h4 style="margin-top: 15px;">Missing Cards:</h4>`;
+					missingCards.sort((a, b) => getCardPoints(a) - getCardPoints(b));
+					const missingCardsTable = TCG_UI.generateCardTable(missingCards, ['name', 'rarity']);
+					content += missingCardsTable;
 				} else {
-					output += `<p style="text-align:center; font-weight:bold; color:#2ecc71; margin-top:15px;">🎉 Set Complete! 🎉</p>`;
+					content += `<p style="text-align:center; font-weight:bold; color:#2ecc71; margin-top:15px;">🎉 Set Complete! 🎉</p>`;
 				}
 
-				output += `</div>`;
+				const output = TCG_UI.buildPage(`Set Progress for ${displaySetName}`, content);
 				this.sendReplyBox(output);
 
 			} catch (e: any) {
-				this.errorReply(`Error fetching set progress: ${e.message}`);
+				return this.errorReply(`Error fetching set progress: ${e.message}`);
 			}
 		},
 
@@ -786,7 +589,6 @@ export const commands: Chat.ChatCommands = {
 					sortLabel = 'Total Points';
 					break;
 				case 'total':
-					// Default is already set
 					break;
 				default:
 					return this.errorReply(`Invalid sort type. Use: total, unique, or points.`);
@@ -797,15 +599,13 @@ export const commands: Chat.ChatCommands = {
 				const totalCardsInDb = await TCGCards.count({});
 
 				const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
-
-				let output = `<div class="themed-table-container">`;
-				output += `<h3 class="themed-table-title">TCG Collection Statistics</h3>`;
-				output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
+				
+				let content = `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
 				
 				if (topCollectors.length > 0) {
-					output += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
+					content += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
+					content += `<table class="themed-table">`;
+					content += `<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
 
 					topCollectors.forEach((collector, idx) => {
 						let statValue = 0;
@@ -820,19 +620,16 @@ export const commands: Chat.ChatCommands = {
 								statValue = collector.stats.totalCards;
 								break;
 						}
-
-						output += `<tr class="themed-table-row">`;
-						output += `<td>${idx + 1}</td>`;
-						output += `<td>${Impulse.nameColor(collector.userId, true)}</td>`;
-						output += `<td>${statValue}</td>`;
-						output += `</tr>`;
+						content += `<tr class="themed-table-row">`;
+						content += `<td>${idx + 1}</td>`;
+						content += `<td>${Impulse.nameColor(collector.userId, true)}</td>`;
+						content += `<td>${statValue}</td>`;
+						content += `</tr>`;
 					});
-
-					output += `</table>`;
+					content += `</table>`;
 				}
-				output += `</div>`;
-
-				this.sendReplyBox(output);
+				
+				this.sendReplyBox(TCG_UI.buildPage('TCG Collection Statistics', content));
 			} catch (e: any) {
 				return this.errorReply(`Error fetching stats: ${e.message}`);
 			}
@@ -840,11 +637,7 @@ export const commands: Chat.ChatCommands = {
 
 		async sets(target, room, user) {
 			if (!this.runBroadcast()) return;
-			let output = `<div class="themed-table-container">`;
-			output += `<h3 class="themed-table-title">Pokemon TCG Sets</h3>`;
-			
-			output += `<div style="max-height: 380px; overflow-y: auto;">`;
-			
+			let content = `<div style="max-height: 380px; overflow-y: auto;">`;
 			const seriesGroups = new Map<string, TCGSet[]>();
 			POKEMON_SETS.forEach(set => {
 				if (!seriesGroups.has(set.series)) {
@@ -854,46 +647,31 @@ export const commands: Chat.ChatCommands = {
 			});
 
 			seriesGroups.forEach((sets, series) => {
-				output += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Code</th><th>Name</th><th>Year</th></tr>`;
-				
+				content += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>`;
+				content += `<table class="themed-table">`;
+				content += `<tr class="themed-table-header"><th>Code</th><th>Name</th><th>Year</th></tr>`;
 				sets.forEach(set => {
-					output += `<tr class="themed-table-row">`;
-					output += `<td>${set.code}</td>`;
-					output += `<td><strong>${set.name}</strong></td>`;
-					output += `<td>${set.year}</td>`;
-					output += `</tr>`;
+					content += `<tr class="themed-table-row">`;
+					content += `<td>${set.code}</td>`;
+					content += `<td><strong>${set.name}</strong></td>`;
+					content += `<td>${set.year}</td>`;
+					content += `</tr>`;
 				});
-				
-				output += `</table>`;
+				content += `</table>`;
 			});
-
-			output += `</div>`;
-
-			output += `</div>`;
-			this.sendReplyBox(output);
+			content += `</div>`;
+			this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Sets', content));
 		},
 
 		async rarities(target, room, user) {
 			if (!this.runBroadcast()) return;
-			let output = `<div class="themed-table-container">`;
-			output += `<h3 class="themed-table-title">Pokemon TCG Rarities</h3>`;
-			
-			output += `<div style="max-height: 380px; overflow-y: auto;">`;
-			
-			output += `<ul style="list-style: none; padding: 10px;">`;
-			
+			let content = `<div style="max-height: 380px; overflow-y: auto;">`;
+			content += `<ul style="list-style: none; padding: 10px;">`;
 			RARITIES.forEach(rarity => {
-				output += `<li><span style="color: ${getRarityColor(rarity)}; font-weight: bold;">●</span> ${rarity}</li>`;
+				content += `<li><span style="color: ${getRarityColor(rarity)}; font-weight: bold;">●</span> ${rarity}</li>`;
 			});
-			
-			output += `</ul>`;
-			
-			output += `</div>`;
-			
-			output += `</div>`;
-			this.sendReplyBox(output);
+			content += `</ul></div>`;
+			this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Rarities', content));
 		},
 
 		async wishlist(target, room, user) {
@@ -927,18 +705,8 @@ export const commands: Chat.ChatCommands = {
 					const cards = await TCGCards.find({ cardId: { $in: collection.wishlist } });
 					cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
-					let output = `<div class="themed-table-container">`;
-					output += `<h3 class="themed-table-title">${Impulse.nameColor(targetUsername, true)}'s Wishlist</h3>`;
-					output += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
-					output += `<tr class="themed-table-header"><th>Card</th><th>Set</th><th>Rarity</th></tr>`;
-					cards.forEach(card => {
-						output += `<tr class="themed-table-row">`;
-						output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
-						output += `<td>${card.set}</td>`;
-						output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity}</span></td>`;
-						output += `</tr>`;
-					});
-					output += `</table></div></div>`;
+					const tableHtml = TCG_UI.generateCardTable(cards, ['name', 'set', 'rarity']);
+					const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s Wishlist`, tableHtml);
 					this.sendReplyBox(output);
 				}
 			} catch (e: any) {
@@ -948,39 +716,150 @@ export const commands: Chat.ChatCommands = {
 
 		async types(target, room, user) {
 			if (!this.runBroadcast()) return;
-			let output = `<div class="themed-table-container">`;
-			output += `<h3 class="themed-table-title">Pokemon TCG Data</h3>`;
+			let content = `<p><strong>Supertypes:</strong> ${SUPERTYPES.join(', ')}</p>`;
+			content += `<p><strong>Pokemon Types:</strong> ${POKEMON_TYPES.join(', ')}</p>`;
+			content += `<h4>Pokemon Subtypes</h4><p>${SUBTYPES.Pokemon.join(', ')}</p>`;
+			content += `<h4>Trainer Subtypes</h4><p>${SUBTYPES.Trainer.join(', ')}</p>`;
+			content += `<h4>Energy Subtypes</h4><p>${SUBTYPES.Energy.join(', ')}</p>`;
+			this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Data', content));
+		},
+
+		async battle(target, room, user) {
+			// ... (full battle command)
+		},
+		
+		async currency(target, room, user) {
+			if (!this.runBroadcast()) return;
+			const targetUser = toID(target) || user.id;
+			const targetUsername = target.trim() || user.name;
 			
-			output += `<p><strong>Supertypes:</strong> ${SUPERTYPES.join(', ')}</p>`;
-			output += `<p><strong>Pokemon Types:</strong> ${POKEMON_TYPES.join(', ')}</p>`;
-			
-			output += `<h4>Pokemon Subtypes</h4>`;
-			output += `<p>${SUBTYPES.Pokemon.join(', ')}</p>`;
-			
-			output += `<h4>Trainer Subtypes</h4>`;
-			output += `<p>${SUBTYPES.Trainer.join(', ')}</p>`;
-			
-			output += `<h4>Energy Subtypes</h4>`;
-			output += `<p>${SUBTYPES.Energy.join(', ')}</p>`;
-			
-			output += `</div>`;
-			this.sendReplyBox(output);
+			const balance = await TCG_Economy.getUserBalance(targetUser);
+			this.sendReplyBox(`<strong>${Impulse.nameColor(targetUsername, true)}'s Balance:</strong> ${balance} Credits.`);
+		},
+
+		async givecurrency(target, room, user) {
+			if (!this.can('%')) return false;
+			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
+			if (!targetUser || !amountStr) {
+				return this.errorReply("Usage: /tcg givecurrency [user], [amount]");
+			}
+
+			const amount = parseInt(amountStr);
+			if (isNaN(amount) || amount <= 0) {
+				return this.errorReply("Invalid amount. Amount must be a positive number.");
+			}
+
+			const targetId = toID(targetUser);
+			const success = await TCG_Economy.grantCurrency(targetId, amount);
+
+			if (success) {
+				this.sendReply(`${targetUser} has been given ${amount} Credits.`);
+				const targetUserObj = Users.get(targetId);
+				if (targetUserObj) targetUserObj.send(`|raw|You have received ${amount} Credits from ${user.name}.`);
+			} else {
+				this.errorReply(`Failed to give currency to ${targetUser}.`);
+			}
+		},
+
+		async takecurrency(target, room, user) {
+			if (!this.can('%')) return false;
+			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
+			if (!targetUser || !amountStr) {
+				return this.errorReply("Usage: /tcg takecurrency [user], [amount]");
+			}
+
+			const amount = parseInt(amountStr);
+			if (isNaN(amount) || amount <= 0) {
+				return this.errorReply("Invalid amount. Amount must be a positive number.");
+			}
+
+			const targetId = toID(targetUser);
+			const success = await TCG_Economy.deductCurrency(targetId, amount);
+
+			if (success) {
+				this.sendReply(`${amount} Credits have been taken from ${targetUser}.`);
+				const targetUserObj = Users.get(targetId);
+				if (targetUserObj) targetUserObj.send(`|raw|${amount} Credits were taken from your account by ${user.name}.`);
+			} else {
+				this.errorReply(`${targetUser} does not have enough currency.`);
+			}
+		},
+
+		async setcurrency(target, room, user) {
+			if (!this.can('%')) return false;
+			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
+			if (!targetUser || !amountStr) {
+				return this.errorReply("Usage: /tcg setcurrency [user], [amount]");
+			}
+
+			const amount = parseInt(amountStr);
+			if (isNaN(amount) || amount < 0) {
+				return this.errorReply("Invalid amount. Amount must be a non-negative number.");
+			}
+
+			const targetId = toID(targetUser);
+			const success = await TCG_Economy.setCurrency(targetId, amount);
+
+			if (success) {
+				this.sendReply(`${targetUser}'s balance has been set to ${amount} Credits.`);
+				const targetUserObj = Users.get(targetId);
+				if (targetUserObj) targetUserObj.send(`|raw|Your credit balance was set to ${amount} by ${user.name}.`);
+			} else {
+				this.errorReply(`Failed to set currency for ${targetUser}.`);
+			}
+		},
+
+		async pay(target, room, user) {
+			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
+			if (!targetUser || !amountStr) {
+				return this.errorReply("Usage: /tcg pay [user], [amount]");
+			}
+
+			const amount = parseInt(amountStr);
+			if (isNaN(amount) || amount <= 0) {
+				return this.errorReply("Invalid amount. Amount must be a positive number.");
+			}
+
+			const fromUserId = user.id;
+			const toUserId = toID(targetUser);
+
+			if (fromUserId === toUserId) {
+				return this.errorReply("You cannot pay yourself.");
+			}
+
+			const success = await TCG_Economy.transferCurrency(fromUserId, toUserId, amount);
+
+			if (success) {
+				this.sendReply(`You have sent ${amount} Credits to ${targetUser}.`);
+				const toUserObj = Users.get(toUserId);
+				if (toUserObj) toUserObj.send(`|raw|You have received ${amount} Credits from ${user.name}.`);
+			} else {
+				this.errorReply(`Payment failed. You may not have enough credits.`);
+			}
 		},
 	},
 
 	tcghelp: [
-		'/tcg daily - Claim your free random pack of the day.',
-		'/tcg collection [user] - View a user\'s TCG card collection.',
+		'/tcg daily - Claim your free random pack of the day and some credits.',
+		'/tcg currency [user] - Check your or another user\'s credit balance.',
+		'/tcg pay [user], [amount] - Give credits to another user.',
+		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
+		'/tcg battle accept, [user] - Accept a pack battle challenge.',
+		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
 		'/tcg wishlist [user] - View a user\'s wishlist.',
 		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
+		'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
 		'/tcg stats [total|unique|points] - View global TCG statistics.',
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
-		'% /tcg openpack [set ID] - Open a pack of cards from a specific set (Admin only).',
-		'% /tcg addcard [id], [name], [set]... - Add a card to the database (Admin only).',
+		'% /tcg givecurrency [user], [amount] - Give credits to a user.',
+		'% /tcg takecurrency [user], [amount] - Take credits from a user.',
+		'% /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
+		'% /tcg openpack [set ID] - Open a pack of cards from a specific set.',
+		'% /tcg addcard [id], [name], [set]... - Add a card to the database.',
 	],
 };
