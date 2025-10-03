@@ -1,6 +1,6 @@
 /**
  * Pokemon TCG Collection Plugin
- * Allows users to collect, trade, and manage Pokemon TCG cards
+ * Allows users to collect and manage Pokemon TCG cards
  * @license MIT
  */
 
@@ -32,29 +32,14 @@ interface UserCollection {
 		totalCards: number;
 		uniqueCards: number;
 		favoriteType?: string;
-		totalCardsTraded?: number;
 		totalPoints?: number; 
 	};
-	tradeLocked: boolean;
 	lastUpdated: number;
-}
-
-interface TradeOffer {
-	_id?: string;
-	tradeId: string;
-	fromUser: string;
-	toUser: string;
-	offeredCards: { cardId: string; quantity: number }[];
-	requestedCards: { cardId: string; quantity: number }[];
-	status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
-	createdAt: number;
-	expiresAt: number;
 }
 
 // Initialize collections
 const TCGCards = MongoDB<TCGCard>('tcg_cards');
 const UserCollections = MongoDB<UserCollection>('tcg_user_collections');
-const TradeOffers = MongoDB<TradeOffer>('tcg_trade_offers');
 
 // Pokemon TCG Data
 const SUPERTYPES = [
@@ -79,44 +64,55 @@ const POKEMON_TYPES = [
 
 const SUBTYPES = {
 	Pokemon: [
+		'Amazing',
+		'Ancient',
+		'Baby',
 		'Basic',
+		'BREAK',
+		'Crystal Pokémon',
+		'Dark Pokémon',
+		'ex', // Lowercase for modern Scarlet & Violet ex
+		'EX', // Uppercase for older Black & White / XY EX
+		'Fusion Strike',
+		'Future',
+		'GX',
+		'LEGEND',
+		'Level-Up',
+		'Light Pokémon',
+		'Mega',
+		'Owner\'s Pokémon',
+		'Prime',
+		'Prism Star',
+		'Radiant',
+		'Rapid Strike',
+		'Restored',
+		'Shining',
+		'Single Strike',
 		'Stage 1',
 		'Stage 2',
-		'BREAK',
-		'EX',
-		'GX',
+		'TAG TEAM',
+		'Team Aqua',
+		'Team Magma',
+		'Team Plasma',
+		'Tera',
+		'Ultra Beast',
 		'V',
+		'V-UNION',
 		'VMAX',
 		'VSTAR',
-		'V-UNION',
-		'ex',
-		'Mega',
-		'LEGEND',
-		'Restored',
-		'Level-Up',
-		'Prime',
-		'Team Plasma',
-		'Radiant',
-		'Ultra Beast',
-		'Baby',
-		'Shining',
-		'Amazing',
-		'TAG TEAM',
-		'Single Strike',
-		'Rapid Strike',
-		'Fusion Strike',
-		'Prism Star',
-		'ACE SPEC',
 	],
 	Trainer: [
-		'Item',
-		'Supporter',
-		'Stadium',
-		'Pokémon Tool',
-		'Technical Machine',
-		'Goldenrod Game Corner',
-		'Rocket\'s Secret Machine',
 		'ACE SPEC',
+		'Ancient',
+		'Fossil',
+		'Future',
+		'Goldenrod Game Corner',
+		'Item',
+		'Pokémon Tool',
+		'Rocket\'s Secret Machine',
+		'Stadium',
+		'Supporter',
+		'Technical Machine',
 	],
 	Energy: [
 		'Basic',
@@ -125,35 +121,69 @@ const SUBTYPES = {
 };
 
 const RARITIES = [
+	// Core Rarities
 	'Common',
 	'Uncommon',
 	'Rare',
+
+	// Holo Variations
 	'Rare Holo',
+	'Reverse Holo',
+
+	// Classic & First Edition
+	'1st Edition',
+	'Shadowless',
+	'Rare Holo 1st Edition',
+
+	// Special Mechanics & Eras
+	'Shining',
+	'Gold Star',
+	'Rare Holo LV.X',
+	'Rare ex',
+	'Rare SP',
+	'Rare Prime',
+	'LEGEND',
+	'Rare BREAK',
+	'Prism Star',
+
+	// Modern "Rule Box" Pokémon
 	'Rare Holo EX',
 	'Rare Holo GX',
 	'Rare Holo V',
 	'Rare Holo VMAX',
 	'Rare Holo VSTAR',
+	
+	// Ultra Rare Tiers (Full Arts & Alternates)
+	'Full Art',
 	'Rare Ultra',
-	'Rare Secret',
-	'Rare Rainbow',
-	'Rare Shiny',
-	'Rare Shiny GX',
-	'Amazing Rare',
-	'Radiant Rare',
 	'Illustration Rare',
 	'Special Illustration Rare',
+	'Character Rare',
+	'Character Super Rare',
+	'Trainer Gallery',
+	
+	// Shiny Tiers
+	'Shiny Rare',
+	'Rare Shiny',
+	'Shiny Ultra Rare',
+	'Rare Shiny GX',
+	'Radiant Rare',
+	'Amazing Rare',
+
+	// Secret & Gold Tiers
+	'Rare Secret',
+	'Rare Rainbow',
+	'Gold Full Art',
+	'Rare Gold',
 	'Hyper Rare',
-	'Ultra Rare',
-	'Double Rare',
+
+	// Miscellaneous
 	'Promo',
+	'Black Star Promo',
 	'Classic Collection',
 	'ACE SPEC Rare',
 	'Rare ACE',
-	'Rare BREAK',
-	'Rare Holo Star',
-	'Rare Prime',
-	'LEGEND',
+	'Double Rare',
 ];
 
 const POKEMON_SETS = [
@@ -294,19 +324,6 @@ const POKEMON_SETS = [
 	{ code: 'PRE', name: 'Prismatic Evolutions', year: 2025, series: 'Scarlet & Violet' },
 ];
 
-// Card rarity weights for pack opening
-const RARITY_WEIGHTS = {
-	common: 60,
-	uncommon: 25,
-	rare: 10,
-	'rare holo': 3,
-	'rare ultra': 1.5,
-	'rare secret': 0.5,
-	'illustration rare': 0.8,
-	'special illustration rare': 0.3,
-	'hyper rare': 0.4,
-};
-
 const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 	VMAX: { color: '#C0392B', glow: true },
 	VSTAR: { color: '#8E44AD', glow: true },
@@ -327,21 +344,30 @@ function getCardPoints(card: TCGCard): number {
 	switch (card.rarity) {
 		// Tier 1: Common Pulls
 		case 'Common':
+		case '1st Edition':
+		case 'Shadowless':
 			return 5;
 		case 'Uncommon':
 			return 10;
+		case 'Reverse Holo':
+			return 15;
 
 		// Tier 2: Standard Rares
 		case 'Rare':
 			return 20;
 		case 'Double Rare':
 		case 'Promo':
+		case 'Black Star Promo':
 			return 25;
 		case 'Rare Holo':
 		case 'Classic Collection':
 			return 30;
+		case 'Rare Holo 1st Edition':
+			return 35;
 
 		// Tier 3: Holo Rule Box Cards (V, GX, EX, etc.)
+		case 'Rare SP':
+			return 40;
 		case 'Rare Holo EX':
 		case 'Rare Holo GX':
 		case 'Rare Holo V':
@@ -349,31 +375,44 @@ function getCardPoints(card: TCGCard): number {
 		case 'Rare BREAK':
 		case 'Rare Prime':
 		case 'LEGEND':
+		case 'Prism Star':
 			return 50;
 		case 'Rare Holo VMAX':
 		case 'Rare Holo VSTAR':
 			return 55;
+		case 'Rare ex': // Older, valuable ex cards
+			return 60;
 			
 		// Tier 4: Special Rarity Cards
 		case 'Radiant Rare':
 			return 60;
 		case 'Amazing Rare':
+		case 'Shining':
 			return 65;
 		case 'ACE SPEC Rare':
 		case 'Rare ACE':
 			return 70;
 		
 		// Tier 5: Full Art & Illustration Rares
+		case 'Full Art':
 		case 'Rare Ultra': // Standard Full Arts
 			return 75;
 		case 'Rare Shiny':
+		case 'Shiny Rare':
 			return 80;
+		case 'Trainer Gallery':
+		case 'Character Rare':
 		case 'Rare Shiny GX':
+		case 'Shiny Ultra Rare':
 			return 85;
 		case 'Illustration Rare':
 			return 90;
-		case 'Rare Holo Star': // Very rare for its era
+		case 'Rare Holo LV.X':
+			return 95;
+		case 'Rare Holo Star':
 			return 100;
+		case 'Character Super Rare':
+			return 110;
 			
 		// Tier 6: Secret & Hyper Rares (Highest Value)
 		case 'Rare Secret':
@@ -382,8 +421,12 @@ function getCardPoints(card: TCGCard): number {
 			return 150;
 		case 'Rare Rainbow':
 			return 160;
+		case 'Gold Full Art':
+		case 'Rare Gold':
 		case 'Hyper Rare': // Gold Cards
 			return 175;
+		case 'Gold Star':
+			return 200;
 
 		default:
 			// Fallback for any unlisted rarities
@@ -412,56 +455,52 @@ function hexToRgba(hex: string, alpha: number): string {
 
 function getRarityColor(rarity: string): string {
 	const colors: {[key: string]: string} = {
+		// Core
 		common: '#808080',
 		uncommon: '#2ECC71',
 		rare: '#3498DB',
 		'rare holo': '#9B59B6',
+		'reverse holo': '#f1c40f',
+		
+		// Special Mechanics
+		'gold star': '#FFD700',
+		'rare holo lv.x': '#95a5a6',
+		'rare ex': '#bdc3c7',
+		'rare prime': '#e67e22',
+		'prism star': '#e91e63',
+
+		// Modern Rule Box
 		'rare holo ex': '#E74C3C',
 		'rare holo gx': '#E67E22',
 		'rare holo v': '#E74C3C',
 		'rare holo vmax': '#C0392B',
 		'rare holo vstar': '#8E44AD',
+		
+		// Ultra & Special Arts
+		'full art': '#E74C3C',
 		'rare ultra': '#E74C3C',
-		'rare secret': '#F39C12',
-		'rare rainbow': '#E91E63',
-		'rare shiny': '#FFD700',
-		'amazing rare': '#00CED1',
-		'radiant rare': '#FF6B6B',
 		'illustration rare': '#4ECDC4',
 		'special illustration rare': '#FFE66D',
+		'character rare': '#ff9ff3',
+		'trainer gallery': '#1abc9c',
+
+		// Shiny
+		'shining': '#f1c40f',
+		'rare shiny': '#FFD700',
+		'radiant rare': '#FF6B6B',
+		'amazing rare': '#00CED1',
+		
+		// Top Tier
+		'rare secret': '#F39C12',
+		'rare rainbow': '#E91E63',
+		'rare gold': '#FFD700',
 		'hyper rare': '#FF10F0',
+
+		// Promo & Misc
+		promo: '#c0392b',
+		'black star promo': '#2c3e50',
 	};
 	return colors[rarity.toLowerCase()] || '#FFFFFF';
-}
-
-function getRandomCard(cards: TCGCard[]): TCGCard {
-	const totalWeight = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
-	const random = Math.random() * totalWeight;
-	
-	let cumulativeWeight = 0;
-	let selectedRarity = 'common';
-	
-	for (const [rarity, weight] of Object.entries(RARITY_WEIGHTS)) {
-		cumulativeWeight += weight;
-		if (random <= cumulativeWeight) {
-			selectedRarity = rarity;
-			break;
-		}
-	}
-
-	const cardsOfRarity = cards.filter(c => c.rarity.toLowerCase() === selectedRarity);
-	if (cardsOfRarity.length === 0) {
-		return cards[Math.floor(Math.random() * cards.length)];
-	}
-	
-	return cardsOfRarity[Math.floor(Math.random() * cardsOfRarity.length)];
-}
-
-function parseCardList(str: string): { cardId: string; quantity: number }[] {
-	return str.split(',').map(item => {
-		const [cardId, qty] = item.trim().split(':');
-		return { cardId, quantity: parseInt(qty) || 1 };
-	}).filter(item => item.cardId);
 }
 
 /**
@@ -543,289 +582,17 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	return pack;
 }
 
-
-async function createTradeOffer(context: any, user: User, args: string[]) {
-	const [targetUser, offeredCardsStr, requestedCardsStr] = args;
-	
-	if (!targetUser || !offeredCardsStr || !requestedCardsStr) {
-		return context.errorReply('Usage: /tcg trade offer, [user], [cardId:qty,cardId:qty], [cardId:qty,cardId:qty]');
-	}
-
-	const userId = toID(user.name);
-	const targetId = toID(targetUser);
-
-	if (userId === targetId) {
-		return context.errorReply("You can't trade with yourself!");
-	}
-
-	const offeredCards = parseCardList(offeredCardsStr);
-	const requestedCards = parseCardList(requestedCardsStr);
-
-	if (offeredCards.length === 0 || requestedCards.length === 0) {
-		return context.errorReply('Invalid card format. Use: cardId:quantity,cardId:quantity');
-	}
-
-	try {
-		const userCollection = await UserCollections.findOne({ userId });
-		if (!userCollection) {
-			return context.errorReply("You don't have any cards to trade!");
-		}
-
-		for (const offer of offeredCards) {
-			const card = userCollection.cards.find(c => c.cardId === offer.cardId);
-			if (!card || card.quantity < offer.quantity) {
-				return context.errorReply(`You don't have enough of card ${offer.cardId}. You have ${card?.quantity || 0}, need ${offer.quantity}.`);
-			}
-		}
-
-		const tradeId = Impulse.generateRandomString(8);
-		const trade: TradeOffer = {
-			tradeId,
-			fromUser: userId,
-			toUser: targetId,
-			offeredCards,
-			requestedCards,
-			status: 'pending',
-			createdAt: Date.now(),
-			expiresAt: Date.now() + (24 * 60 * 60 * 1000),
-		};
-
-		await TradeOffers.insertOne(trade);
-
-		context.sendReply(`Trade offer sent to ${targetUser}! Trade ID: ${tradeId}`);
-		
-		const targetUserObj = Users.get(targetId);
-		if (targetUserObj) {
-			targetUserObj.sendTo(
-				context.room,
-				`|html|${user.name} has sent you a trade offer! Use /tcg trade list to view it.`
-			);
-		}
-
-		return true;
-	} catch (e: any) {
-		return context.errorReply(`Error creating trade: ${e.message}`);
-	}
-}
-
-async function acceptTrade(context: any, user: User, tradeId: string) {
-	if (!tradeId) return context.errorReply("You need to specify a Trade ID to accept.");
-	
-	const userId = user.id;
-	let fromUserCollection: UserCollection | null = null;
-	let toUserCollection: UserCollection | null = null;
-	
-	try {
-		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), toUser: userId, status: 'pending' });
-		if (!trade) {
-			return context.errorReply(`Trade with ID "${tradeId}" not found, or it is not for you.`);
-		}
-		
-		// 1. Lock both users to prevent concurrent trades
-		await UserCollections.updateMany(
-			{ userId: { $in: [trade.fromUser, trade.toUser] } },
-			{ $set: { tradeLocked: true } }
-		);
-
-		fromUserCollection = await UserCollections.findOne({ userId: trade.fromUser });
-		toUserCollection = await UserCollections.findOne({ userId: trade.toUser });
-
-		if (!fromUserCollection || !toUserCollection) {
-			throw new Error("Could not find collection for one of the users.");
-		}
-
-		// 2. Verify both users have the cards to trade
-		const allTradeCardIds = [
-			...trade.offeredCards.map(c => c.cardId),
-			...trade.requestedCards.map(c => c.cardId),
-		];
-		const cardData = await TCGCards.find({ cardId: { $in: allTradeCardIds } });
-		const cardMap = new Map(cardData.map(c => [c.cardId, c]));
-
-		for (const offer of trade.offeredCards) {
-			const cardInCollection = fromUserCollection.cards.find(c => c.cardId === offer.cardId);
-			if (!cardInCollection || cardInCollection.quantity < offer.quantity) {
-				throw new Error(`${trade.fromUser} no longer has enough of card ${offer.cardId}.`);
-			}
-		}
-		for (const request of trade.requestedCards) {
-			const cardInCollection = toUserCollection.cards.find(c => c.cardId === request.cardId);
-			if (!cardInCollection || cardInCollection.quantity < request.quantity) {
-				throw new Error(`${trade.toUser} no longer has enough of card ${request.cardId}.`);
-			}
-		}
-
-		// 3. Exchange Cards
-		let fromUserPointsDelta = 0;
-		let toUserPointsDelta = 0;
-
-		// Helper to manage card quantity changes
-		const updateCardQuantity = (collection: UserCollection, cardId: string, quantity: number) => {
-			let card = collection.cards.find(c => c.cardId === cardId);
-			if (card) {
-				card.quantity += quantity;
-			} else if (quantity > 0) {
-				collection.cards.push({ cardId, quantity, addedAt: Date.now() });
-			}
-			// Remove card from collection if quantity is 0 or less
-			collection.cards = collection.cards.filter(c => c.quantity > 0);
-		};
-		
-		// fromUser -> toUser
-		for (const offer of trade.offeredCards) {
-			const card = cardMap.get(offer.cardId);
-			if (!card) continue;
-			updateCardQuantity(fromUserCollection, offer.cardId, -offer.quantity);
-			updateCardQuantity(toUserCollection, offer.cardId, offer.quantity);
-			fromUserPointsDelta -= getCardPoints(card) * offer.quantity;
-			toUserPointsDelta += getCardPoints(card) * offer.quantity;
-		}
-
-		// toUser -> fromUser
-		for (const request of trade.requestedCards) {
-			const card = cardMap.get(request.cardId);
-			if (!card) continue;
-			updateCardQuantity(toUserCollection, request.cardId, -request.quantity);
-			updateCardQuantity(fromUserCollection, request.cardId, request.quantity);
-			toUserPointsDelta -= getCardPoints(card) * request.quantity;
-			fromUserPointsDelta += getCardPoints(card) * request.quantity;
-		}
-
-		// 4. Recalculate Stats
-		const fromUserTradedCount = trade.offeredCards.reduce((sum, card) => sum + card.quantity, 0);
-		const toUserTradedCount = trade.requestedCards.reduce((sum, card) => sum + card.quantity, 0);
-
-		fromUserCollection.stats = {
-			...fromUserCollection.stats,
-			totalCards: fromUserCollection.cards.reduce((sum, c) => sum + c.quantity, 0),
-			uniqueCards: fromUserCollection.cards.length,
-			totalPoints: (fromUserCollection.stats.totalPoints || 0) + fromUserPointsDelta,
-			totalCardsTraded: (fromUserCollection.stats.totalCardsTraded || 0) + fromUserTradedCount,
-		};
-
-		toUserCollection.stats = {
-			...toUserCollection.stats,
-			totalCards: toUserCollection.cards.reduce((sum, c) => sum + c.quantity, 0),
-			uniqueCards: toUserCollection.cards.length,
-			totalPoints: (toUserCollection.stats.totalPoints || 0) + toUserPointsDelta,
-			totalCardsTraded: (toUserCollection.stats.totalCardsTraded || 0) + toUserTradedCount,
-		};
-		
-		// 5. Finalize and Save
-		await UserCollections.updateOne({ userId: trade.fromUser }, fromUserCollection);
-		await UserCollections.updateOne({ userId: trade.toUser }, toUserCollection);
-		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'accepted' } });
-
-		context.sendReply(`Trade successfully completed with ${trade.fromUser}!`);
-		const fromUserObj = Users.get(trade.fromUser);
-		if (fromUserObj) fromUserObj.sendTo(context.room, `|html|Your trade with ${trade.toUser} was accepted!`);
-
-	} catch (e: any) {
-		await TradeOffers.updateOne({ tradeId: tradeId.trim() }, { $set: { status: 'cancelled' } });
-		context.errorReply(`An error occurred and the trade was cancelled: ${e.message}`);
-	} finally {
-		// 6. Unlock users regardless of outcome
-		if (fromUserCollection && toUserCollection) {
-			await UserCollections.updateMany(
-				{ userId: { $in: [fromUserCollection.userId, toUserCollection.userId] } },
-				{ $set: { tradeLocked: false } }
-			);
-		}
-	}
-}
-
-async function rejectTrade(context: any, user: User, tradeId: string) {
-	if (!tradeId) return context.errorReply("You need to specify a Trade ID to reject.");
-	const userId = user.id;
-
-	try {
-		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), toUser: userId, status: 'pending' });
-		if (!trade) {
-			return context.errorReply(`Trade with ID "${tradeId}" not found, or it is not for you.`);
-		}
-
-		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'rejected' } });
-		
-		context.sendReply(`You have rejected the trade offer from ${trade.fromUser}.`);
-		const fromUserObj = Users.get(trade.fromUser);
-		if (fromUserObj) fromUserObj.sendTo(context.room, `|html|Your trade offer to ${trade.toUser} was rejected.`);
-
-	} catch (e: any) {
-		context.errorReply(`An error occurred while rejecting the trade: ${e.message}`);
-	}
-}
-
-async function cancelTrade(context: any, user: User, tradeId: string) {
-	if (!tradeId) return context.errorReply("You need to specify a Trade ID to cancel.");
-	const userId = user.id;
-
-	try {
-		const trade = await TradeOffers.findOne({ tradeId: tradeId.trim(), fromUser: userId, status: 'pending' });
-		if (!trade) {
-			return context.errorReply(`Trade with ID "${tradeId}" not found, or you are not the sender.`);
-		}
-
-		await TradeOffers.updateOne({ tradeId: trade.tradeId }, { $set: { status: 'cancelled' } });
-		
-		context.sendReply(`You have cancelled your trade offer (ID: ${trade.tradeId}).`);
-	} catch (e: any) {
-		context.errorReply(`An error occurred while cancelling the trade: ${e.message}`);
-	}
-}
-
-async function listTrades(context: any, user: User) {
-	const userId = toID(user.name);
-
-	try {
-		const trades = await TradeOffers.find({
-			$or: [
-				{ fromUser: userId, status: 'pending' },
-				{ toUser: userId, status: 'pending' },
-			],
-		});
-
-		if (trades.length === 0) {
-			return context.sendReply("You don't have any pending trades.");
-		}
-
-		let output = `<div class="themed-table-container">`;
-		output += `<h3 class="themed-table-title">Your Pending Trades</h3>`;
-		output += `<table class="themed-table">`;
-		output += `<tr class="themed-table-header"><th>Trade ID</th><th>Type</th><th>With</th><th>Offered</th><th>Requested</th><th>Expires</th></tr>`;
-
-		trades.forEach(trade => {
-			const isOutgoing = trade.fromUser === userId;
-			const otherUser = isOutgoing ? trade.toUser : trade.fromUser;
-			const expiresIn = Math.round((trade.expiresAt - Date.now()) / (1000 * 60 * 60));
-
-			output += `<tr class="themed-table-row">`;
-			output += `<td>${trade.tradeId}</td>`;
-			output += `<td>${isOutgoing ? 'Outgoing' : 'Incoming'}</td>`;
-			output += `<td>${Impulse.nameColor(otherUser)}</td>`;
-			output += `<td>${trade.offeredCards.length} cards</td>`;
-			output += `<td>${trade.requestedCards.length} cards</td>`;
-			output += `<td>${expiresIn}h</td>`;
-			output += `</tr>`;
-		});
-
-		output += `</table></div>`;
-		return context.sendReplyBox(output);
-	} catch (e: any) {
-		return context.errorReply(`Error listing trades: ${e.message}`);
-	}
-}
-
 // ==================== COMMANDS ====================
 
 export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help tcg');
+			return this.parse('/help pokemontcg');
 		},
 
 		async addcard(target, room, user) {
-			this.checkCan('globalban');
+			if (!this.can('gdeclare')) return false;
 			const parts = target.split(',').map(x => x.trim());
 			
 			if (parts.length < 6) {
@@ -858,7 +625,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async collection(target, room, user) {
-			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
 			const targetUsername = parts[0] || user.name;
 			const targetId = toID(targetUsername);
@@ -939,7 +705,7 @@ export const commands: Chat.ChatCommands = {
 
 				let output = `<div class="themed-table-container">`;
 				output += `<h3 class="themed-table-title">${Impulse.nameColor(targetUsername, true)}'s TCG Collection</h3>`;
-				output += `<p><strong>Total Cards:</strong> ${collection.stats.totalCards} | <strong>Unique Cards:</strong> ${collection.stats.uniqueCards} | <strong>Total Points:</strong> ${totalPoints} | <strong>Cards Traded:</strong> ${collection.stats.totalCardsTraded || 0}</p>`;
+				output += `<p><strong>Total Cards:</strong> ${collection.stats.totalCards} | <strong>Unique Cards:</strong> ${collection.stats.uniqueCards} | <strong>Total Points:</strong> ${totalPoints}</p>`;
 				
 				output += `<div style="max-height: 380px; overflow-y: auto;">`;
 				output += `<table class="themed-table">`;
@@ -950,7 +716,7 @@ export const commands: Chat.ChatCommands = {
 					if (!card) return;
 					
 					output += `<tr class="themed-table-row">`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -974,7 +740,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async openpack(target, room, user) {
-			if (!this.runBroadcast()) return;
 			if (!target) {
 				return this.errorReply("Please specify a set to open. Usage: /tcg openpack [set ID]");
 			}
@@ -991,8 +756,7 @@ export const commands: Chat.ChatCommands = {
 				const collection = await UserCollections.findOne({ userId }) || {
 					userId,
 					cards: [],
-					stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0, totalCardsTraded: 0 },
-					tradeLocked: false,
+					stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
 					lastUpdated: Date.now(),
 				};
 
@@ -1039,31 +803,7 @@ export const commands: Chat.ChatCommands = {
 			}
 		},
 
-		async trade(target, room, user) {
-			const [action, ...args] = target.split(',').map(x => x.trim());
-
-			if (!action) {
-				return this.errorReply('Usage: /tcg trade [offer/accept/reject/cancel/list], [user], [your cards], [their cards]');
-			}
-
-			switch (toID(action)) {
-				case 'offer':
-					return this.runBroadcast(() => createTradeOffer(this, user, args));
-				case 'accept':
-					return this.runBroadcast(() => acceptTrade(this, user, args[0]));
-				case 'reject':
-					return this.runBroadcast(() => rejectTrade(this, user, args[0]));
-				case 'cancel':
-					return this.runBroadcast(() => cancelTrade(this, user, args[0]));
-				case 'list':
-					return this.runBroadcast(() => listTrades(this, user));
-				default:
-					return this.errorReply('Invalid trade action. Use: offer, accept, reject, cancel, or list.');
-			}
-		},
-
-		async card(target, room, user) {
-			if (!this.runBroadcast()) return;
+		async viewcard(target, room, user) {
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg viewcard [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
@@ -1118,8 +858,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
-			if (!this.runBroadcast()) return;
-			const CARDS_PER_PAGE = 50;
+			const CARDS_PER_PAGE = 20;
 
 			if (!target) {
 				return this.errorReply(`Usage: /tcg search [filter]:[value], [filter]:[value], ...`);
@@ -1186,23 +925,24 @@ export const commands: Chat.ChatCommands = {
 			}
 
 			try {
-				const allResults = await TCGCards.find(query);
-				
-				allResults.sort((a, b) => {
-					const pointsDiff = getCardPoints(b) - getCardPoints(a);
-					if (pointsDiff !== 0) return pointsDiff;
-					return a.name.localeCompare(b.name);
-				});
-
-				const totalResults = allResults.length;
+				const { data: paginatedResults, total: totalResults, pages: totalPages } = await TCGCards.findWithPagination(
+					query,
+					{
+						page: page,
+						limit: CARDS_PER_PAGE,
+					}
+				);
 
 				if (totalResults === 0) {
 					return this.sendReply(`No cards found matching your criteria.`);
 				}
 
-				const startIndex = (page - 1) * CARDS_PER_PAGE;
-				const paginatedResults = allResults.slice(startIndex, startIndex + CARDS_PER_PAGE);
-				const totalPages = Math.ceil(totalResults / CARDS_PER_PAGE);
+				paginatedResults.sort((a, b) => {
+					const pointsDiff = getCardPoints(b) - getCardPoints(a);
+					if (pointsDiff !== 0) return pointsDiff;
+					return a.name.localeCompare(b.name);
+				});
+
 
 				let output = `<div class="themed-table-container">`;
 				output += `<h3 class="themed-table-title">Search Results</h3>`;
@@ -1215,7 +955,7 @@ export const commands: Chat.ChatCommands = {
 				paginatedResults.forEach(card => {
 					output += `<tr class="themed-table-row">`;
 					output += `<td>${card.cardId}</td>`;
-					output += `<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
+					output += `<td><button name="send" value="/tcg viewcard ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>`;
 					output += `<td>${card.set}</td>`;
 					output += `<td><span style="color: ${getRarityColor(card.rarity)}">${card.rarity.toUpperCase()}</span></td>`;
 					output += `<td>${card.type || card.supertype}</td>`;
@@ -1238,7 +978,7 @@ export const commands: Chat.ChatCommands = {
 					output += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
 				}
 				output += `<strong>Page ${page} of ${totalPages}</strong>`;
-				if (startIndex + CARDS_PER_PAGE < totalResults) {
+				if ((page * CARDS_PER_PAGE) < totalResults) {
 					output += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
 				}
 				output += `</div>`;
@@ -1252,7 +992,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async stats(target, room, user) {
-			if (!this.runBroadcast()) return;
 			const sortBy = toID(target) || 'total';
 			let sortQuery: any = { 'stats.totalCards': -1 };
 			let sortLabel = 'Total Cards';
@@ -1266,27 +1005,22 @@ export const commands: Chat.ChatCommands = {
 					sortQuery = { 'stats.totalPoints': -1 };
 					sortLabel = 'Total Points';
 					break;
-				case 'traded':
-					sortQuery = { 'stats.totalCardsTraded': -1 };
-					sortLabel = 'Cards Traded';
-					break;
 				case 'total':
 					// Default is already set
 					break;
 				default:
-					return this.errorReply(`Invalid sort type. Use: total, unique, points, or traded.`);
+					return this.errorReply(`Invalid sort type. Use: total, unique, or points.`);
 			}
 
 			try {
 				const totalUsers = await UserCollections.count({});
 				const totalCardsInDb = await TCGCards.count({});
-				const totalTrades = await TradeOffers.count({ status: 'accepted' });
 
 				const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
 
 				let output = `<div class="themed-table-container">`;
 				output += `<h3 class="themed-table-title">TCG Collection Statistics</h3>`;
-				output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb} | <strong>Successful Trades:</strong> ${totalTrades}</p>`;
+				output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
 				
 				if (topCollectors.length > 0) {
 					output += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
@@ -1301,9 +1035,6 @@ export const commands: Chat.ChatCommands = {
 								break;
 							case 'points':
 								statValue = collector.stats.totalPoints || 0;
-								break;
-							case 'traded':
-								statValue = collector.stats.totalCardsTraded || 0;
 								break;
 							default:
 								statValue = collector.stats.totalCards;
@@ -1328,7 +1059,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async sets(target, room, user) {
-			if (!this.runBroadcast()) return;
 			let output = `<div class="themed-table-container">`;
 			output += `<h3 class="themed-table-title">Pokemon TCG Sets</h3>`;
 			
@@ -1365,7 +1095,6 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async rarities(target, room, user) {
-			if (!this.runBroadcast()) return;
 			let output = `<div class="themed-table-container">`;
 			output += `<h3 class="themed-table-title">Pokemon TCG Rarities</h3>`;
 			
@@ -1411,13 +1140,10 @@ export const commands: Chat.ChatCommands = {
 
 	tcghelp: [
 		'/tcg collection [user] - View a user\'s TCG card collection.',
-		'/tcg card [cardId] - View the details of a specific card.',
+		'/tcg viewcard [cardId] - View the details of a specific card.',
 		'/tcg openpack [set ID] - Open a pack of 10 cards from a specific set.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
-		'/tcg trade offer, [user], [your cards], [their cards] - Offer a trade.',
-		'/tcg trade list - View your pending trades.',
-		'/tcg trade accept/reject/cancel [tradeId] - Manage trade offers.',
-		'/tcg stats - View global TCG statistics.',
+		'/tcg stats [total|unique|points] - View global TCG statistics.',
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
