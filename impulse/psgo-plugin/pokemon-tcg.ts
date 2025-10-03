@@ -5,7 +5,6 @@
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS } from './sets.ts';
 
 interface TCGCard {
 	_id?: string;
@@ -196,6 +195,9 @@ const SPECIAL_SUBTYPES: { [key: string]: { color: string; glow?: boolean } } = {
 	'Radiant Rare': { color: '#FF6B6B', glow: true },
 	'Amazing Rare': { color: '#00CED1', glow: true },
 };
+
+// Moved hardcoded sets data to separate file and impulse global.
+const POKEMON_SETS = Impulse.POKEMON_SETS;
 
 // ==================== HELPER FUNCTIONS ====================
 
