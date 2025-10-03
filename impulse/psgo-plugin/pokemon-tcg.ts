@@ -354,11 +354,13 @@ export const commands: Chat.ChatCommands = {
 					collection = {
 						userId,
 						cards: [],
+						packs: [],
 						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
 						lastUpdated: Date.now(),
 					};
 				} else {
 					if (!collection.cards) collection.cards = [];
+					if (!collection.packs) collection.packs = [];
 					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				}
 
@@ -1099,17 +1101,18 @@ export const commands: Chat.ChatCommands = {
 					
 					let collection = await UserCollections.findOne({ userId });
 
-					// Robust initialization to prevent conflicts
 					if (!collection) {
 						collection = {
 							userId,
 							cards: [],
 							packs: [],
-							stats: { totalCards: 0, uniqueCards: 0 },
+							stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
 							lastUpdated: Date.now(),
 						};
 					} else {
+						if (!collection.cards) collection.cards = [];
 						if (!collection.packs) collection.packs = [];
+						if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 					}
 
 					const packEntry = collection.packs.find(p => p.setId === setId);
@@ -1191,7 +1194,7 @@ export const commands: Chat.ChatCommands = {
 						collection.packs = collection.packs.filter(p => p.setId !== setId);
 					}
 
-					// --- ADDED: Robust Initialization for Partial Documents ---
+					if (!collection.packs) collection.packs = [];
 					if (!collection.cards) collection.cards = [];
 					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 					
