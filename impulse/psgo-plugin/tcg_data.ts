@@ -26,6 +26,10 @@ export interface UserCollection {
 		quantity: number;
 		addedAt: number;
 	}[];
+	packs?: {
+		setId: string;
+		quantity: number;
+	}[];
 	stats: {
 		totalCards: number;
 		uniqueCards: number;
