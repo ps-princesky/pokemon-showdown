@@ -635,18 +635,25 @@ export async function generateTournamentHTML(tournament: Tournament, viewerId: s
 			content += `<p>${playerList}</p>`;
 		}
 
-		const isParticipant = tournament.participants.some((p: any) => p.userId === viewerId);
-		const isHost = tournament.host === viewerId;
+		// This block handles different viewer contexts to prevent UI bugs
+		const isParticipant = viewerId ? tournament.participants.some((p: any) => p.userId === viewerId) : false;
+		const isHost = viewerId ? tournament.host === viewerId : false;
 
 		content += `<div style="margin-top: 10px;">`;
-		if (!isParticipant) {
-			content += `<button class="button" name="send" value="/tcg tournament join">Join Tournament</button> `;
+		if (viewerId) {
+			// This HTML is for a specific user viewing their options (e.g., via /tcg tournament view)
+			if (!isParticipant) {
+				content += `<button class="button" name="send" value="/tcg tournament join">Join Tournament</button> `;
+			} else {
+				content += `<button class="button" name="send" value="/tcg tournament leave">Leave Tournament</button> `;
+			}
+			if (isHost) {
+				content += `<button class="button" name="send" value="/tcg tournament start">Start Tournament</button> `;
+				content += `<button class="button" name="send" value="/tcg tournament cancel">Cancel Tournament</button>`;
+			}
 		} else {
-			content += `<button class="button" name="send" value="/tcg tournament leave">Leave Tournament</button> `;
-		}
-		if (isHost) {
-			content += `<button class="button" name="send" value="/tcg tournament start">Start Tournament</button> `;
-			content += `<button class="button" name="send" value="/tcg tournament cancel">Cancel Tournament</button>`;
+			// This HTML is for the generic public broadcast
+			content += `<i>Use <code>/tcg tournament join</code> to enter or <code>/tcg tournament view</code> to see your options.</i>`;
 		}
 		content += `</div>`;
 	}
