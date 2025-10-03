@@ -135,3 +135,5 @@ export const POKEMON_SETS = [
 	{ code: 'SSP', name: 'Surging Sparks', year: 2024, series: 'Scarlet & Violet' },
 	{ code: 'PRE', name: 'Prismatic Evolutions', year: 2025, series: 'Scarlet & Violet' },
 ];
+
+Impulse.Pokemon_SETS = POKEMON_SETS;
