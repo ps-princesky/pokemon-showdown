@@ -1,6 +1,7 @@
 /**
  * TCG Tournament Module
  * Handles tournament creation, management, and bracket-style elimination battles.
+ * Modified to support single active tournament at a time.
  */
 
 import { MongoDB } from '../../impulse/mongodb_module';
@@ -37,7 +38,6 @@ export interface TournamentMatch {
 
 export interface Tournament {
 	_id?: string;
-	tournamentId: string;
 	name: string;
 	host: string;
 	entryFee: number;
@@ -60,12 +60,8 @@ export const Tournaments = MongoDB<Tournament>('tcg_tournaments');
 
 // --- HELPER FUNCTIONS ---
 
-function generateTournamentId(): string {
-	return `TCGT-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-}
-
-function generateMatchId(tournamentId: string, round: number, matchNum: number): string {
-	return `${tournamentId}-R${round}-M${matchNum}`;
+function generateMatchId(round: number, matchNum: number): string {
+	return `R${round}-M${matchNum}`;
 }
 
 function isPowerOfTwo(n: number): boolean {
@@ -73,14 +69,13 @@ function isPowerOfTwo(n: number): boolean {
 }
 
 export async function setPlayerReady(
-	tournamentId: string,
 	matchId: string,
 	userId: string
 ): Promise<{ success: boolean; error?: string; bothReady?: boolean }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ status: { $in: ['in_progress'] } });
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
+		return { success: false, error: 'No active tournament found.' };
 	}
 
 	const match = tournament.matches.find(m => m.matchId === matchId);
@@ -102,7 +97,7 @@ export async function setPlayerReady(
 		match.player2Ready = true;
 	}
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
 	const bothReady = match.player1Ready && match.player2Ready;
 
@@ -209,7 +204,16 @@ export async function createTournament(
 	entryFee: number,
 	setId: string,
 	maxParticipants: number
-): Promise<{ success: boolean; tournamentId?: string; error?: string }> {
+): Promise<{ success: boolean; error?: string }> {
+	// Check if there's already an active tournament
+	const existingTournament = await Tournaments.findOne({ 
+		status: { $in: ['registration', 'in_progress'] } 
+	});
+
+	if (existingTournament) {
+		return { success: false, error: 'There is already an active tournament. Please wait for it to finish.' };
+	}
+
 	if (!name || name.length < 3) {
 		return { success: false, error: 'Tournament name must be at least 3 characters.' };
 	}
@@ -227,10 +231,7 @@ export async function createTournament(
 		return { success: false, error: `Set "${setId}" not found or has no cards.` };
 	}
 
-	const tournamentId = generateTournamentId();
-
 	const tournament: Tournament = {
-		tournamentId,
 		name,
 		host,
 		entryFee,
@@ -247,22 +248,17 @@ export async function createTournament(
 
 	await Tournaments.insertOne(tournament);
 
-	return { success: true, tournamentId };
+	return { success: true };
 }
 
 export async function joinTournament(
-	tournamentId: string,
 	userId: string,
 	username: string
 ): Promise<{ success: boolean; error?: string }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ status: 'registration' });
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
-	}
-
-	if (tournament.status !== 'registration') {
-		return { success: false, error: 'Tournament is not accepting registrations.' };
+		return { success: false, error: 'No tournament registration is currently open.' };
 	}
 
 	if (tournament.participants.some(p => p.userId === userId)) {
@@ -287,23 +283,18 @@ export async function joinTournament(
 
 	tournament.prizePool += tournament.entryFee;
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
 	return { success: true };
 }
 
 export async function leaveTournament(
-	tournamentId: string,
 	userId: string
 ): Promise<{ success: boolean; error?: string }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ status: 'registration' });
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
-	}
-
-	if (tournament.status !== 'registration') {
-		return { success: false, error: 'Cannot leave after tournament has started.' };
+		return { success: false, error: 'No tournament registration is currently open.' };
 	}
 
 	const participant = tournament.participants.find(p => p.userId === userId);
@@ -314,28 +305,23 @@ export async function leaveTournament(
 	tournament.participants = tournament.participants.filter(p => p.userId !== userId);
 	tournament.prizePool -= tournament.entryFee;
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 	await TCG_Economy.grantCurrency(userId, tournament.entryFee);
 
 	return { success: true };
 }
 
 export async function startTournament(
-	tournamentId: string,
 	hostId: string
 ): Promise<{ success: boolean; error?: string }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ status: 'registration' });
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
+		return { success: false, error: 'No tournament registration is currently open.' };
 	}
 
 	if (tournament.host !== hostId) {
 		return { success: false, error: 'Only the tournament host can start the tournament.' };
-	}
-
-	if (tournament.status !== 'registration') {
-		return { success: false, error: 'Tournament has already started or is completed.' };
 	}
 
 	if (!isPowerOfTwo(tournament.participants.length)) {
@@ -361,7 +347,7 @@ export async function startTournament(
 	const matches: TournamentMatch[] = [];
 	for (let i = 0; i < shuffled.length; i += 2) {
 		matches.push({
-			matchId: generateMatchId(tournamentId, 1, Math.floor(i / 2) + 1),
+			matchId: generateMatchId(1, Math.floor(i / 2) + 1),
 			player1: shuffled[i].userId,
 			player2: shuffled[i + 1].userId,
 		});
@@ -370,23 +356,18 @@ export async function startTournament(
 	tournament.matches = matches;
 	tournament.bracketHistory = [matches];
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
 	return { success: true };
 }
 
 export async function playMatch(
-	tournamentId: string,
 	matchId: string
 ): Promise<{ success: boolean; error?: string; winner?: string; matchData?: TournamentMatch }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ status: 'in_progress' });
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
-	}
-
-	if (tournament.status !== 'in_progress') {
-		return { success: false, error: 'Tournament is not in progress.' };
+		return { success: false, error: 'No tournament is currently in progress.' };
 	}
 
 	const match = tournament.matches.find(m => m.matchId === matchId);
@@ -432,19 +413,19 @@ export async function playMatch(
 	const loser = tournament.participants.find(p => p.userId === loserId);
 	if (loser) loser.eliminated = true;
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 
 	// Check if round is complete
 	const allMatchesComplete = tournament.matches.every(m => m.winner);
 	if (allMatchesComplete) {
-		await advanceRound(tournamentId);
+		await advanceRound();
 	}
 
 	return { success: true, winner: match.winner, matchData: match };
 }
 
-async function advanceRound(tournamentId: string): Promise<void> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+async function advanceRound(): Promise<void> {
+	const tournament = await Tournaments.findOne({ status: 'in_progress' });
 	if (!tournament) return;
 
 	const winners = tournament.matches
@@ -466,7 +447,7 @@ async function advanceRound(tournamentId: string): Promise<void> {
 
 		for (let i = 0; i < winners.length; i += 2) {
 			nextMatches.push({
-				matchId: generateMatchId(tournamentId, tournament.currentRound, Math.floor(i / 2) + 1),
+				matchId: generateMatchId(tournament.currentRound, Math.floor(i / 2) + 1),
 				player1: winners[i],
 				player2: winners[i + 1],
 			});
@@ -476,7 +457,7 @@ async function advanceRound(tournamentId: string): Promise<void> {
 		tournament.bracketHistory.push(nextMatches);
 	}
 
-	await Tournaments.updateOne({ tournamentId }, { $set: tournament });
+	await Tournaments.updateOne({ _id: tournament._id }, { $set: tournament });
 }
 
 async function distributePrizes(tournament: Tournament): Promise<void> {
@@ -509,21 +490,18 @@ async function distributePrizes(tournament: Tournament): Promise<void> {
 }
 
 export async function cancelTournament(
-	tournamentId: string,
 	userId: string
 ): Promise<{ success: boolean; error?: string }> {
-	const tournament = await Tournaments.findOne({ tournamentId });
+	const tournament = await Tournaments.findOne({ 
+		status: { $in: ['registration', 'in_progress'] } 
+	});
 
 	if (!tournament) {
-		return { success: false, error: 'Tournament not found.' };
+		return { success: false, error: 'No active tournament found.' };
 	}
 
 	if (tournament.host !== userId) {
 		return { success: false, error: 'Only the host can cancel the tournament.' };
-	}
-
-	if (tournament.status === 'completed') {
-		return { success: false, error: 'Cannot cancel a completed tournament.' };
 	}
 
 	// Refund all participants
@@ -531,18 +509,14 @@ export async function cancelTournament(
 		await TCG_Economy.grantCurrency(participant.userId, tournament.entryFee);
 	}
 
-	await Tournaments.deleteOne({ tournamentId });
+	await Tournaments.deleteOne({ _id: tournament._id });
 
 	return { success: true };
 }
 
-export async function getTournamentDetails(tournamentId: string): Promise<Tournament | null> {
-	return await Tournaments.findOne({ tournamentId });
-}
-
-export async function listActiveTournaments(): Promise<Tournament[]> {
-	return await Tournaments.find({
-		status: { $in: ['registration', 'in_progress'] }
+export async function getActiveTournament(): Promise<Tournament | null> {
+	return await Tournaments.findOne({ 
+		status: { $in: ['registration', 'in_progress'] } 
 	});
 }
 
