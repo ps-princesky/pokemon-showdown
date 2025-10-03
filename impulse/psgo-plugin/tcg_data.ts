@@ -49,6 +49,12 @@ export interface TCGSet {
 	series: string;
 }
 
+export interface ShopState {
+  _id?: string;
+  stock: string[];
+  lastRotation: number;
+}
+
 // --- DATA CONSTANTS ---
 export const SUPERTYPES = [
 	'Pokémon',
