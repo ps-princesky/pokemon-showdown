@@ -123,7 +123,7 @@ export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
 	pokemontcg: {
 		''(target, room, user) {
-			return this.parse('/help pokemontcg');
+			return this.parse('/help tcg');
 		},
 
 		async addcard(target, room, user) {
