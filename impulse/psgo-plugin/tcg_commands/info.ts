@@ -1,5 +1,6 @@
 /**
  * Information and search TCG commands
+ * UPDATED: Enhanced search to show battle data
  */
 
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
