@@ -2,9 +2,9 @@
  * Ranking and milestone TCG commands
  */
 
-import * as TCG_Ranking from '../tcg_ranking';
-import * as TCG_Economy from '../tcg_economy';
-import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../tcg_config';
+import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
+import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
+import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 
 export const rankingCommands: Chat.ChatCommands = {
 
