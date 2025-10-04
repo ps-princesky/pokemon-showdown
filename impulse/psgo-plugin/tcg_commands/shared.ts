@@ -60,7 +60,7 @@ export function hexToRgba(hex: string, alpha: number): string {
  * Generate a pack of cards
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
-	const setCards = await TCGCards.find({ set: setId });
+	const setCards = await TCGCards.find({ set: setId }).toArray();
 	if (setCards.length === 0) return null;
 
 	const commons = setCards.filter(c => c.rarity === 'Common');
