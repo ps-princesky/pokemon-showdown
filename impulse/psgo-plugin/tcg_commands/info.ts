@@ -75,7 +75,7 @@ export const infoCommands: Chat.ChatCommands = {
 				'Metal': 'steel'
 			};
 			const iconName = typeMap[energyType] || energyType.toLowerCase();
-			return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/icons/type/masters/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+			return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/type/masters/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
 		};
 
 		// Outer scrollable container
