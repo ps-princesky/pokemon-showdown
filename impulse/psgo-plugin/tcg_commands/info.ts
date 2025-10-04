@@ -2,199 +2,220 @@
  * Information and search TCG commands
  */
 
-import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
-import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
-import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
-import { TCGCard } from '../../../impulse/psgo-plugin/tcg_data';
-import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
+import * as TCG_UI from '../tcg_ui';
+import * as TCG_Ranking from '../tcg_ranking';
+import { TCGCards, UserCollections } from '../tcg_collections';
+import { TCGCard } from '../tcg_data';
+import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../tcg_config';
 import { getCardPoints, getRarityColor, getTypeColor, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
 
 	async search(target, room, user) {
-	if (!this.runBroadcast()) return;
-	await TCG_Ranking.getPlayerRanking(user.id);
-	
-	if (!target) {
-		return this.errorReply("Usage: /tcg search [name/type/rarity/set/etc...]");
-	}
-	
-	const searchTerms = target.split(',').map(term => term.trim()).filter(Boolean);
-	const query: any = {};
-	
-	// Enhanced search with new card structure
-	for (const term of searchTerms) {
-		if (term.includes(':')) {
-			const [key, value] = term.split(':').map(s => s.trim());
-			switch (toID(key)) {
-				case 'name':
-					query.name = { $regex: value, $options: 'i' };
-					break;
-				case 'type':
-					query.type = { $regex: value, $options: 'i' };
-					break;
-				case 'rarity':
-					query.rarity = { $regex: value, $options: 'i' };
-					break;
-				case 'supertype':
-					query.supertype = { $regex: value, $options: 'i' };
-					break;
-				case 'subtype':
-					query.subtypes = { $regex: value, $options: 'i' };
-					break;
-				case 'set':
-					query.$or = [
-						{ set: { $regex: value, $options: 'i' } },
-						{ set: { $in: [new RegExp(value, 'i')] } },
-						{ cardId: { $regex: `^${value}-`, $options: 'i' } }
-					];
-					break;
-				case 'hp':
-					const hpMatch = value.match(/([<>=]+)?\s*(\d+)/);
-					if (hpMatch) {
-						const operator = hpMatch[1] || '=';
-						const amount = parseInt(hpMatch[2]);
-						if (!isNaN(amount)) {
-							if (operator === '>') query.hp = { $gt: amount };
-							else if (operator === '>=') query.hp = { $gte: amount };
-							else if (operator === '<') query.hp = { $lt: amount };
-							else if (operator === '<=') query.hp = { $lte: amount };
-							else query.hp = amount;
-						}
-					}
-					break;
-				case 'battlevalue':
-				case 'bv':
-					const bvMatch = value.match(/([<>=]+)?\s*(\d+)/);
-					if (bvMatch) {
-						const operator = bvMatch[1] || '=';
-						const amount = parseInt(bvMatch[2]);
-						if (!isNaN(amount)) {
-							if (operator === '>') query.battleValue = { $gt: amount };
-							else if (operator === '>=') query.battleValue = { $gte: amount };
-							else if (operator === '<') query.battleValue = { $lt: amount };
-							else if (operator === '<=') query.battleValue = { $lte: amount };
-							else query.battleValue = amount;
-						}
-					}
-					break;
-			}
-		} else {
-			// General search across multiple fields
-			query.$or = [
-				{ name: { $regex: term, $options: 'i' } },
-				{ rarity: { $regex: term, $options: 'i' } },
-				{ supertype: { $regex: term, $options: 'i' } },
-				{ subtypes: { $regex: term, $options: 'i' } },
-				{ type: { $regex: term, $options: 'i' } }
-			];
-		}
-	}
-	
-	try {
-		// FIX: Get all results first, then limit in code
-		const allResults = await TCGCards.find(query);
-		const results = allResults.slice(0, PAGINATION_CONFIG.SEARCH_RESULTS_LIMIT || 20);
+		if (!this.runBroadcast()) return;
+		await TCG_Ranking.getPlayerRanking(user.id);
 		
-		if (results.length === 0) {
-			return this.sendReplyBox(`<div class="infobox">` +
-				`<h3>🔍 Search Results</h3>` +
-				`<p style="text-align:center; color:#666; margin:20px 0;">No cards found matching: <em>${searchTerms.join(', ')}</em></p>` +
-				`<div style="font-size:0.9em; color:#999; text-align:center;">` +
-				`Try searching with: name:pikachu, type:fire, rarity:rare, set:base1, hp:>100, bv:>=50` +
-				`</div>` +
-				`</div>`);
+		if (!target) {
+			return this.errorReply("Usage: /tcg search [name/type/rarity/set/etc...]");
 		}
 		
-		// Sort results by battle value for Pokemon, then by points
-		results.sort((a, b) => {
-			if (a.supertype === 'Pokémon' && b.supertype === 'Pokémon') {
-				const bvDiff = (b.battleValue || 0) - (a.battleValue || 0);
-				if (bvDiff !== 0) return bvDiff;
-			}
-			return getCardPoints(b) - getCardPoints(a);
-		});
+		const searchTerms = target.split(',').map(term => term.trim()).filter(Boolean);
+		const query: any = {};
 		
-		let output = `<div class="infobox">` +
-			`<h3>🔍 Search Results (${results.length})</h3>` +
-			`<div style="margin:10px 0; font-size:0.9em; color:#666;">` +
-			`Searching for: <em>${searchTerms.join(', ')}</em>` +
-			`</div>`;
-		
-		// Enhanced card grid display
-		output += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; margin:15px 0;">`;
-		
-		results.slice(0, 20).forEach(card => {
-			const points = getCardPoints(card);
-			
-			output += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px; background:${getRarityColor(card.rarity)}08;">`;
-			
-			// Card header
-			output += `<div style="font-weight:bold; color:${getRarityColor(card.rarity)}; margin-bottom:5px;">${card.name}</div>`;
-			
-			// Card details
-			output += `<div style="font-size:0.9em; color:#666; margin-bottom:8px;">` +
-				`${card.rarity} ${card.supertype}`;
-			
-			if (card.subtypes && card.subtypes.length > 0) {
-				output += ` - ${card.subtypes.slice(0, 2).join(', ')}`;
-			}
-			
-			output += `</div>`;
-			
-			// Pokemon-specific info
-			if (card.supertype === 'Pokémon') {
-				output += `<div style="margin:5px 0;">`;
-				
-				if (card.hp) {
-					output += `<span style="background:#e74c3c; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em; margin-right:3px;">HP ${card.hp}</span>`;
+		// Enhanced search with new card structure
+		for (const term of searchTerms) {
+			if (term.includes(':')) {
+				const [key, value] = term.split(':').map(s => s.trim());
+				switch (toID(key)) {
+					case 'name':
+						query.name = { $regex: value, $options: 'i' };
+						break;
+					case 'type':
+						query.type = { $regex: value, $options: 'i' };
+						break;
+					case 'rarity':
+						query.rarity = { $regex: value, $options: 'i' };
+						break;
+					case 'supertype':
+						query.supertype = { $regex: value, $options: 'i' };
+						break;
+					case 'subtype':
+						query.subtypes = { $regex: value, $options: 'i' };
+						break;
+					case 'set':
+						query.$or = [
+							{ set: { $regex: value, $options: 'i' } },
+							{ set: { $in: [new RegExp(value, 'i')] } },
+							{ cardId: { $regex: `^${value}-`, $options: 'i' } }
+						];
+						break;
+					case 'hp':
+						const hpMatch = value.match(/([<>=]+)?\s*(\d+)/);
+						if (hpMatch) {
+							const operator = hpMatch[1] || '=';
+							const amount = parseInt(hpMatch[2]);
+							if (!isNaN(amount)) {
+								if (operator === '>') query.hp = { $gt: amount };
+								else if (operator === '>=') query.hp = { $gte: amount };
+								else if (operator === '<') query.hp = { $lt: amount };
+								else if (operator === '<=') query.hp = { $lte: amount };
+								else query.hp = amount;
+							}
+						}
+						break;
+					case 'battlevalue':
+					case 'bv':
+						const bvMatch = value.match(/([<>=]+)?\s*(\d+)/);
+						if (bvMatch) {
+							const operator = bvMatch[1] || '=';
+							const amount = parseInt(bvMatch[2]);
+							if (!isNaN(amount)) {
+								if (operator === '>') query.battleValue = { $gt: amount };
+								else if (operator === '>=') query.battleValue = { $gte: amount };
+								else if (operator === '<') query.battleValue = { $lt: amount };
+								else if (operator === '<=') query.battleValue = { $lte: amount };
+								else query.battleValue = amount;
+							}
+						}
+						break;
 				}
-				
-				if (card.type) {
-					output += `<span style="background:${getTypeColor(card.type)}; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em; margin-right:3px;">${card.type}</span>`;
+			} else {
+				// General search across multiple fields
+				query.$or = [
+					{ name: { $regex: term, $options: 'i' } },
+					{ rarity: { $regex: term, $options: 'i' } },
+					{ supertype: { $regex: term, $options: 'i' } },
+					{ subtypes: { $regex: term, $options: 'i' } },
+					{ type: { $regex: term, $options: 'i' } }
+				];
+			}
+		}
+		
+		try {
+			// FIX: Get all results first, then limit in code
+			const allResults = await TCGCards.find(query);
+			const results = allResults.slice(0, PAGINATION_CONFIG.SEARCH_RESULTS_LIMIT || 20);
+			
+			if (results.length === 0) {
+				return this.sendReplyBox(`<div class="infobox">` +
+					`<h3>🔍 Search Results</h3>` +
+					`<p style="text-align:center; color:#666; margin:20px 0;">No cards found matching: <em>${searchTerms.join(', ')}</em></p>` +
+					`<div style="font-size:0.9em; color:#999; text-align:center;">` +
+					`Try searching with: name:pikachu, type:fire, rarity:rare, set:base1, hp:>100, bv:>=50` +
+					`</div>` +
+					`</div>`);
+			}
+			
+			// Sort results by battle value for Pokemon, then by points
+			results.sort((a, b) => {
+				if (a.supertype === 'Pokémon' && b.supertype === 'Pokémon') {
+					const bvDiff = (b.battleValue || 0) - (a.battleValue || 0);
+					if (bvDiff !== 0) return bvDiff;
 				}
+				return getCardPoints(b) - getCardPoints(a);
+			});
+			
+			let output = `<div class="infobox">` +
+				`<h3>🔍 Search Results (${results.length})</h3>` +
+				`<div style="margin:10px 0; font-size:0.9em; color:#666;">` +
+				`Searching for: <em>${searchTerms.join(', ')}</em>` +
+				`</div>`;
+			
+			// Enhanced card grid display
+			output += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; margin:15px 0;">`;
+			
+			results.slice(0, 20).forEach(card => {
+				const points = getCardPoints(card);
 				
-				if (card.battleValue) {
-					output += `<span style="background:#f39c12; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em;">BV ${card.battleValue}</span>`;
+				output += `<div style="border:1px solid #ddd; border-radius:8px; padding:10px; background:${getRarityColor(card.rarity)}08;">`;
+				
+				// Card header
+				output += `<div style="font-weight:bold; color:${getRarityColor(card.rarity)}; margin-bottom:5px;">${card.name}</div>`;
+				
+				// Card details
+				output += `<div style="font-size:0.9em; color:#666; margin-bottom:8px;">` +
+					`${card.rarity} ${card.supertype}`;
+				
+				if (card.subtypes && card.subtypes.length > 0) {
+					output += ` - ${card.subtypes.slice(0, 2).join(', ')}`;
 				}
 				
 				output += `</div>`;
-			}
-			
-			// Set and points
-			const setDisplay = Array.isArray(card.set) ? card.set[0] : card.set;
-			output += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:0.8em; color:#999;">` +
-				`<span>${setDisplay || 'Unknown'}</span>` +
-				`<span>${points} pts</span>` +
-				`</div>`;
+				
+				// Pokemon-specific info
+				if (card.supertype === 'Pokémon') {
+					output += `<div style="margin:5px 0;">`;
+					
+					if (card.hp) {
+						output += `<span style="background:#e74c3c; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em; margin-right:3px;">HP ${card.hp}</span>`;
+					}
+					
+					if (card.type) {
+						output += `<span style="background:${getTypeColor(card.type)}; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em; margin-right:3px;">${card.type}</span>`;
+					}
+					
+					if (card.battleValue) {
+						output += `<span style="background:#f39c12; color:white; padding:2px 5px; border-radius:3px; font-size:0.8em;">BV ${card.battleValue}</span>`;
+					}
+					
+					output += `</div>`;
+				}
+				
+				// Set and points
+				const setDisplay = Array.isArray(card.set) ? card.set[0] : card.set;
+				output += `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:0.8em; color:#999;">` +
+					`<span>${setDisplay || 'Unknown'}</span>` +
+					`<span>${points} pts</span>` +
+					`</div>`;
+				
+				output += `</div>`;
+			});
 			
 			output += `</div>`;
-		});
-		
-		output += `</div>`;
-		
-		if (allResults.length > 20) {
-			output += `<div style="text-align:center; margin-top:15px; color:#666;">` +
-				`<em>Showing first 20 of ${allResults.length} results</em>` +
-				`</div>`;
+			
+			if (results.length > 20) {
+				output += `<div style="text-align:center; margin-top:15px; color:#666;">` +
+					`<em>Showing first 20 of ${results.length} results</em>` +
+					`</div>`;
+			}
+			
+			if (allResults.length > results.length) {
+				output += `<div style="text-align:center; margin-top:15px; color:#666;">` +
+					`<em>Total ${allResults.length} cards found, showing first ${results.length}</em>` +
+					`</div>`;
+			}
+			
+			// Search help
+			output += `<details style="margin-top:15px;">` +
+				`<summary style="cursor:pointer; color:#3498db;">🔍 Advanced Search</summary>` +
+				`<div style="margin-top:10px; padding:10px; background:#f9f9f9; border-radius:5px; font-size:0.9em;">` +
+				`<strong>Search Examples:</strong><br/>` +
+				`• <code>name:pikachu</code> - Card name contains "pikachu"<br/>` +
+				`• <code>type:fire</code> - Fire-type cards<br/>` +
+				`• <code>rarity:rare</code> - Rare cards<br/>` +
+				`• <code>supertype:pokemon</code> - Only Pokemon cards<br/>` +
+				`• <code>hp:>100</code> - Pokemon with HP over 100<br/>` +
+				`• <code>bv:>=50</code> - Battle value 50 or higher<br/>` +
+				`• <code>set:base1</code> - Cards from specific set<br/>` +
+				`• <code>subtype:basic</code> - Basic Pokemon only` +
+				`</div>` +
+				`</details>`;
+			
+			output += `</div>`;
+			
+			this.sendReplyBox(output);
+			
+		} catch (e: any) {
+			console.error('Search error:', e);
+			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
-		
-		output += `</div>`;
-		
-		this.sendReplyBox(output);
-		
-	} catch (e: any) {
-		console.error('Search error:', e);
-		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-	}
-},
-	
+	},
 
 	async sets(target, room, user) {
 		if (!this.runBroadcast()) return;
 		
 		try {
-			// Get unique sets from the database (handle array and string formats)
+			// FIX: Get unique sets from the database (handle array and string formats)
 			const allSets = await TCGCards.distinct('set');
 			const flatSets = allSets.flat().filter(Boolean);
 			const uniqueSets = [...new Set(flatSets)];
@@ -203,45 +224,26 @@ export const infoCommands: Chat.ChatCommands = {
 			const setStats: { [key: string]: any } = {};
 			
 			for (const setId of uniqueSets.slice(0, 50)) { // Limit to prevent timeout
-				const [totalCards, pokemonCount, rarityBreakdown] = await Promise.all([
-					TCGCards.countDocuments({
-						$or: [
-							{ set: setId },
-							{ set: { $in: [setId] } }
-						]
-					}),
-					TCGCards.countDocuments({
-						$or: [
-							{ set: setId },
-							{ set: { $in: [setId] } }
-						],
-						supertype: 'Pokémon'
-					}),
-					TCGCards.aggregate([
-						{
-							$match: {
-								$or: [
-									{ set: setId },
-									{ set: { $in: [setId] } }
-								]
-							}
-						},
-						{
-							$group: {
-								_id: '$rarity',
-								count: { $sum: 1 }
-							}
-						}
-					])
-				]);
+				// FIX: Get counts using find().length instead of countDocuments()
+				const setCards = await TCGCards.find({
+					$or: [
+						{ set: setId },
+						{ set: { $in: [setId] } }
+					]
+				});
+				
+				const pokemonCards = setCards.filter(card => card.supertype === 'Pokémon');
+				
+				// Calculate rarity breakdown
+				const rarityBreakdown: { [key: string]: number } = {};
+				setCards.forEach(card => {
+					rarityBreakdown[card.rarity] = (rarityBreakdown[card.rarity] || 0) + 1;
+				});
 				
 				setStats[setId] = {
-					totalCards,
-					pokemonCount,
-					rarityBreakdown: rarityBreakdown.reduce((acc, item) => {
-						acc[item._id] = item.count;
-						return acc;
-					}, {} as { [key: string]: number })
+					totalCards: setCards.length,
+					pokemonCount: pokemonCards.length,
+					rarityBreakdown
 				};
 			}
 			
@@ -320,6 +322,7 @@ export const infoCommands: Chat.ChatCommands = {
 			this.sendReplyBox(output);
 			
 		} catch (e: any) {
+			console.error('Sets error:', e);
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
 	},
@@ -330,38 +333,20 @@ export const infoCommands: Chat.ChatCommands = {
 		const sortBy = target ? toID(target) : 'points';
 		
 		try {
-			let sortField: string;
-			let sortLabel: string;
-			
-			switch (sortBy) {
-				case 'cards':
-					sortField = 'stats.totalCards';
-					sortLabel = 'Total Cards';
-					break;
-				case 'unique':
-					sortField = 'stats.uniqueCards';
-					sortLabel = 'Unique Cards';
-					break;
-				case 'points':
-				default:
-					sortField = 'stats.totalPoints';
-					sortLabel = 'Total Points';
-					break;
-			}
-			
-			const collectors = await UserCollections.find({
+			// FIX: Get all collectors using find() instead of complex queries
+			const allCollectors = await UserCollections.find({
 				'cards.0': { $exists: true }
-			}).sort({ [sortField]: -1 }).limit(20);
+			});
 			
-			if (collectors.length === 0) {
+			if (allCollectors.length === 0) {
 				return this.sendReplyBox(`<div class="infobox">` +
 					`<h3>🏆 Top Collectors</h3>` +
 					`<p style="text-align:center; color:#666; margin:20px 0;">No collectors found</p>` +
 					`</div>`);
 			}
 			
-			// Calculate total points for each collector if needed
-			for (const collector of collectors) {
+			// Calculate total points for each collector
+			for (const collector of allCollectors) {
 				if (!collector.stats?.totalPoints && collector.cards?.length) {
 					let totalPoints = 0;
 					const cardIds = collector.cards.map(c => c.cardId);
@@ -380,16 +365,32 @@ export const infoCommands: Chat.ChatCommands = {
 				}
 			}
 			
-			// Re-sort after point calculation
-			collectors.sort((a, b) => {
-				const aValue = sortField === 'stats.totalPoints' ? (a.stats?.totalPoints || 0) :
-							   sortField === 'stats.totalCards' ? (a.stats?.totalCards || 0) :
+			// Sort collectors based on criteria
+			allCollectors.sort((a, b) => {
+				const aValue = sortBy === 'points' ? (a.stats?.totalPoints || 0) :
+							   sortBy === 'cards' ? (a.stats?.totalCards || 0) :
 							   (a.stats?.uniqueCards || 0);
-				const bValue = sortField === 'stats.totalPoints' ? (b.stats?.totalPoints || 0) :
-							   sortField === 'stats.totalCards' ? (b.stats?.totalCards || 0) :
+				const bValue = sortBy === 'points' ? (b.stats?.totalPoints || 0) :
+							   sortBy === 'cards' ? (b.stats?.totalCards || 0) :
 							   (b.stats?.uniqueCards || 0);
 				return bValue - aValue;
 			});
+			
+			const topCollectors = allCollectors.slice(0, 20);
+			
+			let sortLabel: string;
+			switch (sortBy) {
+				case 'cards':
+					sortLabel = 'Total Cards';
+					break;
+				case 'unique':
+					sortLabel = 'Unique Cards';
+					break;
+				case 'points':
+				default:
+					sortLabel = 'Total Points';
+					break;
+			}
 			
 			let output = `<div class="infobox">` +
 				`<h2 style="text-align:center;">🏆 Top Collectors</h2>` +
@@ -409,7 +410,7 @@ export const infoCommands: Chat.ChatCommands = {
 				`<th style="padding:8px; text-align:center;">Unique Cards</th>` +
 				`</tr>`;
 			
-			collectors.slice(0, 15).forEach((collector, idx) => {
+			topCollectors.forEach((collector, idx) => {
 				const stats = collector.stats || { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 				
 				output += `<tr style="border-bottom:1px solid #ddd;">` +
@@ -426,6 +427,7 @@ export const infoCommands: Chat.ChatCommands = {
 			this.sendReplyBox(output);
 			
 		} catch (e: any) {
+			console.error('Top collectors error:', e);
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
 	},
