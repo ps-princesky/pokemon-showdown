@@ -5,7 +5,8 @@
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
-import { UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { UserCollections, TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
+import { POKEMON_SETS } from '../../../impulse/psgo-plugin/tcg_data';
 import { DAILY_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints, ensureUserCollection } from './shared';
 
@@ -57,7 +58,11 @@ export const coreCommands: Chat.ChatCommands = {
 			collection.lastUpdated = Date.now();
 			collection.lastDaily = Date.now();
 
-			await UserCollections.upsert({ userId }, collection);
+			await UserCollections.updateOne(
+				{ userId },
+				{ $set: collection },
+				{ upsert: true }
+			);
 
 			const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
 			const displaySetName = setInfo ? setInfo.name : randomSetId;
