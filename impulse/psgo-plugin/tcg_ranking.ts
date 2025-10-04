@@ -3,7 +3,7 @@
  * Handles ELO rating calculations and competitive battle rankings.
  */
 
-import { MongoDB } from '../../mongodb_module';
+import { MongoDB } from '../../impulse/mongodb_module';
 import { 
 	PlayerRanking,
 	BattleHistory,
