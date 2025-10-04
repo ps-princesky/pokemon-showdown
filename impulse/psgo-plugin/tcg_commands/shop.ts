@@ -11,121 +11,113 @@ import { generatePack, getCardPoints, ensureUserCollection, addCardToCollection,
 export const shopCommands: Chat.ChatCommands = {
 
 	async shop(target, room, user) {
-		if (!this.runBroadcast()) return;
-		await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	
+	try {
+		const balance = await TCG_Economy.getCurrency(user.id);
 		
-		try {
-			const balance = await TCG_Economy.getCurrency(user.id);
-			
-			// Get available sets from database (handle new card structure)
-			const allSets = await TCGCards.distinct('set');
-			const flatSets = allSets.flat().filter(Boolean);
-			const uniqueSets = [...new Set(flatSets)];
-			
-			if (uniqueSets.length === 0) {
-				return this.sendReplyBox(`<div class="infobox">` +
-					`<h2 style="text-align:center;">🛒 TCG Shop</h2>` +
-					`<div style="text-align:center; margin:20px 0; color:#666;">` +
-					`Shop is currently empty. Please check back later.` +
-					`</div>` +
-					`</div>`);
-			}
-			
-			// Get random featured sets for the shop (simulate rotation)
-			const hourOfDay = Math.floor(Date.now() / (1000 * 60 * 60)) % SHOP_CONFIG.ROTATION_HOURS;
-			const shuffledSets = uniqueSets.sort(() => Math.sin(hourOfDay) - 0.5);
-			const featuredSets = shuffledSets.slice(0, SHOP_CONFIG.FEATURED_SETS || 6);
-			
-			let output = `<div class="infobox">` +
+		// FIX: Get available sets - remove chained methods
+		const allSets = await TCGCards.distinct('set');
+		const flatSets = allSets.flat().filter(Boolean);
+		const uniqueSets = [...new Set(flatSets)];
+		
+		if (uniqueSets.length === 0) {
+			return this.sendReplyBox(`<div class="infobox">` +
 				`<h2 style="text-align:center;">🛒 TCG Shop</h2>` +
-				`<div style="text-align:center; margin:15px 0;">` +
-				`<div style="font-size:1.2em; color:#f39c12; font-weight:bold;">` +
-				`Your Balance: ${balance.toLocaleString()} Credits` +
+				`<div style="text-align:center; margin:20px 0; color:#666;">` +
+				`Shop is currently empty. Please check back later.` +
 				`</div>` +
-				`<div style="font-size:0.9em; color:#666; margin-top:5px;">` +
-				`New packs rotate every ${SHOP_CONFIG.ROTATION_HOURS} hours` +
-				`</div>` +
+				`</div>`);
+		}
+		
+		// Get random featured sets for the shop (simulate rotation)
+		const hourOfDay = Math.floor(Date.now() / (1000 * 60 * 60)) % SHOP_CONFIG.ROTATION_HOURS;
+		const shuffledSets = uniqueSets.sort(() => Math.sin(hourOfDay) - 0.5);
+		const featuredSets = shuffledSets.slice(0, SHOP_CONFIG.FEATURED_SETS || 6);
+		
+		let output = `<div class="infobox">` +
+			`<h2 style="text-align:center;">🛒 TCG Shop</h2>` +
+			`<div style="text-align:center; margin:15px 0;">` +
+			`<div style="font-size:1.2em; color:#f39c12; font-weight:bold;">` +
+			`Your Balance: ${balance.toLocaleString()} Credits` +
+			`</div>` +
+			`<div style="font-size:0.9em; color:#666; margin-top:5px;">` +
+			`New packs rotate every ${SHOP_CONFIG.ROTATION_HOURS} hours` +
+			`</div>` +
+			`</div>`;
+		
+		// Shop grid
+		output += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:15px; margin:20px 0;">`;
+		
+		for (const setId of featuredSets) {
+			// FIX: Get set info without .limit()
+			const allSetCards = await TCGCards.find({
+				$or: [
+					{ set: setId },
+					{ set: { $in: [setId] } }
+				]
+			});
+			
+			const setCards = allSetCards.slice(0, 5); // Limit in code
+			
+			if (setCards.length === 0) continue;
+			
+			const setName = setId.toUpperCase();
+			const price = SHOP_CONFIG.PACK_PRICE || 100;
+			const canAfford = balance >= price;
+			
+			// Get rarity breakdown for preview
+			const rarities = setCards.map(c => c.rarity);
+			const uniqueRarities = [...new Set(rarities)];
+			
+			output += `<div style="border:1px solid #ddd; border-radius:8px; padding:15px; background:#f9f9f9;">` +
+				`<div style="text-align:center; margin-bottom:10px;">` +
+				`<div style="font-weight:bold; font-size:1.1em; color:#2c3e50;">${setName}</div>` +
+				`<div style="font-size:0.9em; color:#666; margin:5px 0;">${allSetCards.length}+ cards available</div>` +
 				`</div>`;
 			
-			// Shop grid
-			output += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:15px; margin:20px 0;">`;
-			
-			for (const setId of featuredSets) {
-				// Get set info
-				const setCards = await TCGCards.find({
-					$or: [
-						{ set: setId },
-						{ set: { $in: [setId] } }
-					]
-				}).limit(5);
-				
-				if (setCards.length === 0) continue;
-				
-				const setName = setId.toUpperCase();
-				const price = SHOP_CONFIG.PACK_PRICE || 100;
-				const canAfford = balance >= price;
-				
-				// Get rarity breakdown for preview
-				const rarities = setCards.map(c => c.rarity);
-				const uniqueRarities = [...new Set(rarities)];
-				
-				output += `<div style="border:1px solid #ddd; border-radius:8px; padding:15px; background:#f9f9f9;">` +
-					`<div style="text-align:center; margin-bottom:10px;">` +
-					`<div style="font-weight:bold; font-size:1.1em; color:#2c3e50;">${setName}</div>` +
-					`<div style="font-size:0.9em; color:#666; margin:5px 0;">${setCards.length}+ cards available</div>` +
-					`</div>`;
-				
-				// Rarity preview
-				if (uniqueRarities.length > 0) {
-					output += `<div style="margin:10px 0;">`;
-					uniqueRarities.slice(0, 3).forEach(rarity => {
-						output += `<span style="background:${getRarityColor(rarity)}15; color:${getRarityColor(rarity)}; border:1px solid ${getRarityColor(rarity)}; padding:2px 5px; border-radius:3px; font-size:0.7em; margin:1px;">${rarity}</span>`;
-					});
-					if (uniqueRarities.length > 3) {
-						output += `<span style="color:#666; font-size:0.8em;">+${uniqueRarities.length - 3} more</span>`;
-					}
-					output += `</div>`;
+			// Rarity preview
+			if (uniqueRarities.length > 0) {
+				output += `<div style="margin:10px 0;">`;
+				uniqueRarities.slice(0, 3).forEach(rarity => {
+					output += `<span style="background:${require('./shared').getRarityColor(rarity)}15; color:${require('./shared').getRarityColor(rarity)}; border:1px solid ${require('./shared').getRarityColor(rarity)}; padding:2px 5px; border-radius:3px; font-size:0.7em; margin:1px;">${rarity}</span>`;
+				});
+				if (uniqueRarities.length > 3) {
+					output += `<span style="color:#666; font-size:0.8em;">+${uniqueRarities.length - 3} more</span>`;
 				}
-				
-				// Price and buy button
-				output += `<div style="text-align:center; margin-top:15px;">` +
-					`<div style="font-size:1.1em; color:#f39c12; font-weight:bold; margin-bottom:8px;">` +
-					`${price} Credits` +
-					`</div>`;
-				
-				if (canAfford) {
-					output += `<button name="send" value="/tcg open ${setId}" style="background:#27ae60; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%;">` +
-						`🎁 Buy Pack` +
-						`</button>`;
-				} else {
-					output += `<button disabled style="background:#95a5a6; color:white; border:none; padding:8px 15px; border-radius:5px; width:100%; opacity:0.6;">` +
-						`Insufficient Funds` +
-						`</button>`;
-				}
-				
-				output += `</div></div>`;
+				output += `</div>`;
 			}
 			
-			output += `</div>`;
-			
-			// Quick actions
-			output += `<div style="text-align:center; margin:20px 0; padding:15px; background:#f0f8ff; border-radius:5px;">` +
-				`<h4 style="margin:0 0 10px 0;">💡 Quick Actions</h4>` +
-				`<div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">` +
-				`<button name="send" value="/tcg daily" style="background:#3498db; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">🎁 Daily Pack</button>` +
-				`<button name="send" value="/tcg currency" style="background:#f39c12; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">💰 Balance</button>` +
-				`<button name="send" value="/tcg collection" style="background:#9b59b6; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">📦 Collection</button>` +
-				`</div>` +
+			// Price and buy button
+			output += `<div style="text-align:center; margin-top:15px;">` +
+				`<div style="font-size:1.1em; color:#f39c12; font-weight:bold; margin-bottom:8px;">` +
+				`${price} Credits` +
 				`</div>`;
 			
-			output += `</div>`;
+			if (canAfford) {
+				output += `<button name="send" value="/tcg open ${setId}" style="background:#27ae60; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%;">` +
+					`🎁 Buy Pack` +
+					`</button>`;
+			} else {
+				output += `<button disabled style="background:#95a5a6; color:white; border:none; padding:8px 15px; border-radius:5px; width:100%; opacity:0.6;">` +
+					`Insufficient Funds` +
+					`</button>`;
+			}
 			
-			this.sendReplyBox(output);
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+			output += `</div></div>`;
 		}
-	},
+		
+		output += `</div></div>`;
+		
+		this.sendReplyBox(output);
+		
+	} catch (e: any) {
+		console.error('Shop error:', e);
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+	
 
 	async open(target, room, user) {
 		if (!this.runBroadcast()) return;
