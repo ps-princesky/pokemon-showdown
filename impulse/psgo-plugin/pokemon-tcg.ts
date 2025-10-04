@@ -10,12 +10,20 @@ import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 import { TCGCards, UserCollections, ShopStateCollection } from './tcg_collections';
+import * as TCG_Ranking from './tcg_ranking';
 
 // State variables
 const battleChallenges: Map<string, { from: string, wager: number, setId: string }> = new Map();
 const SHOP_PACK_PRICE = 150;
 const SHOP_ROTATION_HOURS = 24;
 const SHOP_PACK_SLOTS = 5;
+
+const battleChallenges: Map<string, { 
+	from: string; 
+	wager: number; 
+	setId: string; 
+	ranked?: boolean; 
+}> = new Map();
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -1261,6 +1269,432 @@ export const commands: Chat.ChatCommands = {
 				return this.errorReply(`An error occurred with your packs: ${e.message}`);
 			}
 		},
+
+async rankedbattle(target, room, user) {
+	const [action, ...args] = target.split(',').map(p => p.trim());
+
+	switch (toID(action)) {
+		case 'challenge': {
+			const [targetUsername] = args;
+			if (!targetUsername) {
+				return this.errorReply("Usage: /tcg rankedbattle challenge, [user]");
+			}
+
+			const challengerId = user.id;
+			const targetId = toID(targetUsername);
+
+			if (challengerId === targetId) {
+				return this.errorReply("You cannot challenge yourself.");
+			}
+
+			try {
+				const result = await TCG_Ranking.executeSimulatedChallenge(challengerId, targetId);
+				
+				if (!result.success) {
+					return this.errorReply(result.error || "Challenge failed.");
+				}
+
+				const battle = result.battle!;
+				const challengerRanking = result.challengerRanking!;
+				const targetRanking = result.targetRanking!;
+
+				// Determine winner
+				let resultText = '';
+				let resultColor = '#f1c40f';
+				if (battle.winner === challengerId) {
+					resultText = 'Victory!';
+					resultColor = '#2ecc71';
+				} else if (battle.winner === targetId) {
+					resultText = 'Defeat!';
+					resultColor = '#e74c3c';
+				} else {
+					resultText = 'Draw!';
+					resultColor = '#f1c40f';
+				}
+
+				const challengerEloChange = TCG_Ranking.formatEloChange(battle.challengerEloChange);
+				const targetEloChange = TCG_Ranking.formatEloChange(battle.targetEloChange);
+				const challengerColor = TCG_Ranking.getRankColor(challengerRanking.rank);
+				const targetColor = TCG_Ranking.getRankColor(targetRanking.rank);
+
+				let output = `<div class="infobox">`;
+				output += `<h2 style="text-align:center;">⚔️ Ranked Challenge Battle</h2>`;
+				output += `<div style="text-align:center; margin: 10px 0;">`;
+				output += `<strong>${Impulse.nameColor(user.name, true)}</strong> challenged <strong>${Impulse.nameColor(targetUsername, true)}</strong>`;
+				output += `</div>`;
+
+				output += `<table style="width:100%; margin: 10px 0;"><tr>`;
+				output += `<td style="width:50%; text-align:center; padding:10px; border-right: 1px solid #ddd;">`;
+				output += `<strong>${user.name}</strong><br/>`;
+				output += `Pack Value: <strong>${battle.challengerPackValue}</strong> pts<br/>`;
+				output += `<span style="color: ${challengerColor};">${challengerRanking.rank}</span><br/>`;
+				output += `<span style="color: ${battle.challengerEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${challengerRanking.elo} (${challengerEloChange})</span>`;
+				output += `</td>`;
+				output += `<td style="width:50%; text-align:center; padding:10px;">`;
+				output += `<strong>${targetUsername}</strong><br/>`;
+				output += `Pack Value: <strong>${battle.targetPackValue}</strong> pts<br/>`;
+				output += `<span style="color: ${targetColor};">${targetRanking.rank}</span><br/>`;
+				output += `<span style="color: ${battle.targetEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${targetRanking.elo} (${targetEloChange})</span>`;
+				output += `</td></tr></table>`;
+
+				output += `<div style="text-align:center; color: ${resultColor}; font-size: 1.3em; font-weight: bold; margin: 15px 0; padding: 10px; border: 2px solid ${resultColor}; border-radius: 8px;">`;
+				output += resultText;
+				output += `</div>`;
+
+				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(challengerId);
+				output += `<div style="text-align:center; margin-top: 10px; font-size: 0.9em; color: #666;">`;
+				output += `Challenges remaining today: <strong>${challengeStatus.challengesRemaining}/10</strong>`;
+				output += `</div>`;
+				output += `</div>`;
+
+				this.sendReplyBox(output);
+
+			} catch (e: any) {
+				return this.errorReply(`Error executing challenge: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'targets': {
+			if (!this.runBroadcast()) return;
+			
+			try {
+				const availableTargets = await TCG_Ranking.getAvailableChallengeTargets(user.id);
+				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
+
+				let output = `<div class="infobox">`;
+				output += `<h3>Available Challenge Targets</h3>`;
+				output += `<p>Challenges remaining: <strong>${challengeStatus.challengesRemaining}/10</strong></p>`;
+
+				if (availableTargets.length === 0) {
+					output += `<p>No available targets. You may have challenged all eligible players today.</p>`;
+				} else {
+					output += `<table class="themed-table">`;
+					output += `<tr class="themed-table-header">`;
+					output += `<th>Rank</th><th>Player</th><th>Rating</th><th>W-L-D</th><th>Action</th>`;
+					output += `</tr>`;
+
+					availableTargets.slice(0, 20).forEach((target, index) => {
+						const rankColor = TCG_Ranking.getRankColor(target.rank);
+						const winRate = TCG_Ranking.getWinRate(target.wins, target.losses, target.draws);
+
+						output += `<tr class="themed-table-row">`;
+						output += `<td>${index + 1}</td>`;
+						output += `<td>${Impulse.nameColor(target.userId, true)}</td>`;
+						output += `<td><span style="color: ${rankColor};">${target.elo} (${target.rank})</span></td>`;
+						output += `<td>${target.wins}-${target.losses}-${target.draws} (${winRate}%)</td>`;
+						output += `<td><button name="send" value="/tcg rankedbattle challenge, ${target.userId}">Challenge</button></td>`;
+						output += `</tr>`;
+					});
+
+					output += `</table>`;
+					
+					if (availableTargets.length > 20) {
+						output += `<p style="text-align:center;">Showing top 20 of ${availableTargets.length} available targets.</p>`;
+					}
+				}
+
+				output += `</div>`;
+				this.sendReplyBox(output);
+
+			} catch (e: any) {
+				return this.errorReply(`Error fetching targets: ${e.message}`);
+			}
+			break;
+		}
+
+		case 'status': {
+			if (!this.runBroadcast()) return;
+			
+			try {
+				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
+				const nextReset = new Date(challengeStatus.nextReset);
+
+				let output = `<div class="infobox">`;
+				output += `<h3>Daily Challenge Status</h3>`;
+				output += `<p><strong>Challenges Remaining:</strong> ${challengeStatus.challengesRemaining}/10</p>`;
+				output += `<p><strong>Challenges Used:</strong> ${challengeStatus.challengesUsed}/10</p>`;
+				output += `<p><strong>Next Reset:</strong> ${nextReset.toLocaleString()}</p>`;
+
+				if (challengeStatus.recentChallenges.length > 0) {
+					output += `<h4>Recent Challenges Today:</h4>`;
+					output += `<ul>`;
+					challengeStatus.recentChallenges.forEach(challenge => {
+						const time = new Date(challenge.timestamp).toLocaleTimeString();
+						output += `<li>${Impulse.nameColor(challenge.targetUserId, true)} at ${time}</li>`;
+					});
+					output += `</ul>`;
+				}
+
+				output += `</div>`;
+				this.sendReplyBox(output);
+
+			} catch (e: any) {
+				return this.errorReply(`Error fetching challenge status: ${e.message}`);
+			}
+			break;
+		}
+
+		default:
+			this.errorReply("Usage: /tcg rankedbattle [challenge/targets/status], [user]");
+	}
+},
+
+async ranking(target, room, user) {
+	if (!this.runBroadcast()) return;
+	const targetUser = target.trim() || user.name;
+	const targetId = toID(targetUser);
+	
+	try {
+		const [ranking, position] = await Promise.all([
+			TCG_Ranking.getPlayerRanking(targetId),
+			TCG_Ranking.getPlayerRankPosition(targetId)
+		]);
+		
+		const rankColor = TCG_Ranking.getRankColor(ranking.rank);
+		const winRate = TCG_Ranking.getWinRate(ranking.wins, ranking.losses, ranking.draws);
+		
+		let output = `<div class="infobox">`;
+		output += `<h3>${Impulse.nameColor(targetUser, true)}'s Ranking</h3>`;
+		output += `<table style="width: 100%;">`;
+		output += `<tr><td><strong>Rank:</strong></td><td><span style="color: ${rankColor}; font-weight: bold;">${ranking.rank}</span></td></tr>`;
+		output += `<tr><td><strong>ELO:</strong></td><td>${ranking.elo}</td></tr>`;
+		output += `<tr><td><strong>Position:</strong></td><td>#${position}</td></tr>`;
+		output += `<tr><td><strong>Win Rate:</strong></td><td>${winRate}%</td></tr>`;
+		output += `<tr><td><strong>Record:</strong></td><td>${ranking.wins}W - ${ranking.losses}L - ${ranking.draws}D</td></tr>`;
+		output += `<tr><td><strong>Win Streak:</strong></td><td>${ranking.winStreak} (Best: ${ranking.bestWinStreak})</td></tr>`;
+		output += `<tr><td><strong>Total Battles:</strong></td><td>${ranking.totalBattles}</td></tr>`;
+		output += `<tr><td><strong>Avg Pack Value:</strong></td><td>${ranking.averagePackValue} pts</td></tr>`;
+		output += `</table>`;
+		output += `</div>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching ranking: ${e.message}`);
+	}
+},
+
+async leaderboard(target, room, user) {
+	if (!this.runBroadcast()) return;
+	const type = toID(target) || 'elo';
+	
+	try {
+		let leaderboard;
+		let title;
+		
+		if (type === 'seasonal') {
+			leaderboard = await TCG_Ranking.getSeasonalLeaderboard(10);
+			title = 'Seasonal Leaderboard (Wins)';
+		} else {
+			leaderboard = await TCG_Ranking.getLeaderboard(10);
+			title = 'ELO Leaderboard';
+		}
+		
+		let output = `<div class="infobox">`;
+		output += `<h3>${title}</h3>`;
+		output += `<table class="themed-table">`;
+		output += `<tr class="themed-table-header">`;
+		output += `<th>Rank</th><th>Player</th><th>Rating/Rank</th><th>Record</th><th>Win Rate</th>`;
+		output += `</tr>`;
+		
+		leaderboard.forEach((player, index) => {
+			const rankColor = TCG_Ranking.getRankColor(player.rank);
+			const winRate = TCG_Ranking.getWinRate(player.wins, player.losses, player.draws);
+			const displayValue = type === 'seasonal' ? 
+				`${player.seasonWins || 0} wins` : 
+				`${player.elo} (${player.rank})`;
+			
+			output += `<tr class="themed-table-row">`;
+			output += `<td>${index + 1}</td>`;
+			output += `<td>${Impulse.nameColor(player.userId, true)}</td>`;
+			output += `<td><span style="color: ${rankColor};">${displayValue}</span></td>`;
+			output += `<td>${player.wins}W-${player.losses}L-${player.draws}D</td>`;
+			output += `<td>${winRate}%</td>`;
+			output += `</tr>`;
+		});
+		
+		output += `</table>`;
+		output += `<p style="text-align: center; margin-top: 10px;">`;
+		output += `<button name="send" value="/tcg leaderboard elo">ELO</button> | `;
+		output += `<button name="send" value="/tcg leaderboard seasonal">Seasonal</button>`;
+		output += `</p>`;
+		output += `</div>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching leaderboard: ${e.message}`);
+	}
+},
+
+async battlehistory(target, room, user) {
+	if (!this.runBroadcast()) return;
+	const targetUser = target.trim() || user.name;
+	const targetId = toID(targetUser);
+	
+	try {
+		const [battles, simulatedBattles] = await Promise.all([
+			TCG_Ranking.getPlayerBattleHistory(targetId, 5),
+			TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
+		]);
+
+		let output = `<div class="infobox">`;
+		output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
+		
+		const allBattles = [
+			...battles.map(b => ({ ...b, type: 'live' })),
+			...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
+		].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
+
+		if (allBattles.length === 0) {
+			output += `<p>${targetUser} has no ranked battle history.</p>`;
+		} else {
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header">`;
+			output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
+			output += `</tr>`;
+			
+			allBattles.forEach(battle => {
+				const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
+				const opponent = battle.type === 'live' ? 
+					(isPlayer1 ? battle.player2 : battle.player1) :
+					(isPlayer1 ? battle.targetId : battle.challengerId);
+				
+				const playerPackValue = battle.type === 'live' ?
+					(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
+					(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
+				
+				const opponentPackValue = battle.type === 'live' ?
+					(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
+					(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
+				
+				const eloChange = battle.type === 'live' ?
+					(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
+					(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
+				
+				let result = 'Draw';
+				let resultColor = '#f1c40f';
+				if (battle.winner === targetId) {
+					result = 'Win';
+					resultColor = '#2ecc71';
+				} else if (battle.winner && battle.winner !== targetId) {
+					result = 'Loss';
+					resultColor = '#e74c3c';
+				}
+				
+				const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
+				const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
+				const date = new Date(battle.battleTime).toLocaleDateString();
+				const battleType = battle.type === 'live' ? '🎯' : '🤖';
+				
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${battleType}</td>`;
+				output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
+				output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
+				output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
+				output += `<td>${playerPackValue} vs ${opponentPackValue}</td>`;
+				output += `<td>${date}</td>`;
+				output += `</tr>`;
+			});
+			
+			output += `</table>`;
+			output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
+		}
+		
+		output += `</div>`;
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching battle history: ${e.message}`);
+	}
+},
+
+async season(target, room, user) {
+	if (!this.runBroadcast()) return;
+	const [action] = target.split(',').map(p => p.trim());
+	
+	try {
+		if (toID(action) === 'end' && this.checkCan('globalban')) {
+			// Admin command to force end season
+			const success = await TCG_Ranking.forceEndSeason();
+			if (success) {
+				this.sendReply("Current season has been ended and rewards distributed. New season started!");
+			} else {
+				this.errorReply("No active season found to end.");
+			}
+			return;
+		}
+		
+		// Show current season info
+		const seasonInfo = await TCG_Ranking.getCurrentSeasonInfo();
+		if (!seasonInfo) {
+			return this.sendReplyBox("No active season found.");
+		}
+		
+		const { season, daysRemaining, hoursRemaining } = seasonInfo;
+		
+		let output = `<div class="infobox">`;
+		output += `<h3>🏆 ${season.name}</h3>`;
+		output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
+		output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
+		output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
+		
+		output += `<h4>Season Rewards (Top 10)</h4>`;
+		output += `<table class="themed-table">`;
+		output += `<tr class="themed-table-header"><th>Rank</th><th>Credits</th><th>Title</th></tr>`;
+		
+		Object.entries(TCG_Ranking.SEASON_REWARDS).forEach(([rank, reward]) => {
+			output += `<tr class="themed-table-row">`;
+			output += `<td>#${rank}</td>`;
+			output += `<td>${reward.credits}</td>`;
+			output += `<td>${reward.title}</td>`;
+			output += `</tr>`;
+		});
+		
+		output += `</table>`;
+		output += `</div>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching season info: ${e.message}`);
+	}
+},
+
+async seasonhistory(target, room, user) {
+	if (!this.runBroadcast()) return;
+	const targetUser = target.trim() || user.name;
+	const targetId = toID(targetUser);
+	
+	try {
+		const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
+		
+		let output = `<div class="infobox">`;
+		output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
+		
+		if (seasonRewards.length === 0) {
+			output += `<p>${targetUser} has not received any season rewards yet.</p>`;
+		} else {
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header"><th>Season</th><th>Rank</th><th>Credits</th><th>Title</th><th>Date</th></tr>`;
+			
+			seasonRewards.forEach(reward => {
+				const date = new Date(reward.claimedAt).toLocaleDateString();
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${reward.seasonId.replace(/season_(\d+)_.*/, 'Season $1')}</td>`;
+				output += `<td>#${reward.rank}</td>`;
+				output += `<td>${reward.credits}</td>`;
+				output += `<td>${reward.title || '-'}</td>`;
+				output += `<td>${date}</td>`;
+				output += `</tr>`;
+			});
+			
+			output += `</table>`;
+		}
+		
+		output += `</div>`;
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching season history: ${e.message}`);
+	}
+},					
 	},
 	
 	tcghelp: [
@@ -1288,5 +1722,14 @@ export const commands: Chat.ChatCommands = {
 		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
 		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
 		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
+		'/tcg rankedbattle challenge, [user] - Challenge a user to a simulated ranked battle (10 daily, no wager).',
+		'/tcg rankedbattle targets - View available players you can challenge today.',
+		'/tcg rankedbattle status - Check your daily challenge status and history.',
+		'/tcg season - View current season information and rewards.',
+		'/tcg seasonhistory [user] - View season reward history for a user.',
+		'/tcg ranking [user] - View ranking information for a user.',
+		'/tcg leaderboard [elo|seasonal] - View the ELO or seasonal leaderboards.',
+		'/tcg battlehistory [user] - View ranked battle history for a user.',
+		'@ /tcg season end - Force end the current season (admin only).',
 	],
 };
