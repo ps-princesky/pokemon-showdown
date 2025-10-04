@@ -1736,7 +1736,32 @@ async seasonhistory(target, room, user) {
 	} catch (e: any) {
 		return this.errorReply(`Error fetching season history: ${e.message}`);
 	}
-},					
+},
+
+		async initseason(target, room, user) {
+			this.checkCan('globalban');
+	
+			try {
+				// Check if season already exists
+				const existingSeason = await TCG_Ranking.getCurrentSeason();
+				if (existingSeason) {
+					return this.errorReply("A season is already active.");
+				}
+		
+				// Initialize the season system
+				await TCG_Ranking.initializeSeasonSystem();
+		
+				const newSeason = await TCG_Ranking.getCurrentSeason();
+				if (newSeason) {
+					this.sendReply(`Successfully initialized ${newSeason.name}! Duration: 30 days.`);
+				} else {
+					this.errorReply("Failed to initialize season.");
+				}
+			} catch (e: any) {
+				return this.errorReply(`Error initializing season: ${e.message}`);
+			}
+		},
+		
 	},
 	
 	tcghelp: [
