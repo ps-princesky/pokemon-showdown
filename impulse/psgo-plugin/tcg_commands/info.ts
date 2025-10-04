@@ -300,4 +300,57 @@ export const infoCommands: Chat.ChatCommands = {
 			`<h4>Energy Subtypes</h4><p>${SUBTYPES.Energy.join(', ')}</p>`;
 		this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Data', content));
 	},
+
+	// Add to tcg_commands/info.ts temporarily:
+async testbattledata(target, room, user) {
+	this.checkCan('globalban');
+	
+	try {
+		// Get a random Pokemon with battle data
+		const pokemon = await TCGCards.findOne({ 
+			supertype: 'Pokémon',
+			battleValue: { $exists: true },
+			attacks: { $exists: true }
+		});
+		
+		if (!pokemon) {
+			return this.errorReply("No Pokemon found with battle data");
+		}
+		
+		let output = `<div class="infobox">` +
+			`<h3>🎮 Battle Data Test: ${pokemon.name}</h3>` +
+			`<p><strong>Card ID:</strong> ${pokemon.cardId}</p>` +
+			`<p><strong>HP:</strong> ${pokemon.hp || 'N/A'}</p>` +
+			`<p><strong>Type:</strong> ${pokemon.type || 'N/A'}</p>`;
+		
+		if (pokemon.battleStats) {
+			output += `<h4>Battle Stats:</h4>` +
+				`<p>Attack Power: ${pokemon.battleStats.attackPower}</p>` +
+				`<p>Defense: ${pokemon.battleStats.defensePower}</p>` +
+				`<p>Speed: ${pokemon.battleStats.speed}</p>` +
+				`<p>Energy Cost: ${pokemon.battleStats.energyCost}</p>` +
+				`<p><strong>Battle Value: ${pokemon.battleValue}</strong></p>`;
+		}
+		
+		if (pokemon.attacks && pokemon.attacks.length > 0) {
+			output += `<h4>Attacks:</h4>`;
+			pokemon.attacks.forEach(attack => {
+				output += `<p><strong>${attack.name}</strong> (${attack.convertedEnergyCost} energy): ${attack.damageText} damage</p>`;
+			});
+		}
+		
+		if (pokemon.weaknesses && pokemon.weaknesses.length > 0) {
+			output += `<h4>Weaknesses:</h4>`;
+			pokemon.weaknesses.forEach(w => {
+				output += `<p>${w.type} ${w.value}</p>`;
+			});
+		}
+		
+		output += `</div>`;
+		this.sendReplyBox(output);
+		
+	} catch (e: any) {
+		return this.errorReply(`Error: ${e.message}`);
+	}
+},
 };
