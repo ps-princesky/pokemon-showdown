@@ -757,7 +757,7 @@ export async function executeSimulatedChallenge(
 		}
 		
 		// Ensure both players have ranking records (this creates them if they don't exist)
-		await Promise.all([
+		const [challengerRanking, targetRanking] = await Promise.all([
 			getPlayerRanking(challengerId),
 			getPlayerRanking(targetId)
 		]);
@@ -775,26 +775,53 @@ export async function executeSimulatedChallenge(
 			simulatePackOpening(randomSetId)
 		]);
 		
-		// Process the battle result (no wager)
-		const battleResult = await processBattleResult(
-			challengerId,
-			targetId,
-			challengerResult.totalValue,
-			targetResult.totalValue,
-			0, // No wager
-			randomSetId
-		);
+		// Determine battle result WITHOUT calling processBattleResult
+		let winner: string | null = null;
+		let challengerResult_battle: 'win' | 'loss' | 'draw';
+		let targetResult_battle: 'win' | 'loss' | 'draw';
+		let resultScore1: number;
+		let resultScore2: number;
 		
-		// Create simulated battle record
+		if (challengerResult.totalValue > targetResult.totalValue) {
+			winner = challengerId;
+			challengerResult_battle = 'win';
+			targetResult_battle = 'loss';
+			resultScore1 = 1;
+			resultScore2 = 0;
+		} else if (targetResult.totalValue > challengerResult.totalValue) {
+			winner = targetId;
+			challengerResult_battle = 'loss';
+			targetResult_battle = 'win';
+			resultScore1 = 0;
+			resultScore2 = 1;
+		} else {
+			winner = null;
+			challengerResult_battle = 'draw';
+			targetResult_battle = 'draw';
+			resultScore1 = 0.5;
+			resultScore2 = 0.5;
+		}
+		
+		// Calculate ELO changes directly
+		const challengerEloChange = calculateEloChange(challengerRanking.elo, targetRanking.elo, resultScore1);
+		const targetEloChange = calculateEloChange(targetRanking.elo, challengerRanking.elo, resultScore2);
+		
+		// Update rankings directly (this will handle ELO milestones)
+		const [updatedChallenger, updatedTarget] = await Promise.all([
+			updatePlayerRanking(challengerId, challengerEloChange, challengerResult_battle, challengerResult.totalValue),
+			updatePlayerRanking(targetId, targetEloChange, targetResult_battle, targetResult.totalValue)
+		]);
+		
+		// Create simulated battle record (ONLY ONE RECORD)
 		const simulatedBattle: SimulatedBattle = {
-			battleId: battleResult.battleHistory.battleId,
+			battleId: `${challengerId}_vs_${targetId}_${Date.now()}`,
 			challengerId,
 			targetId,
 			challengerPackValue: challengerResult.totalValue,
 			targetPackValue: targetResult.totalValue,
-			winner: battleResult.battleHistory.winner,
-			challengerEloChange: battleResult.battleHistory.player1EloChange,
-			targetEloChange: battleResult.battleHistory.player2EloChange,
+			winner,
+			challengerEloChange,
+			targetEloChange,
 			wager: 0, // No wager
 			setId: randomSetId,
 			timestamp: Date.now(),
@@ -858,14 +885,14 @@ export async function executeSimulatedChallenge(
 		return {
 			success: true,
 			battle: simulatedBattle,
-			challengerRanking: battleResult.player1Ranking,
-			targetRanking: battleResult.player2Ranking,
+			challengerRanking: updatedChallenger.ranking,
+			targetRanking: updatedTarget.ranking,
 			challengerPack: challengerResult.pack,
 			targetPack: targetResult.pack,
 			challengerCredits,
 			targetCredits,
-			player1EloMilestones: battleResult.player1EloMilestones,
-			player2EloMilestones: battleResult.player2EloMilestones,
+			player1EloMilestones: updatedChallenger.eloMilestones,
+			player2EloMilestones: updatedTarget.eloMilestones,
 		};
 		
 	} catch (error: any) {
