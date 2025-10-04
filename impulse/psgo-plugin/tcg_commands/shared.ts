@@ -57,6 +57,24 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
+ * Check if a set has valid rarity distribution for pack generation
+ */
+async function isValidPackSet(setId: string): Promise<boolean> {
+	const setCards = await TCGCards.find({ set: setId }).toArray();
+	if (setCards.length === 0) return false;
+
+	// Check if set has minimum required commons, uncommons, and rares
+	const commons = setCards.filter(c => c.rarity === 'Common');
+	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
+	const rares = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
+
+	// Need at least 5 commons, 3 uncommons, and some rares for valid pack generation
+	const hasValidDistribution = commons.length >= 5 && uncommons.length >= 3 && rares.length > 0;
+
+	return hasValidDistribution;
+}
+
+/**
  * Generate a pack of cards
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
@@ -84,14 +102,10 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
 
-	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
-		if (setCards.length < PACK_CONFIG.PACK_SIZE) {
-			return setCards;
-		}
-		for (let i = 0; i < PACK_CONFIG.PACK_SIZE; i++) {
-			pack.push(pickRandom(setCards));
-		}
-		return pack;
+	// Check if set has valid rarity distribution
+	if (commons.length < 5 || uncommons.length < 3 || raresPool.length === 0) {
+		// Invalid set for pack generation - return null
+		return null;
 	}
 	
 	const reverseHoloPool = [...commons, ...uncommons];
@@ -121,6 +135,22 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	pack.push(pickRandom(hitPool));
 	
 	return pack;
+}
+
+/**
+ * Get all valid sets for pack generation (filters out special/gallery sets)
+ */
+export async function getValidPackSets(): Promise<string[]> {
+	const allSets = await TCGCards.distinct('set');
+	const validSets: string[] = [];
+
+	for (const setId of allSets) {
+		if (await isValidPackSet(setId)) {
+			validSets.push(setId);
+		}
+	}
+
+	return validSets;
 }
 
 /**
