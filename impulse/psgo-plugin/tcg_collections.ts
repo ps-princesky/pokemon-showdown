@@ -17,3 +17,4 @@ export const RankingSeasons = MongoDB<RankingSeason>('tcg_ranking_seasons');
 export const DailyChallenges = MongoDB<DailyChallenge>('tcg_daily_challenges');
 export const SimulatedBattles = MongoDB<SimulatedBattle>('tcg_simulated_battles');
 export const SeasonRewards = MongoDB<SeasonReward>('tcg_season_rewards');
+export const WeeklyMilestonesCollection = MongoDB<WeeklyMilestones>('tcg_weekly_milestones');
