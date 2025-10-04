@@ -7,7 +7,7 @@ import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { VALIDATION_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
-import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
+import { POKEMON_SETS, getRarityColor, SPECIAL_SUBTYPES } from '../../../impulse/psgo-plugin/tcg_data';
 import { generatePack, getCardPoints, ensureUserCollection } from './shared';
 
 export const adminCommands: Chat.ChatCommands = {
