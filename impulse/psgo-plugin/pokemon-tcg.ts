@@ -1620,7 +1620,6 @@ async ranking(target, room, user) {
 		return this.errorReply(`Error fetching leaderboard: ${e.message}`);
 	}
 },
-		
 
 		async battlehistory(target, room, user) {
 	if (!this.runBroadcast()) return;
@@ -1628,44 +1627,28 @@ async ranking(target, room, user) {
 	const targetId = toID(targetUser);
 	
 	try {
-		const [battles, simulatedBattles] = await Promise.all([
-			TCG_Ranking.getPlayerBattleHistory(targetId, 5),
-			TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
-		]);
+		// Only get simulated battles since all ranked battles are simulated now
+		const simulatedBattles = await TCG_Ranking.getSimulatedBattleHistory(targetId, 10);
+
 		let output = `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
 		
-		const allBattles = [
-			...battles.map(b => ({ ...b, type: 'live' })),
-			...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
-		].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
-
-		if (allBattles.length === 0) {
+		if (simulatedBattles.length === 0) {
 			output += `<p>${targetUser} has no ranked battle history.</p>`;
 		} else {
 			// ADD SCROLLABLE CONTAINER HERE
 			output += `<div style="max-height: 360px; overflow-y: auto;">`;
 			output += `<table class="themed-table">`;
 			output += `<tr class="themed-table-header">`;
-			output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
+			output += `<th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
 			output += `</tr>`;
 			
-			allBattles.forEach(battle => {
-				const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
-				const opponent = battle.type === 'live' ? 
-					(isPlayer1 ? battle.player2 : battle.player1) :
-					(isPlayer1 ? battle.targetId : battle.challengerId);
+			simulatedBattles.forEach(battle => {
+				const isChallenger = battle.challengerId === targetId;
+				const opponent = isChallenger ? battle.targetId : battle.challengerId;
 				
-				const playerPackValue = battle.type === 'live' ?
-					(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
-					(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
-				
-				const opponentPackValue = battle.type === 'live' ?
-					(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
-					(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
-				
-				const eloChange = battle.type === 'live' ?
-					(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
-					(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
+				const playerPackValue = isChallenger ? battle.challengerPackValue : battle.targetPackValue;
+				const opponentPackValue = isChallenger ? battle.targetPackValue : battle.challengerPackValue;
+				const eloChange = isChallenger ? battle.challengerEloChange : battle.targetEloChange;
 				
 				let result = 'Draw';
 				let resultColor = '#f1c40f';
@@ -1679,11 +1662,9 @@ async ranking(target, room, user) {
 				
 				const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
 				const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
-				const date = new Date(battle.battleTime).toLocaleDateString();
-				const battleType = battle.type === 'live' ? '🎯' : '🤖';
+				const date = new Date(battle.timestamp).toLocaleDateString();
 				
 				output += `<tr class="themed-table-row">`;
-				output += `<td>${battleType}</td>`;
 				output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
 				output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
 				output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
@@ -1694,13 +1675,14 @@ async ranking(target, room, user) {
 			
 			output += `</table>`;
 			output += `</div>`;
-			output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
 		}
+		
 		this.sendReplyBox(output);
 	} catch (e: any) {
 		return this.errorReply(`Error fetching battle history: ${e.message}`);
 	}
 },
+		
 
 		async season(target, room, user) {
 	await TCG_Ranking.getPlayerRanking(user.id);
