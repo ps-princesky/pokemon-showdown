@@ -1172,13 +1172,13 @@ export const commands: Chat.ChatCommands = {
 					}
 			
 					await UserCollections.upsert({ userId }, collection);
+					await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
 
 					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 					const displaySetName = setInfo ? setInfo.name : setId;
 			
 					return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
-					await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
-			
+					
 				} else { // View the shop
 					if (!this.runBroadcast()) return;
 					const balance = await TCG_Economy.getUserBalance(userId);
