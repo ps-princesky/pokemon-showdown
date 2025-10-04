@@ -6,7 +6,7 @@
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
-import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
+import { POKEMON_SETS, getRarityColor, getSubtypeColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { getCardPoints } from './shared';
 
@@ -192,7 +192,7 @@ export const collectionCommands: Chat.ChatCommands = {
 
 			for (const card of cardsToDisplay) {
 				const quantity = quantityMap.get(card.cardId) || 1;
-				const rarityColor = TCG_UI.getRarityColor(card.rarity);
+				const rarityColor = getRarityColor(card.rarity);
 				
 				content += `<tr class="themed-table-row">` +
 					`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
