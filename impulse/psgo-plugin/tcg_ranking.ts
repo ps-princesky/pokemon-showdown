@@ -561,7 +561,7 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
 	const allPlayers = await PlayerRankings.find(
 		{ userId: { $ne: challengerId } },
 		{ sort: { elo: -1 }, limit: RANKING_CONFIG.LEADERBOARD_CHALLENGE_RANGE }
-	);
+	).toArray();  // ← FIXED
 	
 	if (allPlayers.length === 0) {
 		await getPlayerRanking(challengerId);
@@ -575,7 +575,7 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
  * Simulate a pack opening for battle with comprehensive point calculation
  */
 async function simulatePackOpening(setId: string): Promise<{ pack: any[], totalValue: number }> {
-	const setCards = await TCGCards.find({ set: setId });
+	const setCards = await TCGCards.find({ set: setId }).toArray();  // ← FIXED
 	if (setCards.length === 0) {
 		throw new Error(`No cards found for set ${setId}`);
 	}
@@ -809,7 +809,7 @@ export async function getDailyChallengeStatus(userId: string): Promise<{
  * Get top players by ELO
  */
 export async function getLeaderboard(limit: number = 10): Promise<PlayerRanking[]> {
-	return PlayerRankings.find({}, { sort: { elo: -1 }, limit });
+	return PlayerRankings.find({}, { sort: { elo: -1 }, limit }).toArray();  // ← FIXED
 }
 
 /**
@@ -836,7 +836,7 @@ export async function getPlayersInRank(rank: string): Promise<PlayerRanking[]> {
 	
 	return PlayerRankings.find({
 		elo: { $gte: threshold, $lt: maxThreshold }
-	});
+	}).toArray();  // ← FIXED
 }
 
 /**
@@ -846,7 +846,7 @@ export async function getSeasonalLeaderboard(limit: number = 10): Promise<Player
 	return PlayerRankings.find(
 		{ seasonWins: { $gt: 0 } },
 		{ sort: { seasonWins: -1, elo: -1 }, limit }
-	);
+	).toArray();  // ← FIXED
 }
 
 // ==================== BATTLE HISTORY FUNCTIONS ====================
@@ -858,14 +858,14 @@ export async function getPlayerBattleHistory(userId: string, limit: number = 10)
 	return BattleHistories.find(
 		{ $or: [{ player1: userId }, { player2: userId }] },
 		{ sort: { battleTime: -1 }, limit }
-	);
+	).toArray();  // ← FIXED
 }
 
 /**
  * Get recent battles across all players
  */
 export async function getRecentBattles(limit: number = 20): Promise<BattleHistory[]> {
-	return BattleHistories.find({}, { sort: { battleTime: -1 }, limit });
+	return BattleHistories.find({}, { sort: { battleTime: -1 }, limit }).toArray();  // ← FIXED
 }
 
 /**
@@ -875,7 +875,7 @@ export async function getSimulatedBattleHistory(userId: string, limit: number = 
 	return SimulatedBattles.find(
 		{ $or: [{ challengerId: userId }, { targetId: userId }] },
 		{ sort: { timestamp: -1 }, limit }
-	);
+	).toArray();  // ← FIXED
 }
 
 // ==================== SEASON MANAGEMENT ====================
@@ -1022,7 +1022,7 @@ export async function getCurrentSeason(): Promise<RankingSeason | null> {
  * Get season rewards for a user
  */
 export async function getUserSeasonRewards(userId: string): Promise<SeasonReward[]> {
-	return SeasonRewards.find({ userId }, { sort: { claimedAt: -1 }, limit: 10 });
+	return SeasonRewards.find({ userId }, { sort: { claimedAt: -1 }, limit: 10 }).toArray();  // ← FIXED
 }
 
 /**
@@ -1068,7 +1068,7 @@ export async function getCompletedSeasons(limit: number = 5): Promise<RankingSea
 	return RankingSeasons.find(
 		{ isCompleted: true },
 		{ sort: { endTime: -1 }, limit }
-	);
+	).toArray();  // ← FIXED
 }
 
 /**
