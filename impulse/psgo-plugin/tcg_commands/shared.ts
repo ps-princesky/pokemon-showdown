@@ -96,35 +96,31 @@ export function hexToRgba(hex: string, alpha: number): string {
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// ==================== AGGRESSIVE CACHING ====================
+// ==================== PERMANENT IN-MEMORY CACHING ====================
 
-// Cache valid sets for 24 hours (they rarely change)
-let validSetsCache: { sets: string[], timestamp: number } | null = null;
-const VALID_SETS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+// Cache valid sets permanently (cleared only manually)
+let validSetsCache: string[] | null = null;
 
-// Cache set card distributions to speed up pack generation
+// Cache set card distributions permanently (cleared only manually)
 let setCardsCache: Map<string, {
 	commons: TCGCard[],
 	uncommons: TCGCard[],
 	rares: TCGCard[],
-	reverseHoloPool: TCGCard[],
-	timestamp: number
+	reverseHoloPool: TCGCard[]
 }> = new Map();
-const SET_CARDS_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
- * Get all valid sets for pack generation (HEAVILY CACHED)
+ * Get all valid sets for pack generation (PERMANENTLY CACHED)
  */
 export async function getValidPackSets(): Promise<string[]> {
-	const now = Date.now();
-	
-	// Return cached result if still valid
-	if (validSetsCache && (now - validSetsCache.timestamp) < VALID_SETS_CACHE_DURATION) {
-		console.log('Using cached valid sets');
-		return validSetsCache.sets;
+	// Return cached result if available
+	if (validSetsCache !== null) {
+		console.log(`Using cached valid sets (${validSetsCache.length} sets)`);
+		return validSetsCache;
 	}
 	
-	console.log('Rebuilding valid sets cache...');
+	console.log('Building valid sets cache (first time or after clear)...');
+	const startTime = Date.now();
 	
 	// Use aggregation pipeline to count rarities per set (MUCH faster)
 	const pipeline = [
@@ -161,15 +157,17 @@ export async function getValidPackSets(): Promise<string[]> {
 	const validSetsData = await TCGCards.aggregate(pipeline).toArray();
 	const validSets = validSetsData.map((doc: any) => doc._id);
 	
-	// Cache the result
-	validSetsCache = { sets: validSets, timestamp: now };
-	console.log(`Valid sets cached: ${validSets.length} sets`);
+	// Cache the result permanently
+	validSetsCache = validSets;
+	
+	const elapsed = Date.now() - startTime;
+	console.log(`✅ Valid sets cached: ${validSets.length} sets (took ${elapsed}ms)`);
 	
 	return validSets;
 }
 
 /**
- * Get cards for a set (with caching and pre-computed pools)
+ * Get cards for a set (PERMANENTLY CACHED)
  */
 async function getSetCards(setId: string): Promise<{
 	commons: TCGCard[],
@@ -177,13 +175,15 @@ async function getSetCards(setId: string): Promise<{
 	rares: TCGCard[],
 	reverseHoloPool: TCGCard[]
 }> {
-	const now = Date.now();
 	const cached = setCardsCache.get(setId);
 	
-	// Return cached if valid
-	if (cached && (now - cached.timestamp) < SET_CARDS_CACHE_DURATION) {
+	// Return cached if available
+	if (cached) {
 		return cached;
 	}
+	
+	console.log(`Caching cards for set: ${setId}`);
+	const startTime = Date.now();
 	
 	// Fetch from DB with projection (only needed fields)
 	const setCards = await TCGCards.find(
@@ -211,11 +211,14 @@ async function getSetCards(setId: string): Promise<{
 		commons,
 		uncommons,
 		rares,
-		reverseHoloPool: [...commons, ...uncommons], // Pre-compute this
-		timestamp: now
+		reverseHoloPool: [...commons, ...uncommons] // Pre-compute this
 	};
 	
 	setCardsCache.set(setId, result);
+	
+	const elapsed = Date.now() - startTime;
+	console.log(`✅ Set ${setId} cached: ${setCards.length} cards (took ${elapsed}ms)`);
+	
 	return result;
 }
 
