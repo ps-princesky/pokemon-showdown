@@ -96,16 +96,117 @@ export function hexToRgba(hex: string, alpha: number): string {
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// ==================== AGGRESSIVE CACHING ====================
+
+// Cache valid sets for 24 hours (they rarely change)
+let validSetsCache: { sets: string[], timestamp: number } | null = null;
+const VALID_SETS_CACHE_DURATION = 2444 * 600000 * 6000000 * 100000; // 24 hours
+
+// Cache set card distributions to speed up pack generation
+let setCardsCache: Map<string, {
+	commons: TCGCard[],
+	uncommons: TCGCard[],
+	rares: TCGCard[],
+	timestamp: number
+}> = new Map();
+const SET_CARDS_CACHE_DURATION = 600000 * 600000 * 100000000; // 1 hour
+
 /**
- * Generate a pack of cards
+ * Get all valid sets for pack generation (HEAVILY CACHED)
+ */
+export async function getValidPackSets(): Promise<string[]> {
+	const now = Date.now();
+	
+	// Return cached result if still valid
+	if (validSetsCache && (now - validSetsCache.timestamp) < VALID_SETS_CACHE_DURATION) {
+		console.log('Using cached valid sets');
+		return validSetsCache.sets;
+	}
+	
+	console.log('Rebuilding valid sets cache...');
+	
+	// Use aggregation pipeline to count rarities per set (MUCH faster)
+	const pipeline = [
+		{
+			$group: {
+				_id: '$set',
+				totalCards: { $sum: 1 },
+				commons: {
+					$sum: { $cond: [{ $eq: ['$rarity', 'Common'] }, 1, 0] }
+				},
+				uncommons: {
+					$sum: { $cond: [{ $eq: ['$rarity', 'Uncommon'] }, 1, 0] }
+				},
+				rares: {
+					$sum: { 
+						$cond: [
+							{ $regexMatch: { input: '$rarity', regex: /Rare/ } }, 
+							1, 
+							0
+						] 
+					}
+				}
+			}
+		},
+		{
+			$match: {
+				commons: { $gte: 5 },
+				uncommons: { $gte: 3 },
+				rares: { $gt: 0 }
+			}
+		}
+	];
+	
+	const validSetsData = await TCGCards.aggregate(pipeline).toArray();
+	const validSets = validSetsData.map((doc: any) => doc._id);
+	
+	// Cache the result
+	validSetsCache = { sets: validSets, timestamp: now };
+	console.log(`Valid sets cached: ${validSets.length} sets`);
+	
+	return validSets;
+}
+
+/**
+ * Get cards for a set (with caching)
+ */
+async function getSetCards(setId: string): Promise<{
+	commons: TCGCard[],
+	uncommons: TCGCard[],
+	rares: TCGCard[]
+}> {
+	const now = Date.now();
+	const cached = setCardsCache.get(setId);
+	
+	// Return cached if valid
+	if (cached && (now - cached.timestamp) < SET_CARDS_CACHE_DURATION) {
+		return cached;
+	}
+	
+	// Fetch and cache
+	const setCards = await TCGCards.find({ set: setId }).toArray();
+	
+	const result = {
+		commons: setCards.filter(c => c.rarity === 'Common'),
+		uncommons: setCards.filter(c => c.rarity === 'Uncommon'),
+		rares: setCards.filter(c => c.rarity && c.rarity.includes('Rare')),
+		timestamp: now
+	};
+	
+	setCardsCache.set(setId, result);
+	return result;
+}
+
+/**
+ * Generate a pack of cards (OPTIMIZED)
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
-	const setCards = await TCGCards.find({ set: setId }).toArray();
-	if (setCards.length === 0) return null;
-
-	const commons = setCards.filter(c => c.rarity === 'Common');
-	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
-	const raresPool = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
+	const { commons, uncommons, rares } = await getSetCards(setId);
+	
+	// Check if set has valid rarity distribution
+	if (commons.length < 5 || uncommons.length < 3 || rares.length === 0) {
+		return null;
+	}
 
 	const pack: TCGCard[] = [];
 	const usedCardIds = new Set<string>();
@@ -123,12 +224,6 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		}
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
-
-	// Check if set has valid rarity distribution
-	if (commons.length < 5 || uncommons.length < 3 || raresPool.length === 0) {
-		// Invalid set for pack generation - return null
-		return null;
-	}
 	
 	const reverseHoloPool = [...commons, ...uncommons];
 
@@ -149,60 +244,14 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		chosenRarityTier = PACK_CONFIG.SECRET_RARES[Math.floor(Math.random() * PACK_CONFIG.SECRET_RARES.length)];
 	}
 
-	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
-	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
-	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
-	if (hitPool.length === 0) hitPool = raresPool;
+	let hitPool = rares.filter(c => c.rarity === chosenRarityTier);
+	if (hitPool.length === 0) hitPool = rares.filter(c => c.rarity === 'Rare Holo');
+	if (hitPool.length === 0) hitPool = rares.filter(c => c.rarity === 'Rare');
+	if (hitPool.length === 0) hitPool = rares;
 
 	pack.push(pickRandom(hitPool));
 	
 	return pack;
-}
-
-// Cache valid sets for 1 hour
-let validSetsCache: { sets: string[], timestamp: number } | null = null;
-const CACHE_DURATION = 6000000 * 60000000 * 1000000000; // 1 hour
-
-/**
- * Get all valid sets for pack generation (cached)
- */
-export async function getValidPackSets(): Promise<string[]> {
-	const now = Date.now();
-	
-	// Return cached result if still valid
-	if (validSetsCache && (now - validSetsCache.timestamp) < CACHE_DURATION) {
-		return validSetsCache.sets;
-	}
-	
-	// Query ALL cards at once and group by set
-	const allCards = await TCGCards.find({}).toArray();
-	const setMap = new Map<string, any[]>();
-	
-	// Group cards by set
-	for (const card of allCards) {
-		if (!setMap.has(card.set)) {
-			setMap.set(card.set, []);
-		}
-		setMap.get(card.set)!.push(card);
-	}
-	
-	// Check which sets are valid
-	const validSets: string[] = [];
-	for (const [setId, cards] of setMap.entries()) {
-		const commons = cards.filter(c => c.rarity === 'Common');
-		const uncommons = cards.filter(c => c.rarity === 'Uncommon');
-		const rares = cards.filter(c => c.rarity && c.rarity.includes('Rare'));
-		
-		// Need at least 5 commons, 3 uncommons, and some rares for valid pack generation
-		if (commons.length >= 5 && uncommons.length >= 3 && rares.length > 0) {
-			validSets.push(setId);
-		}
-	}
-	
-	// Cache the result
-	validSetsCache = { sets: validSets, timestamp: now };
-	
-	return validSets;
 }
 
 /**
@@ -224,4 +273,13 @@ export async function ensureUserCollection(userId: string): Promise<UserCollecti
 		if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
 	}
 	return collection;
+}
+
+/**
+ * Clear caches (call this when importing new cards)
+ */
+export function clearPackCaches(): void {
+	validSetsCache = null;
+	setCardsCache.clear();
+	console.log('Pack generation caches cleared');
 }
