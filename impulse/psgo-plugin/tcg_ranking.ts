@@ -689,4 +689,175 @@ async function endCurrentSeason(): Promise<void> {
 	// Distribute rewards to top 10
 	const rewardPromises = [];
 	for (let i = 0; i < Math.min(10, finalLeaderboardData.length); i++) {
-		const player = finalLeaderboardData[i
+		const player = finalLeaderboardData[i];
+		const rank = i + 1;
+		const reward = SEASON_REWARDS[rank as keyof typeof SEASON_REWARDS];
+		
+		if (reward) {
+			player.creditsAwarded = reward.credits;
+			player.titleAwarded = reward.title;
+			
+			// Award credits
+			rewardPromises.push(
+				TCG_Economy.grantCurrency(player.userId, reward.credits)
+			);
+			
+			// Record the reward
+			const seasonReward: SeasonReward = {
+				userId: player.userId,
+				seasonId: currentSeason.seasonId,
+				rank,
+				credits: reward.credits,
+				title: reward.title,
+				claimedAt: Date.now(),
+			};
+			rewardPromises.push(SeasonRewards.insertOne(seasonReward));
+		}
+	}
+	
+	await Promise.all(rewardPromises);
+	
+	// Mark season as completed
+	await RankingSeasons.updateOne(
+		{ seasonId: currentSeason.seasonId },
+		{
+			$set: {
+				isActive: false,
+				isCompleted: true,
+				rewardsDistributed: true,
+				finalLeaderboard: finalLeaderboardData,
+				endTime: Date.now(), // Update actual end time
+			}
+		}
+	);
+	
+	console.log(`Season ${currentSeason.name} completed. Rewards distributed to top 10 players.`);
+	
+	// Start new season
+	await createNewSeason();
+}
+
+/**
+ * Get current active season
+ */
+export async function getCurrentSeason(): Promise<RankingSeason | null> {
+	return RankingSeasons.findOne({ isActive: true });
+}
+
+/**
+ * Get season rewards for a user
+ */
+export async function getUserSeasonRewards(userId: string): Promise<SeasonReward[]> {
+	return SeasonRewards.findSorted({ userId }, { claimedAt: -1 }, 10);
+}
+
+/**
+ * Get current season info with time remaining
+ */
+export async function getCurrentSeasonInfo(): Promise<{
+	season: RankingSeason | null;
+	timeRemaining: number;
+	daysRemaining: number;
+	hoursRemaining: number;
+} | null> {
+	const season = await getCurrentSeason();
+	if (!season) return null;
+	
+	const now = Date.now();
+	const timeRemaining = Math.max(0, season.endTime - now);
+	const daysRemaining = Math.floor(timeRemaining / (24 * 60 * 60 * 1000));
+	const hoursRemaining = Math.floor((timeRemaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+	
+	return {
+		season,
+		timeRemaining,
+		daysRemaining,
+		hoursRemaining,
+	};
+}
+
+/**
+ * Force end current season (admin command)
+ */
+export async function forceEndSeason(): Promise<boolean> {
+	const currentSeason = await getCurrentSeason();
+	if (!currentSeason) return false;
+	
+	await endCurrentSeason();
+	return true;
+}
+
+/**
+ * Get completed seasons with their final leaderboards
+ */
+export async function getCompletedSeasons(limit: number = 5): Promise<RankingSeason[]> {
+	return RankingSeasons.findSorted(
+		{ isCompleted: true },
+		{ endTime: -1 },
+		limit
+	);
+}
+
+/**
+ * Run season maintenance (should be called periodically)
+ */
+export async function runSeasonMaintenance(): Promise<void> {
+	try {
+		// Initialize season system if needed
+		await initializeSeasonSystem();
+		
+		// Check if season should end
+		const seasonEnded = await checkAndProcessSeasonEnd();
+		
+		if (seasonEnded) {
+			console.log('Season maintenance: Season ended and new season started');
+		}
+	} catch (error) {
+		console.error('Error in season maintenance:', error);
+	}
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
+/**
+ * Get rank color for display
+ */
+export function getRankColor(rank: string): string {
+	return RANK_COLORS[rank as keyof typeof RANK_COLORS] || '#808080';
+}
+
+/**
+ * Format ELO change for display
+ */
+export function formatEloChange(change: number): string {
+	return change > 0 ? `+${change}` : `${change}`;
+}
+
+/**
+ * Get win rate percentage
+ */
+export function getWinRate(wins: number, losses: number, draws: number): number {
+	const total = wins + losses + draws;
+	if (total === 0) return 0;
+	return Math.round((wins / total) * 100);
+}
+
+/**
+ * Check if player is eligible for ranked battles
+ */
+export async function isEligibleForRanked(userId: string): Promise<boolean> {
+	const ranking = await getPlayerRanking(userId);
+	// Players need at least 5 battles to be ranked
+	return ranking.totalBattles >= 5;
+}
+
+/**
+ * Get appropriate opponent ELO range
+ */
+export function getOpponentEloRange(playerElo: number): { min: number; max: number } {
+	const range = Math.max(100, Math.min(300, playerElo * 0.15));
+	return {
+		min: Math.max(0, playerElo - range),
+		max: playerElo + range
+	};
+}
