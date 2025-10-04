@@ -8,7 +8,7 @@ import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { VALIDATION_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { POKEMON_SETS, getRarityColor, SPECIAL_SUBTYPES } from '../../../impulse/psgo-plugin/tcg_data';
-import { generatePack, getCardPoints, ensureUserCollection } from './shared';
+import { generatePack, getCardPoints, ensureUserCollection, clearPackCaches } from './shared';
 
 export const adminCommands: Chat.ChatCommands = {
 	async addcard(target, room, user) {
@@ -243,4 +243,10 @@ export const adminCommands: Chat.ChatCommands = {
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
 	},
+
+	clearcache(target, room, user) {
+	this.checkCan('globalban');
+	clearPackCaches();
+	this.sendReply('Pack caches cleared.');
+	}
 };
