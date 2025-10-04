@@ -1777,78 +1777,95 @@ async ranking(target, room, user) {
 		return this.errorReply(`Error fetching season history: ${e.message}`);
 	}
 },
-		
 
 		async milestones(target, room, user) {
-			if (!this.runBroadcast()) return;
+	if (!this.runBroadcast()) return;
 	
-			try {
-				const available = await TCG_Ranking.getAvailableMilestones(user.id);
-				const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
-				
-				let output = `<h3> Weekly Milestones - Week ${summary.weekNumber}</h3>`;
-				output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
-				output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
-				output += `<hr/>`;
-				output += `<div style="max-height: 360px; overflow-y: auto;">`;
+	try {
+		const available = await TCG_Ranking.getAvailableMilestones(user.id);
+		const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
 		
-				// Group milestones by category
-				const categories = {
-					'Battle Milestones': available.filter(m => m.milestoneId.includes('battles') || m.milestoneId.includes('wins')),
-					'Collection Milestones': available.filter(m => m.milestoneId.includes('packs') || m.milestoneId.includes('opened')),
-					'Economy Milestones': available.filter(m => m.milestoneId.includes('credits')),
-				};
+		let output = `<h3> Weekly Milestones - Week ${summary.weekNumber}</h3>`;
+		output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
+		output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
+		output += `<hr/>`;
 		
-				for (const [category, milestones] of Object.entries(categories)) {
-					if (milestones.length === 0) continue;
+		// Add scrollable container
+		output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		
+		// Group milestones by category
+		const categories = {
+			'Battle Milestones': available.filter(m => m.milestoneId.includes('battles') || m.milestoneId.includes('wins')),
+			'Collection Milestones': available.filter(m => m.milestoneId.includes('packs') || m.milestoneId.includes('opened')),
+			'Economy Milestones': available.filter(m => m.milestoneId.includes('credits')),
+		};
+		
+		for (const [category, milestones] of Object.entries(categories)) {
+			if (milestones.length === 0) continue;
 			
-					output += `<h4 style="margin-top: 15px; margin-bottom: 8px;">${category}</h4>`;
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header"><th>Achievement</th><th>Progress</th><th>Reward</th><th>Action</th></tr>`;
+			output += `<h4 style="margin-top: 15px; margin-bottom: 8px;">${category}</h4>`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header"><th>Achievement</th><th>Progress</th><th>Reward</th><th>Action</th></tr>`;
 			
-					milestones.forEach(milestone => {
-						const progressPercent = Math.min(100, Math.round((milestone.progress / milestone.requirement) * 100));
-						const progressBarColor = milestone.canClaim ? '#27ae60' : '#2ecc71'; // Darker green if claimable
-						const progressBgColor = '#ecf0f1';
+			milestones.forEach(milestone => {
+				const progressPercent = Math.min(100, Math.round((milestone.progress / milestone.requirement) * 100));
 				
-						output += `<tr class="themed-table-row">`;
-						output += `<td><strong>${milestone.name}</strong><br/><small style="color: #666;">${milestone.description}</small></td>`;
-						output += `<td style="width: 120px;">`;
-						output += `<div style="background: ${progressBgColor}; border-radius: 4px; overflow: hidden; border: 1px solid #bdc3c7; position: relative; height: 20px;">`;
-						output += `<div style="width: ${progressPercent}%; background: ${progressBarColor}; height: 100%; transition: width 0.3s ease;"></div>`;
+				// Use green color scheme for progress bar
+				let progressBarColor = '#2ecc71'; // Default green
+				let progressBgColor = '#ecf0f1'; // Light gray background
 				
-						// Progress text overlay - always visible and readable
-						const textColor = progressPercent > 50 ? '#fff' : '#2c3e50'; // White text on dark, dark text on light
-						const textShadow = progressPercent > 50 ? 'text-shadow: 1px 1px 1px rgba(0,0,0,0.3);' : '';
-				
-						output += `<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: ${textColor}; ${textShadow}">`;
-						output += `${milestone.progress}/${milestone.requirement} (${progressPercent}%)`;
-						output += `</div>`;
-						output += `</div>`;
-						output += `</td>`;
-				
-						output += `<td><strong style="color: #f39c12;">${milestone.reward}</strong> Credits</td>`;
-						output += `<td>`;
-						if (milestone.canClaim) {
-							output += `<button name="send" value="/tcg claimmilestone ${milestone.milestoneId}" style="background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Claim</button>`;
-						} else if (progressPercent >= 80) {
-							output += `<span style="color: #f39c12; font-weight: bold; font-size: 12px;">Almost there!</span>`;
-						} else {
-							output += `<span style="color: #95a5a6; font-size: 12px;">${progressPercent}% complete</span>`;
-						}
-						output += `</td>`;
-						output += `</tr>`;
-					});
-			
-					output += `</table>`;
+				// Different colors based on status
+				if (milestone.alreadyClaimed) {
+					progressBarColor = '#95a5a6'; // Gray for claimed
+					progressBgColor = '#ecf0f1';
+				} else if (milestone.canClaim) {
+					progressBarColor = '#27ae60'; // Darker green if claimable
 				}
-		
+				
+				output += `<tr class="themed-table-row">`;
+				output += `<td><strong>${milestone.name}</strong><br/><small style="color: #666;">${milestone.description}</small></td>`;
+				output += `<td style="width: 120px;">`;
+				
+				// Enhanced progress bar with better styling
+				output += `<div style="background: ${progressBgColor}; border-radius: 4px; overflow: hidden; border: 1px solid #bdc3c7; position: relative; height: 20px;">`;
+				output += `<div style="width: ${progressPercent}%; background: ${progressBarColor}; height: 100%; transition: width 0.3s ease;"></div>`;
+				
+				// Progress text overlay - always visible and readable
+				const textColor = progressPercent > 50 ? '#fff' : '#2c3e50'; // White text on dark, dark text on light
+				const textShadow = progressPercent > 50 ? 'text-shadow: 1px 1px 1px rgba(0,0,0,0.3);' : '';
+				
+				output += `<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: ${textColor}; ${textShadow}">`;
+				output += `${milestone.progress}/${milestone.requirement} (${progressPercent}%)`;
 				output += `</div>`;
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching milestones: ${e.message}`);
-			}
-		},
+				output += `</div>`;
+				output += `</td>`;
+				
+				output += `<td><strong style="color: #f39c12;">${milestone.reward}</strong> Credits</td>`;
+				output += `<td>`;
+				
+				if (milestone.alreadyClaimed) {
+					output += `<span style="color: #27ae60; font-weight: bold; font-size: 12px;">✅ Claimed</span>`;
+				} else if (milestone.canClaim) {
+					output += `<button name="send" value="/tcg claimmilestone ${milestone.milestoneId}" style="background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Claim</button>`;
+				} else if (progressPercent >= 80) {
+					output += `<span style="color: #f39c12; font-weight: bold; font-size: 12px;">Almost there!</span>`;
+				} else {
+					output += `<span style="color: #95a5a6; font-size: 12px;">${progressPercent}% complete</span>`;
+				}
+				output += `</td>`;
+				output += `</tr>`;
+			});
+			
+			output += `</table>`;
+		}
+
+		output += `</div>`;
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching milestones: ${e.message}`);
+	}
+},
+		
 		
 
 		async claimmilestone(target, room, user) {
