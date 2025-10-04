@@ -2,9 +2,9 @@
  * Shared helper functions for TCG commands
  */
 
-import { TCGCard, UserCollection } from '../../..impulse/tcg_data';
-import { TCGCards, UserCollections } from '../../../impulse/tcg_collections';
-import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/tcg_config';
+import { TCGCard, UserCollection } from '../../..impulse/psgo-plugin/tcg_data';
+import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 
 /**
  * Get card points - now uses pre-calculated battleValue when available
