@@ -100,16 +100,17 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 // Cache valid sets for 24 hours (they rarely change)
 let validSetsCache: { sets: string[], timestamp: number } | null = null;
-const VALID_SETS_CACHE_DURATION = 2444 * 600000 * 6000000 * 100000; // 24 hours
+const VALID_SETS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 // Cache set card distributions to speed up pack generation
 let setCardsCache: Map<string, {
 	commons: TCGCard[],
 	uncommons: TCGCard[],
 	rares: TCGCard[],
+	reverseHoloPool: TCGCard[],
 	timestamp: number
 }> = new Map();
-const SET_CARDS_CACHE_DURATION = 600000 * 600000 * 100000000; // 1 hour
+const SET_CARDS_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
  * Get all valid sets for pack generation (HEAVILY CACHED)
@@ -168,12 +169,13 @@ export async function getValidPackSets(): Promise<string[]> {
 }
 
 /**
- * Get cards for a set (with caching)
+ * Get cards for a set (with caching and pre-computed pools)
  */
 async function getSetCards(setId: string): Promise<{
 	commons: TCGCard[],
 	uncommons: TCGCard[],
-	rares: TCGCard[]
+	rares: TCGCard[],
+	reverseHoloPool: TCGCard[]
 }> {
 	const now = Date.now();
 	const cached = setCardsCache.get(setId);
@@ -183,13 +185,33 @@ async function getSetCards(setId: string): Promise<{
 		return cached;
 	}
 	
-	// Fetch and cache
-	const setCards = await TCGCards.find({ set: setId }).toArray();
+	// Fetch from DB with projection (only needed fields)
+	const setCards = await TCGCards.find(
+		{ set: setId },
+		{ 
+			projection: { 
+				cardId: 1, 
+				name: 1, 
+				set: 1, 
+				rarity: 1, 
+				type: 1, 
+				supertype: 1,
+				hp: 1,
+				battleValue: 1,
+				subtypes: 1
+			} 
+		}
+	).toArray();
+	
+	const commons = setCards.filter(c => c.rarity === 'Common');
+	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
+	const rares = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
 	
 	const result = {
-		commons: setCards.filter(c => c.rarity === 'Common'),
-		uncommons: setCards.filter(c => c.rarity === 'Uncommon'),
-		rares: setCards.filter(c => c.rarity && c.rarity.includes('Rare')),
+		commons,
+		uncommons,
+		rares,
+		reverseHoloPool: [...commons, ...uncommons], // Pre-compute this
 		timestamp: now
 	};
 	
@@ -201,7 +223,7 @@ async function getSetCards(setId: string): Promise<{
  * Generate a pack of cards (OPTIMIZED)
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
-	const { commons, uncommons, rares } = await getSetCards(setId);
+	const { commons, uncommons, rares, reverseHoloPool } = await getSetCards(setId);
 	
 	// Check if set has valid rarity distribution
 	if (commons.length < 5 || uncommons.length < 3 || rares.length === 0) {
@@ -224,8 +246,6 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 		}
 		return pool[Math.floor(Math.random() * pool.length)];
 	};
-	
-	const reverseHoloPool = [...commons, ...uncommons];
 
 	// Use config values
 	for (let i = 0; i < PACK_CONFIG.COMMONS_PER_PACK; i++) pack.push(pickRandom(commons));
