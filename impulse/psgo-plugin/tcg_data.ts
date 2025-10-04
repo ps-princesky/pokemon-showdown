@@ -55,6 +55,103 @@ export interface ShopState {
   lastRotation: number;
 }
 
+export interface PlayerRanking {
+	_id?: string;
+	userId: string;
+	elo: number;
+	wins: number;
+	losses: number;
+	draws: number;
+	winStreak: number;
+	bestWinStreak: number;
+	rank: string;
+	division: number;
+	lastBattleTime: number;
+	seasonWins?: number;
+	seasonLosses?: number;
+	seasonDraws?: number;
+	totalBattles: number;
+	averagePackValue: number;
+	createdAt: number;
+	updatedAt: number;
+}
+
+export interface BattleHistory {
+	_id?: string;
+	battleId: string;
+	player1: string;
+	player2: string;
+	player1Elo: number;
+	player2Elo: number;
+	player1EloChange: number;
+	player2EloChange: number;
+	winner: string | null;
+	player1PackValue: number;
+	player2PackValue: number;
+	wager: number;
+	battleTime: number;
+	setId: string;
+}
+
+export interface RankingSeason {
+	_id?: string;
+	seasonId: string;
+	name: string;
+	startTime: number;
+	endTime: number;
+	isActive: boolean;
+	isCompleted: boolean;
+	rewardsDistributed: boolean;
+	finalLeaderboard?: {
+		userId: string;
+		rank: number;
+		elo: number;
+		seasonWins: number;
+		seasonLosses: number;
+		seasonDraws: number;
+		creditsAwarded: number;
+		titleAwarded?: string;
+	}[];
+}
+
+export interface DailyChallenge {
+	_id?: string;
+	userId: string;
+	challengesRemaining: number;
+	lastReset: number;
+	challengeHistory: {
+		targetUserId: string;
+		battleId: string;
+		timestamp: number;
+	}[];
+}
+
+export interface SimulatedBattle {
+	_id?: string;
+	battleId: string;
+	challengerId: string;
+	targetId: string;
+	challengerPackValue: number;
+	targetPackValue: number;
+	winner: string | null;
+	challengerEloChange: number;
+	targetEloChange: number;
+	wager: number;
+	setId: string;
+	timestamp: number;
+	isSimulated: boolean;
+}
+
+export interface SeasonReward {
+	_id?: string;
+	userId: string;
+	seasonId: string;
+	rank: number;
+	credits: number;
+	title?: string;
+	claimedAt: number;
+}
+
 // --- DATA CONSTANTS ---
 export const SUPERTYPES = [
 	'Pokémon',
