@@ -2,7 +2,7 @@
  * Shared helper functions for TCG commands
  */
 
-import { TCGCard, UserCollection } from '../../../impulse/psgo-plugin/tcg_data';
+import { TCGCard, UserCollection, SPECIAL_SUBTYPES } from '../../../impulse/psgo-plugin/tcg_data';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 
