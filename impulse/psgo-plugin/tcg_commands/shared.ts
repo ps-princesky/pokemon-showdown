@@ -97,24 +97,6 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
- * Check if a set has valid rarity distribution for pack generation
- */
-async function isValidPackSet(setId: string): Promise<boolean> {
-	const setCards = await TCGCards.find({ set: setId }).toArray();
-	if (setCards.length === 0) return false;
-
-	// Check if set has minimum required commons, uncommons, and rares
-	const commons = setCards.filter(c => c.rarity === 'Common');
-	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
-	const rares = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
-
-	// Need at least 5 commons, 3 uncommons, and some rares for valid pack generation
-	const hasValidDistribution = commons.length >= 5 && uncommons.length >= 3 && rares.length > 0;
-
-	return hasValidDistribution;
-}
-
-/**
  * Generate a pack of cards
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
@@ -177,19 +159,49 @@ export async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	return pack;
 }
 
+// Cache valid sets for 1 hour
+let validSetsCache: { sets: string[], timestamp: number } | null = null;
+const CACHE_DURATION = 6000000 * 60000000 * 1000000000; // 1 hour
+
 /**
- * Get all valid sets for pack generation (filters out special/gallery sets)
+ * Get all valid sets for pack generation (cached)
  */
 export async function getValidPackSets(): Promise<string[]> {
-	const allSets = await TCGCards.distinct('set');
+	const now = Date.now();
+	
+	// Return cached result if still valid
+	if (validSetsCache && (now - validSetsCache.timestamp) < CACHE_DURATION) {
+		return validSetsCache.sets;
+	}
+	
+	// Query ALL cards at once and group by set
+	const allCards = await TCGCards.find({}).toArray();
+	const setMap = new Map<string, any[]>();
+	
+	// Group cards by set
+	for (const card of allCards) {
+		if (!setMap.has(card.set)) {
+			setMap.set(card.set, []);
+		}
+		setMap.get(card.set)!.push(card);
+	}
+	
+	// Check which sets are valid
 	const validSets: string[] = [];
-
-	for (const setId of allSets) {
-		if (await isValidPackSet(setId)) {
+	for (const [setId, cards] of setMap.entries()) {
+		const commons = cards.filter(c => c.rarity === 'Common');
+		const uncommons = cards.filter(c => c.rarity === 'Uncommon');
+		const rares = cards.filter(c => c.rarity && c.rarity.includes('Rare'));
+		
+		// Need at least 5 commons, 3 uncommons, and some rares for valid pack generation
+		if (commons.length >= 5 && uncommons.length >= 3 && rares.length > 0) {
 			validSets.push(setId);
 		}
 	}
-
+	
+	// Cache the result
+	validSetsCache = { sets: validSets, timestamp: now };
+	
 	return validSets;
 }
 
