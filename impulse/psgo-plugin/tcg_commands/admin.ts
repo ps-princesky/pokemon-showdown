@@ -3,7 +3,7 @@
  */
 
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
-import * * TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
+import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { VALIDATION_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
