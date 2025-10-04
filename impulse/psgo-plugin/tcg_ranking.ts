@@ -350,17 +350,23 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
 	const dailyChallenge = await getDailyChallenges(challengerId);
 	const challengedToday = new Set(dailyChallenge.challengeHistory.map(h => h.targetUserId));
 	
-	// Get top players excluding the challenger and those already challenged today
-	const topPlayers = await PlayerRankings.findSorted(
+	// Get ALL players excluding the challenger and those already challenged today
+	// No battle requirement - anyone can be challenged
+	const allPlayers = await PlayerRankings.findSorted(
 		{
-			userId: { $ne: challengerId },
-			totalBattles: { $gte: 5 } // Only players eligible for ranked
+			userId: { $ne: challengerId }
 		},
 		{ elo: -1 },
 		LEADERBOARD_CHALLENGE_RANGE
 	);
 	
-	return topPlayers.filter(player => !challengedToday.has(player.userId));
+	// If no existing players, create a dummy ranking for the challenger to get started
+	if (allPlayers.length === 0) {
+		await getPlayerRanking(challengerId); // This creates their ranking
+		return []; // No one else to challenge yet
+	}
+	
+	return allPlayers.filter(player => !challengedToday.has(player.userId));
 }
 
 /**
@@ -846,9 +852,9 @@ export function getWinRate(wins: number, losses: number, draws: number): number 
  * Check if player is eligible for ranked battles
  */
 export async function isEligibleForRanked(userId: string): Promise<boolean> {
-	const ranking = await getPlayerRanking(userId);
-	// Players need at least 5 battles to be ranked
-	return ranking.totalBattles >= 5;
+	// Everyone is eligible - no minimum battle requirement
+	await getPlayerRanking(userId); // Ensure they have a ranking record
+	return true;
 }
 
 /**
