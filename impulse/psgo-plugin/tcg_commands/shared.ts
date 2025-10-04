@@ -300,9 +300,66 @@ export async function ensureUserCollection(userId: string): Promise<UserCollecti
 
 /**
  * Clear caches (call this when importing new cards)
+ * Returns statistics about what was cleared
  */
-export function clearPackCaches(): void {
+export function clearPackCaches(): { validSets: number; cachedSets: number } {
+	const stats = {
+		validSets: validSetsCache?.length || 0,
+		cachedSets: setCardsCache.size
+	};
+	
 	validSetsCache = null;
 	setCardsCache.clear();
-	console.log('Pack generation caches cleared');
+	
+	console.log(`🗑️  Pack caches cleared: ${stats.validSets} valid sets, ${stats.cachedSets} cached set card pools`);
+	
+	return stats;
+}
+
+/**
+ * Get cache statistics
+ */
+export function getCacheStats(): {
+	validSetsLoaded: boolean;
+	validSetsCount: number;
+	cachedSetsCount: number;
+	estimatedMemoryMB: number;
+} {
+	const cachedSetsCount = setCardsCache.size;
+	
+	// Rough estimate: each card ~1KB, average 200 cards per set
+	const estimatedMemoryMB = Math.round((cachedSetsCount * 200 * 1024) / (1024 * 1024));
+	
+	return {
+		validSetsLoaded: validSetsCache !== null,
+		validSetsCount: validSetsCache?.length || 0,
+		cachedSetsCount,
+		estimatedMemoryMB
+	};
+}
+
+/**
+ * Preload all set caches (call on server startup for instant performance)
+ */
+export async function preloadSetCaches(): Promise<void> {
+	console.log('🚀 Preloading TCG set caches...');
+	const startTime = Date.now();
+	
+	// Load valid sets first
+	const validSets = await getValidPackSets();
+	
+	// Preload the most common sets (or all if you have RAM)
+	const setsToPreload = validSets.slice(0, 20); // Top 20 sets
+	
+	for (const setId of setsToPreload) {
+		await getSetCards(setId);
+	}
+	
+	const elapsed = Date.now() - startTime;
+	const stats = getCacheStats();
+	
+	console.log(`✅ TCG caches preloaded in ${elapsed}ms`);
+	console.log(`   - Valid sets: ${stats.validSetsCount}`);
+	console.log(`   - Cached set pools: ${stats.cachedSetsCount}`);
+	console.log(`   - Est. memory: ~${stats.estimatedMemoryMB}MB`);
 }
