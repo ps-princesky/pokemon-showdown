@@ -6,11 +6,21 @@ import { TCGCard, UserCollection } from '../../../impulse/psgo-plugin/tcg_data';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 
+export function getCardPoints(card: TCGCard): number {
+	// Use pre-calculated battle value if available (more accurate)
+	if (card.battleValue !== undefined) {
+		return card.battleValue;
+	}
+	
+	// Fallback to rarity-based points if no battle value
+	return getCardPointsFromRarity(card.rarity);
+}
+
 /**
  * Get card points from rarity
  */
-export function getCardPoints(card: TCGCard): number {
-	switch (card.rarity) {
+function getCardPointsFromRarity(rarity: string): number {
+	switch (rarity) {
 		case 'Common': case '1st Edition': case 'Shadowless': return 5;
 		case 'Uncommon': return 10;
 		case 'Reverse Holo': return 15;
