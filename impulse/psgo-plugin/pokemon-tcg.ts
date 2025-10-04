@@ -26,7 +26,7 @@ const battleChallenges: Map<string, {
 
 // ==================== HELPER FUNCTIONS ====================
 
-function getCardPoints(card: TCGCard): number {
+export function getCardPoints(card: TCGCard): number {
 	switch (card.rarity) {
 		case 'Common': case '1st Edition': case 'Shadowless': return 5;
 		case 'Uncommon': return 10;
