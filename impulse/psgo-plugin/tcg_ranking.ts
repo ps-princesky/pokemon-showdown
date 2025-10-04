@@ -221,8 +221,12 @@ export async function checkEloMilestones(userId: string, newElo: number): Promis
 	const newMilestones = [];
 	let totalCredits = 0;
 	
+	console.log(`Checking ELO milestones for ${userId}: ELO ${newElo}, Already claimed: [${claimedMilestones.join(', ')}]`);
+	
 	for (const [milestoneId, milestone] of Object.entries(ELO_MILESTONE_REWARDS)) {
 		if (newElo >= milestone.elo && !claimedMilestones.includes(milestoneId)) {
+			console.log(`Awarding milestone ${milestoneId} (${milestone.name}) to ${userId}: ${milestone.reward} credits`);
+			
 			// Award the milestone
 			await TCG_Economy.grantCurrency(userId, milestone.reward);
 			claimedMilestones.push(milestoneId);
@@ -231,12 +235,13 @@ export async function checkEloMilestones(userId: string, newElo: number): Promis
 		}
 	}
 	
-	// Update claimed milestones
+	// Update claimed milestones - FIX: Update the ranking object in database
 	if (newMilestones.length > 0) {
 		await PlayerRankings.updateOne(
 			{ userId },
 			{ $set: { claimedEloMilestones: claimedMilestones } }
 		);
+		console.log(`Updated claimed milestones for ${userId}: [${claimedMilestones.join(', ')}]`);
 	}
 	
 	return {
@@ -272,10 +277,19 @@ export async function getPlayerRanking(userId: string): Promise<PlayerRanking> {
 			averagePackValue: 0,
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
-			claimedEloMilestones: [],
+			claimedEloMilestones: [], // ENSURE THIS IS INITIALIZED
 		};
 		
 		await PlayerRankings.insertOne(ranking);
+	}
+	
+	// ENSURE EXISTING RECORDS HAVE THE FIELD
+	if (!ranking.claimedEloMilestones) {
+		ranking.claimedEloMilestones = [];
+		await PlayerRankings.updateOne(
+			{ userId },
+			{ $set: { claimedEloMilestones: [] } }
+		);
 	}
 	
 	return ranking;
@@ -327,6 +341,9 @@ export async function updatePlayerRanking(
 		ranking.winStreak = 0;
 	}
 	
+	// SAVE THE RANKING FIRST before checking milestones
+	await PlayerRankings.upsert({ userId }, ranking);
+	
 	// Check for ELO milestones (only if ELO increased)
 	let eloMilestones = [];
 	let milestoneCredits = 0;
@@ -335,8 +352,6 @@ export async function updatePlayerRanking(
 		eloMilestones = milestoneResult.milestonesClaimed;
 		milestoneCredits = milestoneResult.totalCredits;
 	}
-	
-	await PlayerRankings.upsert({ userId }, ranking);
 	
 	return {
 		ranking,
