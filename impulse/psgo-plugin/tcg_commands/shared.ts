@@ -109,26 +109,33 @@ export function getTypeColor(type: string): string {
 }
 
 /**
- * Format card display name with type info
+ * Format card for pack display
  */
-export function formatCardName(card: TCGCard): string {
-	let name = card.name;
+export function formatPackCard(card: TCGCard, showBattleInfo: boolean = true): string {
+	const points = getCardPoints(card);
 	
-	if (card.supertype === 'Pokémon') {
+	let cardHtml = `<div style="margin:5px 0; padding:5px; border-left:3px solid ${getRarityColor(card.rarity)};">`;
+	cardHtml += `<span style="font-weight:bold; color:${getRarityColor(card.rarity)};">${card.name}</span>`;
+	cardHtml += ` <span style="font-size:0.9em;">[${card.rarity}]</span>`;
+	
+	if (card.supertype === 'Pokémon' && showBattleInfo) {
 		if (card.hp) {
-			name += ` (${card.hp} HP)`;
+			cardHtml += ` <span style="font-size:0.8em; color:#666;">(${card.hp} HP)</span>`;
 		}
 		if (card.type) {
-			name += ` [${card.type}]`;
+			cardHtml += ` <span style="font-size:0.8em; color:${getTypeColor(card.type)};">[${card.type}]</span>`;
 		}
-	} else if (card.supertype === 'Trainer') {
-		if (card.subtypes && card.subtypes.length > 0) {
-			name += ` [${card.subtypes.join(', ')}]`;
+		if (card.battleValue) {
+			cardHtml += ` <span style="font-size:0.8em; color:#e74c3c;">(${card.battleValue} BV)</span>`;
 		}
 	}
 	
-	return name;
+	cardHtml += ` <span style="font-size:0.8em; color:#999;">(${points} pts)</span>`;
+	cardHtml += `</div>`;
+	
+	return cardHtml;
 }
+
 
 /**
  * Get battle-ready Pokemon from a list of cards
