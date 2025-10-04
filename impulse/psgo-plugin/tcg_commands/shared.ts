@@ -6,11 +6,51 @@ import { TCGCard, UserCollection } from '../../../impulse/psgo-plugin/tcg_data';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 
-/**
- * Get card points from rarity
- */
-export function getCardPoints(card: TCGCard): number {
-	switch (card.rarity) {
+export function getCardPoints(card: any): number {
+	let points = getCardPointsFromRarity(card.rarity);
+	
+	// Battle Value Bonus
+	if (card.battleValue) {
+		if (card.battleValue >= 200) points += 60;
+		else if (card.battleValue >= 175) points += 50;
+		else if (card.battleValue >= 150) points += 40;
+		else if (card.battleValue >= 125) points += 30;
+		else if (card.battleValue >= 100) points += 20;
+		else if (card.battleValue >= 75) points += 10;
+		else if (card.battleValue >= 50) points += 5;
+	}
+	
+	// HP Bonus
+	if (card.hp) {
+		if (card.hp >= 301) points += 20;
+		else if (card.hp >= 251) points += 15;
+		else if (card.hp >= 201) points += 12;
+		else if (card.hp >= 151) points += 8;
+		else if (card.hp >= 101) points += 5;
+		else if (card.hp >= 51) points += 2;
+	}
+	
+	// Special Subtype Bonus
+	if (card.subtypes && card.subtypes.length > 0) {
+		card.subtypes.forEach((subtype: string) => {
+			if (SPECIAL_SUBTYPES[subtype]) {
+				points += 10;
+			}
+		});
+	}
+	
+	// Evolution Stage Bonus
+	if (card.subtypes && card.subtypes.includes('Stage 2')) {
+		points += 10;
+	} else if (card.subtypes && card.subtypes.includes('Stage 1')) {
+		points += 5;
+	}
+	
+	return points;
+}
+
+export function getCardPointsFromRarity(rarity: string): number {
+	switch (rarity) {
 		case 'Common': case '1st Edition': case 'Shadowless': return 5;
 		case 'Uncommon': return 10;
 		case 'Reverse Holo': return 15;
