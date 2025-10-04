@@ -20,7 +20,28 @@ import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/
 import { getCardPoints, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
-[specialSubtype].color;
+	async card(target, room, user) {
+		if (!this.runBroadcast()) return;
+		await TCG_Ranking.getPlayerRanking(user.id);
+		if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg card [cardId]");
+
+		try {
+			const card = await TCGCards.findOne({ cardId: target.trim() });
+			if (!card) return this.errorReply(`Card with ID "${target}" not found.`);
+
+			const rarityColorHex = getRarityColor(card.rarity);
+			const startColor = hexToRgba(rarityColorHex, 0.25);
+			const endColor = hexToRgba(rarityColorHex, 0.1);
+			const backgroundStyle = `background: linear-gradient(135deg, ${startColor}, ${endColor});`;
+
+			const cardNumber = card.cardId.split('-')[1] || '??';
+			const points = getCardPoints(card);
+
+			let borderColor = rarityColorHex;
+			let glowEffect = '';
+			const specialSubtype = card.subtypes.find(s => SPECIAL_SUBTYPES[s]);
+			if (specialSubtype && SPECIAL_SUBTYPES[specialSubtype]) {
+				borderColor = SPECIAL_SUBTYPES[specialSubtype].color;
 				if (SPECIAL_SUBTYPES[specialSubtype].glow) {
 					glowEffect = `box-shadow: 0 0 12px ${borderColor}50;`;
 				}
@@ -31,7 +52,9 @@ export const infoCommands: Chat.ChatCommands = {
 				return color ? `<strong style="color: ${color}">${s}</strong>` : s;
 			}).join(', ');
 
-			let output = `<div style="border: 2px solid ${borderColor}; ${glowEffect} border-radius: 8px; padding: 12px; overflow: hidden; ${backgroundStyle}">` +
+			// Outer scrollable container
+			let output = `<div style="max-height: 360px; overflow-y: auto;">` +
+				`<div style="border: 2px solid ${borderColor}; ${glowEffect} border-radius: 8px; padding: 12px; overflow: hidden; ${backgroundStyle}">` +
 				`<table style="width: 100%; border-collapse: collapse;"><tr>`;
 		
 			if (card.imageUrl) {
@@ -49,8 +72,8 @@ export const infoCommands: Chat.ChatCommands = {
 			}
 
 			output += `<td style="vertical-align: top; line-height: 1.5;">` +
-				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px;">${card.name}</div>` +
-				`<div style="color: ${rarityColorHex}; font-weight: bold; font-size: 1em; margin-bottom: 12px;">${card.rarity}</div>`;
+				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">${card.name}</div>` +
+				`<div style="color: ${rarityColorHex}; font-weight: bold; font-size: 1em; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">${card.rarity}</div>`;
 
 			// Compact info table
 			const infoRows = [];
@@ -70,11 +93,11 @@ export const infoCommands: Chat.ChatCommands = {
 			});
 			output += `</table>`;
 
-			// Battle Stats Compact (if available)
+			// Battle Stats - IMPROVED with better contrast for both themes
 			if (card.battleStats) {
-				output += `<div style="margin-top: 12px; padding: 8px; background: rgba(255,255,255,0.4); border-radius: 4px; font-size: 0.85em;">` +
-					`<strong style="display: block; margin-bottom: 6px; color: #2c3e50;">⚔️ Battle Stats</strong>` +
-					`<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">`;
+				output += `<div style="margin-top: 12px; padding: 10px; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 0.85em; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">` +
+					`<strong style="display: block; margin-bottom: 8px; color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); font-size: 1.1em;">⚔️ Battle Stats</strong>` +
+					`<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">`;
 			
 				const stats = [
 					{ label: 'ATK', value: card.battleStats.attackPower, max: 300, color: '#e74c3c' },
@@ -85,11 +108,11 @@ export const infoCommands: Chat.ChatCommands = {
 				
 				stats.forEach(stat => {
 					const percent = Math.round((stat.value / stat.max) * 100);
-					output += `<div style="display: flex; align-items: center; gap: 6px;">` +
-						`<span style="color: #666; min-width: 32px;">${stat.label}:</span>` +
-						`<span style="font-weight: bold; color: ${stat.color}; min-width: 28px;">${stat.value}</span>` +
-						`<div style="flex: 1; background: #ecf0f1; height: 4px; border-radius: 2px; overflow: hidden;">` +
-						`<div style="background: ${stat.color}; height: 100%; width: ${percent}%;"></div>` +
+					output += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">` +
+						`<span style="color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); min-width: 38px; font-weight: bold; font-size: 0.95em;">${stat.label}:</span>` +
+						`<span style="font-weight: bold; color: ${stat.color}; text-shadow: 0 1px 3px rgba(0,0,0,0.3); min-width: 32px; font-size: 1.05em;">${stat.value}</span>` +
+						`<div style="flex: 1; background: rgba(255,255,255,0.4); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(0,0,0,0.2); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">` +
+						`<div style="background: ${stat.color}; height: 100%; width: ${percent}%; box-shadow: 0 0 6px ${stat.color}; transition: width 0.3s ease;"></div>` +
 						`</div>` +
 						`</div>`;
 				});
@@ -175,7 +198,7 @@ export const infoCommands: Chat.ChatCommands = {
 				output += `</div>`;
 			}
 
-			output += `</div>`;
+			output += `</div></div>`; // Close inner container and scrollable container
 			this.sendReplyBox(output);
 		} catch (e: any) {
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
