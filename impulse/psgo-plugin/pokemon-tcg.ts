@@ -4,18 +4,37 @@
  * @license MIT
  */
 import { MongoDB } from '../../impulse/mongodb_module';
-import { POKEMON_SETS, TCGSet, getRarityColor, getSubtypeColor,
-		  TCGCard, UserCollection, RARITIES, SUBTYPES, POKEMON_TYPES,
-		  SUPERTYPES, SPECIAL_SUBTYPES } from './tcg_data';
+import {
+	POKEMON_SETS,
+	TCGSet,
+	getRarityColor,
+	getSubtypeColor,
+	TCGCard,
+	UserCollection,
+	RARITIES,
+	SUBTYPES,
+	POKEMON_TYPES,
+	SUPERTYPES,
+	SPECIAL_SUBTYPES
+} from './tcg_data';
 import * as TCG_Economy from './tcg_economy';
 import * as TCG_UI from './tcg_ui';
 import { TCGCards, UserCollections, ShopStateCollection } from './tcg_collections';
 import * as TCG_Ranking from './tcg_ranking';
+import { 
+	SHOP_CONFIG, 
+	DAILY_CONFIG, 
+	PACK_CONFIG,
+	BATTLE_CONFIG,
+	PAGINATION_CONFIG,
+	UI_CONFIG,
+	VALIDATION_LIMITS,
+	ERROR_MESSAGES,
+	SUCCESS_MESSAGES,
+	FEATURE_FLAGS,
+	ConfigUtils
+} from './tcg_config';
 
-// State variables
-const SHOP_PACK_PRICE = 100;
-const SHOP_ROTATION_HOURS = 24;
-const SHOP_PACK_SLOTS = 5;
 const battleChallenges: Map<string, { 
 	from: string; 
 	wager: number; 
@@ -75,14 +94,14 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 
 	const commons = setCards.filter(c => c.rarity === 'Common');
 	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
-	const raresPool = setCards.filter(c => c.rarity.includes('Rare'));
+	const raresPool = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
 
 	const pack: TCGCard[] = [];
 	const usedCardIds = new Set<string>();
 
 	const pickRandom = (pool: TCGCard[]): TCGCard => {
 		let attempts = 0;
-		while (attempts < 50) {
+		while (attempts < PACK_CONFIG.MAX_UNIQUE_ATTEMPTS) {
 			const randomCard = pool[Math.floor(Math.random() * pool.length)];
 			if (!pool.length || !randomCard) break;
 			if (!usedCardIds.has(randomCard.cardId)) {
@@ -95,10 +114,10 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	};
 
 	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
-		if (setCards.length < 10) {
+		if (setCards.length < PACK_CONFIG.PACK_SIZE) {
 			return setCards;
 		}
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0; i < PACK_CONFIG.PACK_SIZE; i++) {
 			pack.push(pickRandom(setCards));
 		}
 		return pack;
@@ -106,21 +125,21 @@ async function generatePack(setId: string): Promise<TCGCard[] | null> {
 	
 	const reverseHoloPool = [...commons, ...uncommons];
 
-	for (let i = 0; i < 5; i++) pack.push(pickRandom(commons));
-	for (let i = 0; i < 3; i++) pack.push(pickRandom(uncommons));
-	pack.push(pickRandom(reverseHoloPool));
+	// Use config values
+	for (let i = 0; i < PACK_CONFIG.COMMONS_PER_PACK; i++) pack.push(pickRandom(commons));
+	for (let i = 0; i < PACK_CONFIG.UNCOMMONS_PER_PACK; i++) pack.push(pickRandom(uncommons));
+	for (let i = 0; i < PACK_CONFIG.REVERSE_HOLO_SLOTS; i++) pack.push(pickRandom(reverseHoloPool));
 
 	const hitRoll = Math.random() * 100;
 	let chosenRarityTier: string;
 
-	if (hitRoll <= 50) chosenRarityTier = 'Rare';
-	else if (hitRoll <= 75) chosenRarityTier = 'Rare Holo';
-	else if (hitRoll <= 90) {
-		const ultraRares = ['Rare Ultra', 'Illustration Rare', 'Rare Holo V', 'Rare Holo VMAX', 'Rare Holo VSTAR'];
-		chosenRarityTier = ultraRares[Math.floor(Math.random() * ultraRares.length)];
+	// Use config rarity rates
+	if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE) chosenRarityTier = 'Rare';
+	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO) chosenRarityTier = 'Rare Holo';
+	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO + PACK_CONFIG.RARITY_RATES.ULTRA_RARE) {
+		chosenRarityTier = PACK_CONFIG.ULTRA_RARES[Math.floor(Math.random() * PACK_CONFIG.ULTRA_RARES.length)];
 	} else {
-		const secretRares = ['Rare Secret', 'Special Illustration Rare', 'Hyper Rare', 'Rare Rainbow'];
-		chosenRarityTier = secretRares[Math.floor(Math.random() * secretRares.length)];
+		chosenRarityTier = PACK_CONFIG.SECRET_RARES[Math.floor(Math.random() * PACK_CONFIG.SECRET_RARES.length)];
 	}
 
 	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
@@ -171,171 +190,172 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async collection(target, room, user) {
-			if (!this.runBroadcast()) return;
-			await TCG_Ranking.getPlayerRanking(user.id);
-			const parts = target.split(',').map(p => p.trim());
-			const targetUsername = parts[0] || user.name;
-			const targetId = toID(targetUsername);
+	if (!this.runBroadcast()) return;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	const parts = target.split(',').map(p => p.trim());
+	const targetUsername = parts[0] || user.name;
+	const targetId = toID(targetUsername);
 
-			const query: any = {};
+	const query: any = {};
 
-			if (parts.length > 1) {
-				const filters = parts.slice(1);
-				for (const filter of filters) {
-					const [key, ...valueParts] = filter.split(':');
-					const value = valueParts.join(':').trim();
-					if (!key || !value) continue;
-					switch (toID(key)) {
-						case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
-							query[toID(key)] = { $regex: value, $options: 'i' };
-							break;
-						case 'type':
-							query.type = value;
-							break;
-						case 'subtype':
-							query.subtypes = { $regex: value, $options: 'i' };
-							break;
-						case 'hp':
-							const match = value.match(/([<>=]+)?\s*(\d+)/);
-							if (match) {
-								const operator = match[1] || '=';
-								const amount = parseInt(match[2]);
-								if (isNaN(amount)) break;
-								if (operator === '>') query.hp = { $gt: amount };
-								else if (operator === '>=') query.hp = { $gte: amount };
-								else if (operator === '<') query.hp = { $lt: amount };
-								else if (operator === '<=') query.hp = { $lte: amount };
-								else query.hp = amount;
-							}
-							break;
+	if (parts.length > 1) {
+		const filters = parts.slice(1);
+		for (const filter of filters) {
+			const [key, ...valueParts] = filter.split(':');
+			const value = valueParts.join(':').trim();
+			if (!key || !value) continue;
+			switch (toID(key)) {
+				case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
+					query[toID(key)] = { $regex: value, $options: 'i' };
+					break;
+				case 'type':
+					query.type = value;
+					break;
+				case 'subtype':
+					query.subtypes = { $regex: value, $options: 'i' };
+					break;
+				case 'hp':
+					const match = value.match(/([<>=]+)?\s*(\d+)/);
+					if (match) {
+						const operator = match[1] || '=';
+						const amount = parseInt(match[2]);
+						if (isNaN(amount)) break;
+						if (operator === '>') query.hp = { $gt: amount };
+						else if (operator === '>=') query.hp = { $gte: amount };
+						else if (operator === '<') query.hp = { $lt: amount };
+						else if (operator === '<=') query.hp = { $lte: amount };
+						else query.hp = amount;
 					}
-				}
+					break;
 			}
+		}
+	}
 
-			try {
-				const collection = await UserCollections.findOne({ userId: targetId });
-				if (!collection || !collection.cards || collection.cards.length === 0) {
-					this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
-					return;
-				}
+	try {
+		const collection = await UserCollections.findOne({ userId: targetId });
+		if (!collection || !collection.cards || collection.cards.length === 0) {
+			this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
+			return;
+		}
 
-				query.cardId = { $in: collection.cards.map(c => c.cardId) };
-				
-				const allOwnedCards = await TCGCards.find(query);
-				const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
+		query.cardId = { $in: collection.cards.map(c => c.cardId) };
+		
+		const allOwnedCards = await TCGCards.find(query);
+		const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
 
-				let totalPoints = 0;
-				for (const item of collection.cards) {
-					const card = cardMap.get(item.cardId);
-					if (card) {
-						totalPoints += getCardPoints(card) * item.quantity;
-					}
-				}
-
-				const filteredUserCards = collection.cards.filter(item => cardMap.has(item.cardId));
-
-				filteredUserCards.sort((a, b) => {
-					const cardA = cardMap.get(a.cardId);
-					const cardB = cardMap.get(b.cardId);
-					if (!cardA || !cardB) return 0;
-					const pointsDiff = getCardPoints(cardB) - getCardPoints(cardA);
-					if (pointsDiff !== 0) return pointsDiff;
-					return cardA.rarity.localeCompare(cardB.rarity);
-				});
-
-				const top100Cards = filteredUserCards.slice(0, 100);
-				const cardsToDisplay = top100Cards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
-				const quantityMap = new Map(top100Cards.map(item => [item.cardId, item.quantity]));
-				
-				let content = `<p><strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | <strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | <strong>Total Points:</strong> ${totalPoints}</p>`;
-				content += TCG_UI.generateCardTable(cardsToDisplay, ['name', 'set', 'rarity', 'type', 'quantity'], quantityMap);
-
-				if (filteredUserCards.length > 100) {
-					content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top 100 of ${filteredUserCards.length} matching cards.</em></p>`;
-				}
-				
-				const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, content);
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching collection: ${e.message}`);
+		let totalPoints = 0;
+		for (const item of collection.cards) {
+			const card = cardMap.get(item.cardId);
+			if (card) {
+				totalPoints += getCardPoints(card) * item.quantity;
 			}
-		},
+		}
+
+		const filteredUserCards = collection.cards.filter(item => cardMap.has(item.cardId));
+
+		filteredUserCards.sort((a, b) => {
+			const cardA = cardMap.get(a.cardId);
+			const cardB = cardMap.get(b.cardId);
+			if (!cardA || !cardB) return 0;
+			const pointsDiff = getCardPoints(cardB) - getCardPoints(cardA);
+			if (pointsDiff !== 0) return pointsDiff;
+			return cardA.rarity.localeCompare(cardB.rarity);
+		});
+
+		const topCards = filteredUserCards.slice(0, PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT);
+		const cardsToDisplay = topCards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
+		const quantityMap = new Map(topCards.map(item => [item.cardId, item.quantity]));
+		
+		let content = `<p><strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | <strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | <strong>Total Points:</strong> ${totalPoints}</p>`;
+		content += TCG_UI.generateCardTable(cardsToDisplay, ['name', 'set', 'rarity', 'type', 'quantity'], quantityMap);
+
+		if (filteredUserCards.length > PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT) {
+			content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top ${PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT} of ${filteredUserCards.length} matching cards.</em></p>`;
+		}
+		
+		const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, content);
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 
 		async daily(target, room, user) {
-			if (!this.runBroadcast()) return;
-			await TCG_Ranking.getPlayerRanking(user.id);
-			const userId = user.id;
-			const twentyFourHours = 24 * 60 * 60 * 1000;
-			const DAILY_CURRENCY_AWARD = 75;
+	if (!this.runBroadcast()) return;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	const userId = user.id;
+	const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
 
-			try {
-				let collection = await UserCollections.findOne({ userId });
+	try {
+		let collection = await UserCollections.findOne({ userId });
 
-				if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
-					const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
-					const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-					const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-					return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
-				}
+		if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
+			const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
+			const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+			const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+			return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
+		}
 
-				const availableSets = await TCGCards.distinct('set');
-				if (availableSets.length === 0) {
-					return this.errorReply("There are no sets available to open packs from.");
-				}
-				const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
-				
-				const pack = await generatePack(randomSetId);
-				if (!pack) {
-					return this.errorReply(`An error occurred while generating a pack from set "${randomSetId}".`);
-				}
+		const availableSets = await TCGCards.distinct('set');
+		if (availableSets.length === 0) {
+			return this.errorReply(ERROR_MESSAGES.SET_UNAVAILABLE);
+		}
+		const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
+		
+		const pack = await generatePack(randomSetId);
+		if (!pack) {
+			return this.errorReply(`${ERROR_MESSAGES.PACK_GENERATION_FAILED} from set "${randomSetId}".`);
+		}
 
-				if (!collection) {
-					collection = {
-						userId,
-						cards: [],
-						stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
-						lastUpdated: Date.now(),
-					};
-				} else {
-					if (!collection.cards) collection.cards = [];
-					if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
-				}
+		if (!collection) {
+			collection = {
+				userId,
+				cards: [],
+				stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+				lastUpdated: Date.now(),
+			};
+		} else {
+			if (!collection.cards) collection.cards = [];
+			if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+		}
 
-				let pointsGained = 0;
-				for (const card of pack) {
-					pointsGained += getCardPoints(card);
-					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
-					if (existingCard) {
-						existingCard.quantity++;
-					} else {
-						collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
-					}
-				}
-
-				collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
-				collection.stats.uniqueCards = collection.cards.length;
-				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
-				collection.currency = (collection.currency || 0) + DAILY_CURRENCY_AWARD;
-				collection.lastUpdated = Date.now();
-				collection.lastDaily = Date.now();
-
-				await UserCollections.upsert({ userId }, collection);
-
-				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
-				const displaySetName = setInfo ? setInfo.name : randomSetId;
-
-				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-				
-				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
-				const pageContent = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CURRENCY_AWARD} Credits</strong>!</p><hr/>${tableHtml}`;
-				const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, pageContent);
-				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
-				
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error claiming daily pack: ${e.message}`);
+		let pointsGained = 0;
+		for (const card of pack) {
+			pointsGained += getCardPoints(card);
+			const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+			if (existingCard) {
+				existingCard.quantity++;
+			} else {
+				collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
 			}
-		},
+		}
+
+		collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+		collection.stats.uniqueCards = collection.cards.length;
+		collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+		collection.currency = (collection.currency || 0) + DAILY_CONFIG.CURRENCY_AWARD;
+		collection.lastUpdated = Date.now();
+		collection.lastDaily = Date.now();
+
+		await UserCollections.upsert({ userId }, collection);
+
+		const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
+		const displaySetName = setInfo ? setInfo.name : randomSetId;
+
+		pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+		
+		const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
+		const pageContent = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CONFIG.CURRENCY_AWARD} Credits</strong>!</p><hr/>${tableHtml}`;
+		const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, pageContent);
+		await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 		
 		async openpack(target, room, user) {
 			this.checkCan('globalban');
@@ -460,94 +480,95 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const CARDS_PER_PAGE = 60;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const CARDS_PER_PAGE = PAGINATION_CONFIG.CARDS_PER_PAGE;
 
-			const filters = target.split(',').map(f => f.trim());
-			const query: any = {};
-			const searchTerms: string[] = [];
-			let page = 1;
+	const filters = target.split(',').map(f => f.trim());
+	const query: any = {};
+	const searchTerms: string[] = [];
+	let page = 1;
 
-			const commandArgs = [];
-			for (const filter of filters) {
-				const [key, ...valueParts] = filter.split(':');
-				const value = valueParts.join(':').trim();
-				if (!key || !value) continue;
-				if (toID(key) === 'page') {
-					const pageNum = parseInt(value);
-					if (!isNaN(pageNum) && pageNum > 0) page = pageNum;
-					continue; 
+	const commandArgs = [];
+	for (const filter of filters) {
+		const [key, ...valueParts] = filter.split(':');
+		const value = valueParts.join(':').trim();
+		if (!key || !value) continue;
+		if (toID(key) === 'page') {
+			const pageNum = parseInt(value);
+			if (!isNaN(pageNum) && pageNum > 0) page = pageNum;
+			continue; 
+		}
+		commandArgs.push(filter);
+		searchTerms.push(`<strong>${key}</strong>: "${value}"`);
+		switch (toID(key)) {
+			case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
+				query[toID(key)] = { $regex: value, $options: 'i' };
+				break;
+			case 'type':
+				query.type = value;
+				break;
+			case 'subtype':
+				query.subtypes = { $regex: value, $options: 'i' };
+				break;
+			case 'hp':
+				const match = value.match(/([<>=]+)?\s*(\d+)/);
+				if (match) {
+					const operator = match[1] || '=';
+					const amount = parseInt(match[2]);
+					if (isNaN(amount)) break;
+					if (operator === '>') query.hp = { $gt: amount };
+					else if (operator === '>=') query.hp = { $gte: amount };
+					else if (operator === '<') query.hp = { $lt: amount };
+					else if (operator === '<=') query.hp = { $lte: amount };
+					else query.hp = amount;
 				}
-				commandArgs.push(filter);
-				searchTerms.push(`<strong>${key}</strong>: "${value}"`);
-				switch (toID(key)) {
-					case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
-						query[toID(key)] = { $regex: value, $options: 'i' };
-						break;
-					case 'type':
-						query.type = value;
-						break;
-					case 'subtype':
-						query.subtypes = { $regex: value, $options: 'i' };
-						break;
-					case 'hp':
-						const match = value.match(/([<>=]+)?\s*(\d+)/);
-						if (match) {
-							const operator = match[1] || '=';
-							const amount = parseInt(match[2]);
-							if (isNaN(amount)) break;
-							if (operator === '>') query.hp = { $gt: amount };
-							else if (operator === '>=') query.hp = { $gte: amount };
-							else if (operator === '<') query.hp = { $lt: amount };
-							else if (operator === '<=') query.hp = { $lte: amount };
-							else query.hp = amount;
-						}
-						break;
-					default:
-						return this.errorReply(`Invalid filter: "${key}".`);
-				}
-			}
+				break;
+			default:
+				return this.errorReply(`Invalid filter: "${key}".`);
+		}
+	}
 
-			if (Object.keys(query).length === 0) {
-				return this.errorReply('No valid filters provided.');
-			}
+	if (Object.keys(query).length === 0) {
+		return this.errorReply('No valid filters provided.');
+	}
 
-			try {
-				const { data: paginatedResults, total: totalResults, pages: totalPages } = await TCGCards.findWithPagination(
-					query, { page, limit: CARDS_PER_PAGE }
-				);
+	try {
+		const { data: paginatedResults, total: totalResults, pages: totalPages } = await TCGCards.findWithPagination(
+			query, { page, limit: CARDS_PER_PAGE }
+		);
 
-				if (totalResults === 0) {
-					return this.sendReply(`No cards found matching your criteria.`);
-				}
+		if (totalResults === 0) {
+			return this.sendReply(`No cards found matching your criteria.`);
+		}
 
-				paginatedResults.sort((a, b) => {
-					const pointsDiff = getCardPoints(b) - getCardPoints(a);
-					if (pointsDiff !== 0) return pointsDiff;
-					return a.name.localeCompare(b.name);
-				});
+		paginatedResults.sort((a, b) => {
+			const pointsDiff = getCardPoints(b) - getCardPoints(a);
+			if (pointsDiff !== 0) return pointsDiff;
+			return a.name.localeCompare(b.name);
+		});
 
-				let content = `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
-				content += TCG_UI.generateCardTable(paginatedResults, ['id', 'name', 'set', 'rarity', 'type', 'subtypes', 'hp']);
-				content += `<p style="text-align:center; margin-top: 8px;">Showing ${paginatedResults.length} of ${totalResults} results.</p>`;
-				const commandString = `/tcg search ${commandArgs.join(', ')}`;
-				content += `<div style="text-align: center; margin-top: 5px;">`;
-				if (page > 1) {
-					content += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
-				}
-				content += `<strong>Page ${page} of ${totalPages}</strong>`;
-				if ((page * CARDS_PER_PAGE) < totalResults) {
-					content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
-				}
-				content += `</div>`;
+		let content = `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>`;
+		content += TCG_UI.generateCardTable(paginatedResults, ['id', 'name', 'set', 'rarity', 'type', 'subtypes', 'hp']);
+		content += `<p style="text-align:center; margin-top: 8px;">Showing ${paginatedResults.length} of ${totalResults} results.</p>`;
+		const commandString = `/tcg search ${commandArgs.join(', ')}`;
+		content += `<div style="text-align: center; margin-top: 5px;">`;
+		if (page > 1) {
+			content += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
+		}
+		content += `<strong>Page ${page} of ${totalPages}</strong>`;
+		if ((page * CARDS_PER_PAGE) < totalResults) {
+			content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
+		}
+		content += `</div>`;
 
-				const output = TCG_UI.buildPage('Search Results', content);
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error searching: ${e.message}`);
-			}
-		},
+		const output = TCG_UI.buildPage('Search Results', content);
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 		
 		async setprogress(target, room, user) {
 			await TCG_Ranking.getPlayerRanking(user.id);
@@ -636,16 +657,16 @@ export const commands: Chat.ChatCommands = {
 		const totalUsers = await UserCollections.count({});
 		const totalCardsInDb = await TCGCards.count({});
 
-		const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
+		const topCollectors = await UserCollections.findSorted({}, sortQuery, PAGINATION_CONFIG.LEADERBOARD_SIZE);
 	
-		let output = `<h3>TCG Collection Statistics</h3>`;
+		let output = `<div class="infobox">`;
+		output += `<h3>TCG Collection Statistics</h3>`;
 		output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
 		
-		// ADD SCROLLABLE CONTAINER HERE
-		output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		output += `<div style="max-height: ${PAGINATION_CONFIG.MAX_HEIGHT}; overflow-y: auto;">`;
 		
 		if (topCollectors.length > 0) {
-			output += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
+			output += `<h4>Top ${PAGINATION_CONFIG.LEADERBOARD_SIZE} Collectors by ${sortLabel}</h4>`;
 			output += `<table class="themed-table">`;
 			output += `<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
 
@@ -672,12 +693,14 @@ export const commands: Chat.ChatCommands = {
 		}
 		
 		output += `</div>`;
+		output += `</div>`;
 		
 		this.sendReplyBox(output);
 	} catch (e: any) {
-		return this.errorReply(`Error fetching stats: ${e.message}`);
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 	}
 },
+		
 
 		async sets(target, room, user) {
 	await TCG_Ranking.getPlayerRanking(user.id);
@@ -779,206 +802,212 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async battle(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			const [action, ...args] = target.split(',').map(p => p.trim());
+	await TCG_Ranking.getPlayerRanking(user.id);
+	const [action, ...args] = target.split(',').map(p => p.trim());
 
-			switch (toID(action)) {
-				case 'challenge':
-				case 'chal': {
-					if (!this.runBroadcast()) return;
-					const [targetUsername, wagerStr] = args;
-					if (!targetUsername || !wagerStr) {
-						return this.errorReply("Usage: /tcg battle challenge, [user], [wager]");
-					}
-					const wager = parseInt(wagerStr);
-					if (isNaN(wager) || wager <= 0) {
-						return this.errorReply("The wager must be a positive number.");
-					}
+	switch (toID(action)) {
+		case 'challenge':
+		case 'chal': {
+			if (!this.runBroadcast()) return;
+			const [targetUsername, wagerStr] = args;
+			if (!targetUsername || !wagerStr) {
+				return this.errorReply("Usage: /tcg battle challenge, [user], [wager]");
+			}
+			const wager = parseInt(wagerStr);
+			if (isNaN(wager) || wager < VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT || wager > BATTLE_CONFIG.MAX_WAGER) {
+				return this.errorReply(`The wager must be between ${VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT} and ${BATTLE_CONFIG.MAX_WAGER}.`);
+			}
 
-					const challengerId = user.id;
-					const targetId = toID(targetUsername);
+			const challengerId = user.id;
+			const targetId = toID(targetUsername);
 
-					if (challengerId === targetId) return this.errorReply("You cannot challenge yourself.");
-					if (battleChallenges.has(targetId) || battleChallenges.has(challengerId)) {
-						return this.errorReply("One of you already has a pending battle challenge.");
-					}
+			if (challengerId === targetId) return this.errorReply(ERROR_MESSAGES.SELF_ACTION_ERROR);
+			if (battleChallenges.has(targetId) || battleChallenges.has(challengerId)) {
+				return this.errorReply("One of you already has a pending battle challenge.");
+			}
 
-					try {
-						const challengerBalance = await TCG_Economy.getUserBalance(challengerId);
-						if (challengerBalance < wager) {
-							return this.errorReply("You do not have enough Credits to make that wager.");
-						}
-
-						const availableSets = await TCGCards.distinct('set');
-						if (availableSets.length === 0) {
-							return this.errorReply("There are no sets available for a pack battle.");
-						}
-						const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
-
-						battleChallenges.set(targetId, { from: challengerId, wager, setId: randomSetId });
-						setTimeout(() => {
-							if (battleChallenges.get(targetId)?.from === challengerId) {
-								battleChallenges.delete(targetId);
-								this.sendReply(`Your battle challenge to ${targetUsername} has expired.`);
-							}
-						}, 2 * 60 * 1000);
-
-						this.sendReply(`You have challenged ${targetUsername} to a ${wager} Credit pack battle! They have 2 minutes to accept.`);
-						const targetUserObj = Users.get(targetId);
-						if (targetUserObj) {
-							targetUserObj.sendTo(room, `|html|<div class="infobox"><strong>${user.name} has challenged you to a ${wager} Credit Pack Battle!</strong><br/>Type <code>/tcg battle accept, ${user.name}</code> to accept.</div>`);
-						}
-					} catch (e: any) {
-						return this.errorReply(`Error creating battle: ${e.message}`);
-					}
-					break;
+			try {
+				const challengerBalance = await TCG_Economy.getUserBalance(challengerId);
+				if (challengerBalance < wager) {
+					return this.errorReply(ERROR_MESSAGES.INSUFFICIENT_CREDITS);
 				}
 
-				case 'accept': {
-					const broadcast = this.broadcasting;
-					if (!this.runBroadcast()) return;
-					const [challengerName] = args;
-					if (!challengerName) return this.errorReply("Usage: /tcg battle accept, [user]");
-					
-					const acceptorId = user.id;
-					const challengerId = toID(challengerName);
-					
-					const challenge = battleChallenges.get(acceptorId);
-					if (!challenge || challenge.from !== challengerId) {
-						return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
+				const availableSets = await TCGCards.distinct('set');
+				if (availableSets.length === 0) {
+					return this.errorReply("There are no sets available for a pack battle.");
+				}
+				const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
+
+				battleChallenges.set(targetId, { from: challengerId, wager, setId: randomSetId });
+				setTimeout(() => {
+					if (battleChallenges.get(targetId)?.from === challengerId) {
+						battleChallenges.delete(targetId);
+						this.sendReply(`Your battle challenge to ${targetUsername} has expired.`);
 					}
-					
-					const { wager, setId } = challenge;
-					battleChallenges.delete(acceptorId);
+				}, BATTLE_CONFIG.TIMEOUT_MINUTES * 60 * 1000);
 
-					try {
-						const canAcceptorPay = await TCG_Economy.deductCurrency(acceptorId, wager);
-						if (!canAcceptorPay) {
-							return this.errorReply("You do not have enough Credits to accept this wager.");
-						}
+				this.sendReply(`You have challenged ${targetUsername} to a ${wager} Credit pack battle! They have ${BATTLE_CONFIG.TIMEOUT_MINUTES} minutes to accept.`);
+				const targetUserObj = Users.get(targetId);
+				if (targetUserObj) {
+					targetUserObj.sendTo(room, `|html|<div class="infobox"><strong>${user.name} has challenged you to a ${wager} Credit Pack Battle!</strong><br/>Type <code>/tcg battle accept, ${user.name}</code> to accept.</div>`);
+				}
+			} catch (e: any) {
+				return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+			}
+			break;
+		}
 
-						const canChallengerPay = await TCG_Economy.deductCurrency(challengerId, wager);
-						if (!canChallengerPay) {
-							await TCG_Economy.grantCurrency(acceptorId, wager); // Refund acceptor
-							return this.errorReply(`${challengerName} no longer has enough Credits for this wager. The battle is cancelled.`);
-						}
+		case 'accept': {
+			const broadcast = this.broadcasting;
+			if (!this.runBroadcast()) return;
+			const [challengerName] = args;
+			if (!challengerName) return this.errorReply("Usage: /tcg battle accept, [user]");
+			
+			const acceptorId = user.id;
+			const challengerId = toID(challengerName);
+			
+			const challenge = battleChallenges.get(acceptorId);
+			if (!challenge || challenge.from !== challengerId) {
+				return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
+			}
+			
+			const { wager, setId } = challenge;
+			battleChallenges.delete(acceptorId);
 
-						const [pack1, pack2] = await Promise.all([generatePack(setId), generatePack(setId)]);
-						if (!pack1 || !pack2) throw new Error("Could not generate packs for the battle.");
+			try {
+				const canAcceptorPay = await TCG_Economy.deductCurrency(acceptorId, wager);
+				if (!canAcceptorPay) {
+					return this.errorReply(ERROR_MESSAGES.INSUFFICIENT_CREDITS);
+				}
 
-						const points1 = pack1.reduce((sum, card) => sum + getCardPoints(card), 0);
-						const points2 = pack2.reduce((sum, card) => sum + getCardPoints(card), 0);
+				const canChallengerPay = await TCG_Economy.deductCurrency(challengerId, wager);
+				if (!canChallengerPay) {
+					await TCG_Economy.grantCurrency(acceptorId, wager); // Refund acceptor
+					return this.errorReply(`${challengerName} no longer has enough credits for this wager. The battle is cancelled.`);
+				}
 
-						let winnerId = '';
-						let winnerName = '';
-						if (points1 > points2) {
-							winnerId = challengerId;
-							winnerName = challengerName;
-						} else if (points2 > points1) {
-							winnerId = acceptorId;
-							winnerName = user.name;
-						}
+				const [pack1, pack2] = await Promise.all([generatePack(setId), generatePack(setId)]);
+				if (!pack1 || !pack2) throw new Error(ERROR_MESSAGES.PACK_GENERATION_FAILED);
 
-						if (winnerId) {
-							await TCG_Economy.grantCurrency(winnerId, wager * 2);
-						} else {
-							await Promise.all([
-								TCG_Economy.grantCurrency(challengerId, wager),
-								TCG_Economy.grantCurrency(acceptorId, wager),
-							]);
-						}
-						
-						const buildPackHtml = (pack: TCGCard[]) => {
-							pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-							return pack.map(c => `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`).join('');
-						};
+				const points1 = pack1.reduce((sum, card) => sum + getCardPoints(card), 0);
+				const points2 = pack2.reduce((sum, card) => sum + getCardPoints(card), 0);
 
-						let output = `<div class="infobox">`;
-						output += `<h2 style="text-align:center;">Pack Battle!</h2>`;
-						output += `<table style="width:100%;"><tr>`;
-						output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
-						output += `<strong>${Impulse.nameColor(challengerName, true)}'s Pack (Total: ${points1} Points)</strong>`;
-						output += `<table class="themed-table"> ${buildPackHtml(pack1)} </table>`;
-						output += `</td><td style="width:50%; vertical-align:top; padding-left:5px;">`;
-						output += `<strong>${Impulse.nameColor(user.name, true)}'s Pack (Total: ${points2} Points)</strong>`;
-						output += `<table class="themed-table"> ${buildPackHtml(pack2)} </table>`;
-						output += `</td></tr></table><hr/>`;
+				let winnerId = '';
+				let winnerName = '';
+				if (points1 > points2) {
+					winnerId = challengerId;
+					winnerName = challengerName;
+				} else if (points2 > points1) {
+					winnerId = acceptorId;
+					winnerName = user.name;
+				}
 
-						if (winnerName) {
-							output += `<h3 style="text-align:center; color:#2ecc71;">${winnerName} wins ${wager * 2} Credits!</h3>`;
-						} else {
-							output += `<h3 style="text-align:center; color:#f1c40f;">It's a tie! Wagers have been refunded.</h3>`;
-						}
-						
-						output += `</div>`;
-						
-						this.sendReplyBox(output);
-
-						if (!broadcast) {
-							const challengerObj = Users.get(challengerId);
-							if (challengerObj) {
-								challengerObj.sendTo(room, `|uhtml|battle-result-${challengerId}|${output}`);
-							}
-						}
-
-					} catch (e: any) {
-						await TCG_Economy.grantCurrency(acceptorId, wager);
-						await TCG_Economy.grantCurrency(challengerId, wager);
-						return this.errorReply(`An error occurred during the battle, wagers have been refunded: ${e.message}`);
-					}
-					break;
+				if (winnerId) {
+					await TCG_Economy.grantCurrency(winnerId, wager * 2);
+				} else {
+					await Promise.all([
+						TCG_Economy.grantCurrency(challengerId, wager),
+						TCG_Economy.grantCurrency(acceptorId, wager),
+					]);
 				}
 				
-				case 'reject': {
-					const [challengerName] = args;
-					if (!challengerName) return this.errorReply("Usage: /tcg battle reject, [user]");
-					const rejectorId = user.id;
-					const challengerId = toID(challengerName);
+				const buildPackHtml = (pack: TCGCard[]) => {
+					pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+					return pack.map(c => `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`).join('');
+				};
 
-					const challenge = battleChallenges.get(rejectorId);
-					if (!challenge || challenge.from !== challengerId) {
-						return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
-					}
-					
-					battleChallenges.delete(rejectorId);
-					this.sendReply(`You have rejected the battle challenge from ${challengerName}.`);
+				let output = `<div class="infobox">`;
+				output += `<h2 style="text-align:center;">Pack Battle!</h2>`;
+				output += `<table style="width:100%;"><tr>`;
+				output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+				output += `<strong>${Impulse.nameColor(challengerName, true)}'s Pack (Total: ${points1} Points)</strong>`;
+				output += `<table class="themed-table"> ${buildPackHtml(pack1)} </table>`;
+				output += `</td><td style="width:50%; vertical-align:top; padding-left:5px;">`;
+				output += `<strong>${Impulse.nameColor(user.name, true)}'s Pack (Total: ${points2} Points)</strong>`;
+				output += `<table class="themed-table"> ${buildPackHtml(pack2)} </table>`;
+				output += `</td></tr></table><hr/>`;
+
+				if (winnerName) {
+					output += `<h3 style="text-align:center; color:#2ecc71;">${winnerName} wins ${wager * 2} Credits!</h3>`;
+				} else {
+					output += `<h3 style="text-align:center; color:#f1c40f;">It's a tie! Wagers have been refunded.</h3>`;
+				}
+				
+				output += `</div>`;
+				
+				this.sendReplyBox(output);
+
+				if (!broadcast) {
 					const challengerObj = Users.get(challengerId);
-					if (challengerObj) challengerObj.sendTo(room, `${user.name} has rejected your battle challenge.`);
-					break;
+					if (challengerObj) {
+						challengerObj.sendTo(room, `|uhtml|battle-result-${challengerId}|${output}`);
+					}
 				}
 
-				case 'cancel': {
-					const challengerId = user.id;
-					let found = false;
-					for (const [targetId, challenge] of battleChallenges.entries()) {
-						if (challenge.from === challengerId) {
-							battleChallenges.delete(targetId);
-							found = true;
-							break;
-						}
-					}
-					if (found) {
-						this.sendReply("You have cancelled your outgoing battle challenge.");
-					} else {
-						this.errorReply("You do not have an outgoing battle challenge.");
-					}
-					break;
-				}
-
-				default:
-					this.errorReply("Invalid battle action. Use `challenge`, `accept`, `reject`, or `cancel`.");
+			} catch (e: any) {
+				await TCG_Economy.grantCurrency(acceptorId, wager);
+				await TCG_Economy.grantCurrency(challengerId, wager);
+				return this.errorReply(`An error occurred during the battle, wagers have been refunded: ${e.message}`);
 			}
-		},
+			break;
+		}
+		
+		case 'reject': {
+			const [challengerName] = args;
+			if (!challengerName) return this.errorReply("Usage: /tcg battle reject, [user]");
+			const rejectorId = user.id;
+			const challengerId = toID(challengerName);
+
+			const challenge = battleChallenges.get(rejectorId);
+			if (!challenge || challenge.from !== challengerId) {
+				return this.errorReply(`You do not have a pending battle challenge from ${challengerName}.`);
+			}
+			
+			battleChallenges.delete(rejectorId);
+			this.sendReply(`You have rejected the battle challenge from ${challengerName}.`);
+			const challengerObj = Users.get(challengerId);
+			if (challengerObj) challengerObj.sendTo(room, `${user.name} has rejected your battle challenge.`);
+			break;
+		}
+
+		case 'cancel': {
+			const challengerId = user.id;
+			let found = false;
+			for (const [targetId, challenge] of battleChallenges.entries()) {
+				if (challenge.from === challengerId) {
+					battleChallenges.delete(targetId);
+					found = true;
+					break;
+				}
+			}
+			if (found) {
+				this.sendReply("You have cancelled your outgoing battle challenge.");
+			} else {
+				this.errorReply("You do not have an outgoing battle challenge.");
+			}
+			break;
+		}
+
+		default:
+			this.errorReply("Invalid battle action. Use `challenge`, `accept`, `reject`, or `cancel`.");
+	}
+},
+		
 		
 		async currency(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const targetUser = toID(target) || user.id;
-			const targetUsername = target.trim() || user.name;
-			
-			const balance = await TCG_Economy.getUserBalance(targetUser);
-			this.sendReplyBox(`<strong>${Impulse.nameColor(targetUsername, true)}'s Balance:</strong> ${balance} Credits.`);
-		},
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const targetUser = toID(target) || user.id;
+	const targetUsername = target.trim() || user.name;
+	
+	try {
+		const balance = await TCG_Economy.getUserBalance(targetUser);
+		this.sendReplyBox(`<strong>${Impulse.nameColor(targetUsername, true)}'s Balance:</strong> ${balance} Credits.`);
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 
 		async givecurrency(target, room, user) {
 			this.checkCan('globalban');
@@ -1055,162 +1084,168 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async pay(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
-			if (!targetUser || !amountStr) {
-				return this.errorReply("Usage: /tcg pay [user], [amount]");
-			}
+	await TCG_Ranking.getPlayerRanking(user.id);
+	const [targetUser, amountStr] = target.split(',').map(p => p.trim());
+	if (!targetUser || !amountStr) {
+		return this.errorReply("Usage: /tcg pay [user], [amount]");
+	}
 
-			const amount = parseInt(amountStr);
-			if (isNaN(amount) || amount <= 0) {
-				return this.errorReply("Invalid amount. Amount must be a positive number.");
-			}
+	const amount = parseInt(amountStr);
+	if (isNaN(amount) || amount < VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT || amount > VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT) {
+		return this.errorReply(`Amount must be between ${VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT} and ${VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT}.`);
+	}
 
-			const fromUserId = user.id;
-			const toUserId = toID(targetUser);
+	const fromUserId = user.id;
+	const toUserId = toID(targetUser);
 
-			if (fromUserId === toUserId) {
-				return this.errorReply("You cannot pay yourself.");
-			}
+	if (fromUserId === toUserId) {
+		return this.errorReply(ERROR_MESSAGES.SELF_ACTION_ERROR);
+	}
 
-			const success = await TCG_Economy.transferCurrency(fromUserId, toUserId, amount);
+	try {
+		const success = await TCG_Economy.transferCurrency(fromUserId, toUserId, amount);
 
-			if (success) {
-				this.sendReply(`You have sent ${amount} Credits to ${targetUser}.`);
-				const toUserObj = Users.get(toUserId);
-				if (toUserObj) toUserObj.send(`|raw|You have received ${amount} Credits from ${user.name}.`);
-			} else {
-				this.errorReply(`Payment failed. You may not have enough credits.`);
-			}
-		},
+		if (success) {
+			this.sendReply(`You have sent ${amount} Credits to ${targetUser}.`);
+			const toUserObj = Users.get(toUserId);
+			if (toUserObj) toUserObj.send(`|raw|You have received ${amount} Credits from ${user.name}.`);
+		} else {
+			this.errorReply(`Payment failed. ${ERROR_MESSAGES.INSUFFICIENT_CREDITS}.`);
+		}
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 
 		async shop(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			const [action, ...args] = target.split(',').map(p => p.trim());
-			const userId = user.id;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	const [action, ...args] = target.split(',').map(p => p.trim());
+	const userId = user.id;
 
-			// Helper function to rotate the shop stock if needed
-			const rotateShopStock = async (): Promise<string[]> => {
-				const now = Date.now();
-		
-				// Fetch current shop state from database
-				let shopState = await ShopStateCollection.findOne({ _id: 'main' });
-		
-				// Check if rotation is needed
-				if (shopState && now - shopState.lastRotation < SHOP_ROTATION_HOURS * 60 * 60 * 1000 && shopState.stock.length > 0) {
-					return shopState.stock; // No rotation needed, return current stock
-				}
+	// Helper function to rotate the shop stock if needed
+	const rotateShopStock = async (): Promise<string[]> => {
+		const now = Date.now();
 
-				// Need to rotate - get available sets
-				const availableSets = await TCGCards.distinct('set');
-				if (availableSets.length === 0) {
-					// No sets available, update database with empty stock
-					await ShopStateCollection.upsert(
-						{ _id: 'main' },
-						{ stock: [], lastRotation: now }
-					);
-					return [];
-				}
+		// Fetch current shop state from database
+		let shopState = await ShopStateCollection.findOne({ _id: 'main' });
 
-					// Shuffle the available sets to get a random selection
-				for (let i = availableSets.length - 1; i > 0; i--) {
-					const j = Math.floor(Math.random() * (i + 1));
-					[availableSets[i], availableSets[j]] = [availableSets[j], availableSets[i]];
-				}
-		
-				// Get random sets for shop slots
-				const newStock = availableSets.slice(0, SHOP_PACK_SLOTS);
-		
-				// Update database with new stock and rotation time
-				await ShopStateCollection.upsert(
-					{ _id: 'main' },
-					{ stock: newStock, lastRotation: now }
-				);
-		
-				return newStock;
-			};
+		// Check if rotation is needed
+		if (shopState && now - shopState.lastRotation < SHOP_CONFIG.ROTATION_HOURS * 60 * 60 * 1000 && shopState.stock.length > 0) {
+			return shopState.stock; // No rotation needed, return current stock
+		}
 
-			try {
-				const currentStock = await rotateShopStock();
+		// Need to rotate - get available sets
+		const availableSets = await TCGCards.distinct('set');
+		if (availableSets.length === 0) {
+			// No sets available, update database with empty stock
+			await ShopStateCollection.upsert(
+				{ _id: 'main' },
+				{ stock: [], lastRotation: now }
+			);
+			return [];
+		}
 
-				if (toID(action) === 'buy') {
-					const setId = toID(args[0]);
-					if (!setId) {
-						return this.errorReply("Usage: /tcg shop buy, [set ID]");
-					}
+		// Shuffle the available sets to get a random selection
+		for (let i = availableSets.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[availableSets[i], availableSets[j]] = [availableSets[j], availableSets[i]];
+		}
 
-					if (!currentStock.includes(setId)) {
-						return this.errorReply(`The set "${setId}" is not currently in stock. Check /tcg shop to see the current rotation.`);
-					}
+		// Get random sets for shop slots
+		const newStock = availableSets.slice(0, SHOP_CONFIG.PACK_SLOTS);
 
-					const canAfford = await TCG_Economy.deductCurrency(userId, SHOP_PACK_PRICE);
-					if (!canAfford) {
-						return this.errorReply(`You don't have enough credits to buy this pack. You need ${SHOP_PACK_PRICE} Credits.`);
-					}
-			
-					let collection = await UserCollections.findOne({ userId });
+		// Update database with new stock and rotation time
+		await ShopStateCollection.upsert(
+			{ _id: 'main' },
+			{ stock: newStock, lastRotation: now }
+		);
 
-					if (!collection) {
-						collection = {
-							userId,
-							cards: [],
-							packs: [],
-							stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
-							lastUpdated: Date.now(),
-						};
-					} else {
-						if (!collection.cards) collection.cards = [];
-						if (!collection.packs) collection.packs = [];
-						if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
-					}
+		return newStock;
+	};
 
-					const packEntry = collection.packs.find(p => p.setId === setId);
-					if (packEntry) {
-						packEntry.quantity++;
-					} else {
-						collection.packs.push({ setId, quantity: 1 });
-					}
-			
-					await UserCollections.upsert({ userId }, collection);
-					await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
+	try {
+		const currentStock = await rotateShopStock();
 
-					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
-					const displaySetName = setInfo ? setInfo.name : setId;
-			
-					return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
-					
-				} else { // View the shop
-					if (!this.runBroadcast()) return;
-					const balance = await TCG_Economy.getUserBalance(userId);
-
-					let content = `<p>Welcome to the TCG Shop! New packs rotate in every 24 hours.</p>`;
-					content += `<p><strong>Your Balance:</strong> ${balance} Credits</p><hr/>`;
-			
-					if (currentStock.length === 0) {
-						content += `<p>The shop is currently empty. Please check back later.</p>`;
-					} else {
-						content += `<h4>Booster Packs for Sale</h4>`;
-						content += `<table class="themed-table">`;
-						content += `<tr class="themed-table-header"><th>Set Name</th><th>Set ID</th><th>Price</th><th></th></tr>`;
-						for (const setId of currentStock) {
-							const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
-							const setName = setInfo ? setInfo.name : setId;
-							content += `<tr class="themed-table-row">`;
-							content += `<td><strong>${setName}</strong></td>`;
-							content += `<td>${setId}</td>`;
-							content += `<td>${SHOP_PACK_PRICE} Credits</td>`;
-							content += `<td><button name="send" value="/tcg shop buy, ${setId}">Buy</button></td>`;
-							content += `</tr>`;
-						}
-						content += `</table>`;
-					}
-					const output = TCG_UI.buildPage('TCG Card Shop', content);
-					this.sendReplyBox(output);
-				}
-			} catch (e: any) {
-				return this.errorReply(`An error occurred in the shop: ${e.message}`);
+		if (toID(action) === 'buy') {
+			const setId = toID(args[0]);
+			if (!setId) {
+				return this.errorReply("Usage: /tcg shop buy, [set ID]");
 			}
-		},
+
+			if (!currentStock.includes(setId)) {
+				return this.errorReply(`The set "${setId}" is not currently in stock. Check /tcg shop to see the current rotation.`);
+			}
+
+			const canAfford = await TCG_Economy.deductCurrency(userId, SHOP_CONFIG.PACK_PRICE);
+			if (!canAfford) {
+				return this.errorReply(`${ERROR_MESSAGES.INSUFFICIENT_CREDITS}. You need ${SHOP_CONFIG.PACK_PRICE} Credits.`);
+			}
+	
+			let collection = await UserCollections.findOne({ userId });
+
+			if (!collection) {
+				collection = {
+					userId,
+					cards: [],
+					packs: [],
+					stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+					lastUpdated: Date.now(),
+				};
+			} else {
+				if (!collection.cards) collection.cards = [];
+				if (!collection.packs) collection.packs = [];
+				if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+			}
+
+			const packEntry = collection.packs.find(p => p.setId === setId);
+			if (packEntry) {
+				packEntry.quantity++;
+			} else {
+				collection.packs.push({ setId, quantity: 1 });
+			}
+	
+			await UserCollections.upsert({ userId }, collection);
+			await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
+
+			const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+			const displaySetName = setInfo ? setInfo.name : setId;
+	
+			return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
+			
+		} else { // View the shop
+			if (!this.runBroadcast()) return;
+			const balance = await TCG_Economy.getUserBalance(userId);
+
+			let content = `<p>Welcome to the TCG Shop! New packs rotate in every ${SHOP_CONFIG.ROTATION_HOURS} hours.</p>`;
+			content += `<p><strong>Your Balance:</strong> ${balance} Credits</p><hr/>`;
+	
+			if (currentStock.length === 0) {
+				content += `<p>${ERROR_MESSAGES.SHOP_EMPTY}. Please check back later.</p>`;
+			} else {
+				content += `<h4>Booster Packs for Sale</h4>`;
+				content += `<table class="themed-table">`;
+				content += `<tr class="themed-table-header"><th>Set Name</th><th>Set ID</th><th>Price</th><th></th></tr>`;
+				for (const setId of currentStock) {
+					const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+					const setName = setInfo ? setInfo.name : setId;
+					content += `<tr class="themed-table-row">`;
+					content += `<td><strong>${setName}</strong></td>`;
+					content += `<td>${setId}</td>`;
+					content += `<td>${SHOP_CONFIG.PACK_PRICE} Credits</td>`;
+					content += `<td><button name="send" value="/tcg shop buy, ${setId}">Buy</button></td>`;
+					content += `</tr>`;
+				}
+				content += `</table>`;
+			}
+			const output = TCG_UI.buildPage('TCG Card Shop', content);
+			this.sendReplyBox(output);
+		}
+	} catch (e: any) {
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+		
 		
 		async packs(target, room, user) {
 			await TCG_Ranking.getPlayerRanking(user.id);
