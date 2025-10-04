@@ -525,13 +525,15 @@ export async function getAvailableMilestones(userId: string): Promise<{
 	progress: number;
 	requirement: number;
 	canClaim: boolean;
+	alreadyClaimed: boolean;
 }[]> {
 	const milestones = await getWeeklyMilestones(userId);
 	const available = [];
 	
 	for (const [milestoneId, milestone] of Object.entries(WEEKLY_MILESTONES)) {
 		const progress = milestones[milestone.type];
-		const canClaim = progress >= milestone.requirement && !milestones.claimedMilestones.includes(milestoneId);
+		const alreadyClaimed = milestones.claimedMilestones.includes(milestoneId);
+		const canClaim = progress >= milestone.requirement && !alreadyClaimed;
 		
 		available.push({
 			milestoneId,
@@ -541,6 +543,7 @@ export async function getAvailableMilestones(userId: string): Promise<{
 			progress,
 			requirement: milestone.requirement,
 			canClaim,
+			alreadyClaimed,
 		});
 	}
 	
@@ -549,7 +552,7 @@ export async function getAvailableMilestones(userId: string): Promise<{
 		if (a.canClaim !== b.canClaim) return a.canClaim ? -1 : 1;
 		return b.reward - a.reward;
 	});
-}
+}		
 
 /**
  * Claim a milestone reward
