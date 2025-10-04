@@ -1349,14 +1349,23 @@ async rankedbattle(target, room, user) {
 		output += `<strong>${Impulse.nameColor(user.name, true)}</strong> challenged <strong>${Impulse.nameColor(targetUsername, true)}</strong>`;
 		output += `</div>`;
 
-		// Display ELO changes
-		output += `<div style="text-align:center; margin: 10px 0;">`;
-		output += `<span style="color: ${challengerColor}; font-weight: bold;">${user.name}: ${challengerRanking.rank} (${challengerRanking.elo} ${challengerEloChange})</span>`;
-		output += ` vs `;
-		output += `<span style="color: ${targetColor}; font-weight: bold;">${targetUsername}: ${targetRanking.rank} (${targetRanking.elo} ${targetEloChange})</span>`;
-		output += `</div>`;
+		// Keep the original compact layout for player info
+		output += `<table style="width:100%; margin: 10px 0;"><tr>`;
+		output += `<td style="width:50%; text-align:center; padding:10px; border-right: 1px solid #ddd;">`;
+		output += `<strong>${user.name}</strong><br/>`;
+		output += `Pack Value: <strong>${battle.challengerPackValue}</strong> pts<br/>`;
+		output += `<span style="color: ${challengerColor};">${challengerRanking.rank}</span><br/>`;
+		output += `<span style="color: ${battle.challengerEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${challengerRanking.elo} (${challengerEloChange})</span>`;
+		output += `</td>`;
+		output += `<td style="width:50%; text-align:center; padding:10px;">`;
+		output += `<strong>${targetUsername}</strong><br/>`;
+		output += `Pack Value: <strong>${battle.targetPackValue}</strong> pts<br/>`;
+		output += `<span style="color: ${targetColor};">${targetRanking.rank}</span><br/>`;
+		output += `<span style="color: ${battle.targetEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${targetRanking.elo} (${targetEloChange})</span>`;
+		output += `</td></tr></table>`;
 
-		// Display the packs
+		// Add the cards section below the main info
+		output += `<hr/>`;
 		output += `<table style="width:100%;"><tr>`;
 		output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
 		output += `<strong>${Impulse.nameColor(user.name, true)}'s Pack (Total: ${battle.challengerPackValue} Points)</strong>`;
