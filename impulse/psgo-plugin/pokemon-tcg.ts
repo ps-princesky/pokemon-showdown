@@ -611,96 +611,108 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async stats(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const sortBy = toID(target) || 'total';
-			let sortQuery: any = { 'stats.totalCards': -1 };
-			let sortLabel = 'Total Cards';
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const sortBy = toID(target) || 'total';
+	let sortQuery: any = { 'stats.totalCards': -1 };
+	let sortLabel = 'Total Cards';
 
-			switch (sortBy) {
-				case 'unique':
-					sortQuery = { 'stats.uniqueCards': -1 };
-					sortLabel = 'Unique Cards';
-					break;
-				case 'points':
-					sortQuery = { 'stats.totalPoints': -1 };
-					sortLabel = 'Total Points';
-					break;
-				case 'total':
-					break;
-				default:
-					return this.errorReply(`Invalid sort type. Use: total, unique, or points.`);
-			}
+	switch (sortBy) {
+		case 'unique':
+			sortQuery = { 'stats.uniqueCards': -1 };
+			sortLabel = 'Unique Cards';
+			break;
+		case 'points':
+			sortQuery = { 'stats.totalPoints': -1 };
+			sortLabel = 'Total Points';
+			break;
+		case 'total':
+			break;
+		default:
+			return this.errorReply(`Invalid sort type. Use: total, unique, or points.`);
+	}
 
-			try {
-				const totalUsers = await UserCollections.count({});
-				const totalCardsInDb = await TCGCards.count({});
+	try {
+		const totalUsers = await UserCollections.count({});
+		const totalCardsInDb = await TCGCards.count({});
 
-				const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
-				
-				let content = `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
-				
-				if (topCollectors.length > 0) {
-					content += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
-					content += `<table class="themed-table">`;
-					content += `<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
+		const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
+	
+		let output += `<h3>TCG Collection Statistics</h3>`;
+		output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
+		
+		// ADD SCROLLABLE CONTAINER HERE
+		output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		
+		if (topCollectors.length > 0) {
+			output += `<h4>Top 5 Collectors by ${sortLabel}</h4>`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
 
-					topCollectors.forEach((collector, idx) => {
-						let statValue = 0;
-						switch (sortBy) {
-							case 'unique':
-								statValue = collector.stats.uniqueCards;
-								break;
-							case 'points':
-								statValue = collector.stats.totalPoints || 0;
-								break;
-							default:
-								statValue = collector.stats.totalCards;
-								break;
-						}
-						content += `<tr class="themed-table-row">`;
-						content += `<td>${idx + 1}</td>`;
-						content += `<td>${Impulse.nameColor(collector.userId, true)}</td>`;
-						content += `<td>${statValue}</td>`;
-						content += `</tr>`;
-					});
-					content += `</table>`;
+			topCollectors.forEach((collector, idx) => {
+				let statValue = 0;
+				switch (sortBy) {
+					case 'unique':
+						statValue = collector.stats.uniqueCards;
+						break;
+					case 'points':
+						statValue = collector.stats.totalPoints || 0;
+						break;
+					default:
+						statValue = collector.stats.totalCards;
+						break;
 				}
-				
-				this.sendReplyBox(TCG_UI.buildPage('TCG Collection Statistics', content));
-			} catch (e: any) {
-				return this.errorReply(`Error fetching stats: ${e.message}`);
-			}
-		},
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${idx + 1}</td>`;
+				output += `<td>${Impulse.nameColor(collector.userId, true)}</td>`;
+				output += `<td>${statValue}</td>`;
+				output += `</tr>`;
+			});
+			output += `</table>`;
+		}
+		
+		output += `</div>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching stats: ${e.message}`);
+	}
+},
 
 		async sets(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			let content = `<div style="max-height: 380px; overflow-y: auto;">`;
-			const seriesGroups = new Map<string, TCGSet[]>();
-			POKEMON_SETS.forEach(set => {
-				if (!seriesGroups.has(set.series)) {
-					seriesGroups.set(set.series, []);
-				}
-				seriesGroups.get(set.series)!.push(set);
-			});
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	
+	
+	let output += `<h3>Pokemon TCG Sets</h3>`;
+	
+	// UPDATE: Use consistent height
+	output += `<div style="max-height: 360px; overflow-y: auto;">`;
+	const seriesGroups = new Map<string, TCGSet[]>();
+	POKEMON_SETS.forEach(set => {
+		if (!seriesGroups.has(set.series)) {
+			seriesGroups.set(set.series, []);
+		}
+		seriesGroups.get(set.series)!.push(set);
+	});
 
-			seriesGroups.forEach((sets, series) => {
-				content += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>`;
-				content += `<table class="themed-table">`;
-				content += `<tr class="themed-table-header"><th>Code</th><th>Name</th><th>Year</th></tr>`;
-				sets.forEach(set => {
-					content += `<tr class="themed-table-row">`;
-					content += `<td>${set.code}</td>`;
-					content += `<td><strong>${set.name}</strong></td>`;
-					content += `<td>${set.year}</td>`;
-					content += `</tr>`;
-				});
-				content += `</table>`;
-			});
-			content += `</div>`;
-			this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Sets', content));
-		},
+	seriesGroups.forEach((sets, series) => {
+		output += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>`;
+		output += `<table class="themed-table">`;
+		output += `<tr class="themed-table-header"><th>Code</th><th>Name</th><th>Year</th></tr>`;
+		sets.forEach(set => {
+			output += `<tr class="themed-table-row">`;
+			output += `<td>${set.code}</td>`;
+			output += `<td><strong>${set.name}</strong></td>`;
+			output += `<td>${set.year}</td>`;
+			output += `</tr>`;
+		});
+		output += `</table>`;
+	});
+	output += `</div>`;
+	this.sendReplyBox(output);
+},
+		
 
 		async rarities(target, room, user) {
 			await TCG_Ranking.getPlayerRanking(user.id);
@@ -1411,55 +1423,57 @@ async rankedbattle(target, room, user) {
 		return this.errorReply(`Error executing challenge: ${e.message}`);
 	}
 	break;
-}
-		case 'targets': {
-			if (!this.runBroadcast()) return;
-			
-			try {
-				const availableTargets = await TCG_Ranking.getAvailableChallengeTargets(user.id);
-				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
-
-				let output = `<div class="infobox">`;
-				output += `<h3>Available Challenge Targets</h3>`;
-				output += `<p>Challenges remaining: <strong>${challengeStatus.challengesRemaining}/10</strong></p>`;
-
-				if (availableTargets.length === 0) {
-					output += `<p>No available targets. You may have challenged all eligible players today.</p>`;
-				} else {
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header">`;
-					output += `<th>Rank</th><th>Player</th><th>Rating</th><th>W-L-D</th><th>Action</th>`;
-					output += `</tr>`;
-
-					availableTargets.slice(0, 20).forEach((target, index) => {
-						const rankColor = TCG_Ranking.getRankColor(target.rank);
-						const winRate = TCG_Ranking.getWinRate(target.wins, target.losses, target.draws);
-
-						output += `<tr class="themed-table-row">`;
-						output += `<td>${index + 1}</td>`;
-						output += `<td>${Impulse.nameColor(target.userId, true)}</td>`;
-						output += `<td><span style="color: ${rankColor};">${target.elo} (${target.rank})</span></td>`;
-						output += `<td>${target.wins}-${target.losses}-${target.draws} (${winRate}%)</td>`;
-						output += `<td><button name="send" value="/tcg rankedbattle challenge, ${target.userId}">Challenge</button></td>`;
-						output += `</tr>`;
-					});
-
-					output += `</table>`;
-					
-					if (availableTargets.length > 20) {
-						output += `<p style="text-align:center;">Showing top 20 of ${availableTargets.length} available targets.</p>`;
-					}
-				}
-
-				output += `</div>`;
-				this.sendReplyBox(output);
-
-			} catch (e: any) {
-				return this.errorReply(`Error fetching targets: ${e.message}`);
 			}
-			break;
-		}
 
+			case 'targets': {
+	if (!this.runBroadcast()) return;
+	
+	try {
+		const availableTargets = await TCG_Ranking.getAvailableChallengeTargets(user.id);
+		const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
+
+		
+		let output += `<h3>Available Challenge Targets</h3>`;
+		output += `<p>Challenges remaining: <strong>${challengeStatus.challengesRemaining}/10</strong></p>`;
+
+		if (availableTargets.length === 0) {
+			output += `<p>No available targets. You may have challenged all eligible players today.</p>`;
+		} else {
+			// ADD SCROLLABLE CONTAINER HERE
+			output += `<div style="max-height: 360px; overflow-y: auto;">`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header">`;
+			output += `<th>Rank</th><th>Player</th><th>Rating</th><th>W-L-D</th><th>Action</th>`;
+			output += `</tr>`;
+
+			availableTargets.slice(0, 20).forEach((target, index) => {
+				const rankColor = TCG_Ranking.getRankColor(target.rank);
+				const winRate = TCG_Ranking.getWinRate(target.wins, target.losses, target.draws);
+
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${index + 1}</td>`;
+				output += `<td>${Impulse.nameColor(target.userId, true)}</td>`;
+				output += `<td><span style="color: ${rankColor};">${target.elo} (${target.rank})</span></td>`;
+				output += `<td>${target.wins}-${target.losses}-${target.draws} (${winRate}%)</td>`;
+				output += `<td><button name="send" value="/tcg rankedbattle challenge, ${target.userId}">Challenge</button></td>`;
+				output += `</tr>`;
+			});
+
+			output += `</table>`;
+			output += `</div>`;
+			
+			if (availableTargets.length > 20) {
+				output += `<p style="text-align:center;">Showing top 20 of ${availableTargets.length} available targets.</p>`;
+			}
+		}
+		this.sendReplyBox(output);
+
+	} catch (e: any) {
+		return this.errorReply(`Error fetching targets: ${e.message}`);
+	}
+	break;
+}
+			
 			case 'status': {
 	if (!this.runBroadcast()) return;
 	
@@ -1552,218 +1566,236 @@ async ranking(target, room, user) {
 },
 
 		async leaderboard(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const type = toID(target) || 'elo';
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const type = toID(target) || 'elo';
 	
-			try {
-				let leaderboard;
-				let title;
+	try {
+		let leaderboard;
+		let title;
 		
-				if (type === 'seasonal') {
-					leaderboard = await TCG_Ranking.getSeasonalLeaderboard(10);
-					title = 'Seasonal Leaderboard (Wins)';
-				} else {
-					leaderboard = await TCG_Ranking.getLeaderboard(10);
-					title = 'ELO Leaderboard';
-				}
-				let output += `<h3>${title}</h3>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header">`;
-				output += `<th>Rank</th><th>Player</th><th>Rating/Rank</th><th>Record</th><th>Win Rate</th>`;
-				output += `</tr>`;
-
-				leaderboard.forEach((player, index) => {
-					const rankColor = TCG_Ranking.getRankColor(player.rank);
-					const winRate = TCG_Ranking.getWinRate(player.wins, player.losses, player.draws);
-					const displayValue = type === 'seasonal' ? 
-						`${player.seasonWins || 0} wins` : 
-						`${player.elo} (${player.rank})`;
+		if (type === 'seasonal') {
+			leaderboard = await TCG_Ranking.getSeasonalLeaderboard(10);
+			title = 'Seasonal Leaderboard (Wins)';
+		} else {
+			leaderboard = await TCG_Ranking.getLeaderboard(10);
+			title = 'ELO Leaderboard';
+		}
+		
+		let output += `<h3>${title}</h3>`;
+		
+		// ADD SCROLLABLE CONTAINER HERE
+		output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		output += `<table class="themed-table">`;
+		output += `<tr class="themed-table-header">`;
+		output += `<th>Rank</th><th>Player</th><th>Rating/Rank</th><th>Record</th><th>Win Rate</th>`;
+		output += `</tr>`;
+		
+		leaderboard.forEach((player, index) => {
+			const rankColor = TCG_Ranking.getRankColor(player.rank);
+			const winRate = TCG_Ranking.getWinRate(player.wins, player.losses, player.draws);
+			const displayValue = type === 'seasonal' ? 
+				`${player.seasonWins || 0} wins` : 
+				`${player.elo} (${player.rank})`;
 			
-					output += `<tr class="themed-table-row">`;
-					output += `<td>${index + 1}</td>`;
-					output += `<td>${Impulse.nameColor(player.userId, true)}</td>`;
-					output += `<td><span style="color: ${rankColor};">${displayValue}</span></td>`;
-					output += `<td>${player.wins}W-${player.losses}L-${player.draws}D</td>`;
-					output += `<td>${winRate}%</td>`;
-					output += `</tr>`;
-				});
+			output += `<tr class="themed-table-row">`;
+			output += `<td>${index + 1}</td>`;
+			output += `<td>${Impulse.nameColor(player.userId, true)}</td>`;
+			output += `<td><span style="color: ${rankColor};">${displayValue}</span></td>`;
+			output += `<td>${player.wins}W-${player.losses}L-${player.draws}D</td>`;
+			output += `<td>${winRate}%</td>`;
+			output += `</tr>`;
+		});
 		
-				output += `</table>`;
-				output += `<p style="text-align: center; margin-top: 10px;">`;
-				output += `<button name="send" value="/tcg leaderboard elo">ELO</button> | `;
-				output += `<button name="send" value="/tcg leaderboard seasonal">Seasonal</button>`;
-				output += `</p>`;
+		output += `</table>`;
+		output += `</div>`;
 		
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching leaderboard: ${e.message}`);
-			}
-		},
+		output += `<p style="text-align: center; margin-top: 10px;">`;
+		output += `<button name="send" value="/tcg leaderboard elo">ELO</button> | `;
+		output += `<button name="send" value="/tcg leaderboard seasonal">Seasonal</button>`;
+		output += `</p>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching leaderboard: ${e.message}`);
+	}
+},
+		
 
 		async battlehistory(target, room, user) {
-			if (!this.runBroadcast()) return;
-			const targetUser = target.trim() || user.name;
-			const targetId = toID(targetUser);
+	if (!this.runBroadcast()) return;
+	const targetUser = target.trim() || user.name;
+	const targetId = toID(targetUser);
 	
-			try {
-				const [battles, simulatedBattles] = await Promise.all([
-					TCG_Ranking.getPlayerBattleHistory(targetId, 5),
-					TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
-				]);
-				let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
+	try {
+		const [battles, simulatedBattles] = await Promise.all([
+			TCG_Ranking.getPlayerBattleHistory(targetId, 5),
+			TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
+		]);
+		let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
 		
-				const allBattles = [
-					...battles.map(b => ({ ...b, type: 'live' })),
-					...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
-				].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
+		const allBattles = [
+			...battles.map(b => ({ ...b, type: 'live' })),
+			...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
+		].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
 
-				if (allBattles.length === 0) {
-					output += `<p>${targetUser} has no ranked battle history.</p>`;
-				} else {
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header">`;
-					output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
-					output += `</tr>`;
+		if (allBattles.length === 0) {
+			output += `<p>${targetUser} has no ranked battle history.</p>`;
+		} else {
+			// ADD SCROLLABLE CONTAINER HERE
+			output += `<div style="max-height: 360px; overflow-y: auto;">`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header">`;
+			output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
+			output += `</tr>`;
 			
-					allBattles.forEach(battle => {
-						const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
-						const opponent = battle.type === 'live' ? 
-							(isPlayer1 ? battle.player2 : battle.player1) :
-							(isPlayer1 ? battle.targetId : battle.challengerId);
+			allBattles.forEach(battle => {
+				const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
+				const opponent = battle.type === 'live' ? 
+					(isPlayer1 ? battle.player2 : battle.player1) :
+					(isPlayer1 ? battle.targetId : battle.challengerId);
 				
-						const playerPackValue = battle.type === 'live' ?
-							(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
-							(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
+				const playerPackValue = battle.type === 'live' ?
+					(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
+					(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
 				
-						const opponentPackValue = battle.type === 'live' ?
-							(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
-							(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
+				const opponentPackValue = battle.type === 'live' ?
+					(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
+					(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
 				
-
-						const eloChange = battle.type === 'live' ?
-							(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
-							(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
+				const eloChange = battle.type === 'live' ?
+					(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
+					(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
 				
-						let result = 'Draw';
-						let resultColor = '#f1c40f';
-						if (battle.winner === targetId) {
-							result = 'Win';
-							resultColor = '#2ecc71';
-						} else if (battle.winner && battle.winner !== targetId) {
-							result = 'Loss';
-							resultColor = '#e74c3c';
-						}
-				
-						const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
-						const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
-						const date = new Date(battle.battleTime).toLocaleDateString();
-						const battleType = battle.type === 'live' ? '🎯' : '🤖';
-				
-						output += `<tr class="themed-table-row">`;
-						output += `<td>${battleType}</td>`;
-						output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
-						output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
-						output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
-						output += `<td>${playerPackValue} vs ${opponentPackValue}</td>`;
-						output += `<td>${date}</td>`;
-						output += `</tr>`;
-					});
-			
-					output += `</table>`;
-					output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
+				let result = 'Draw';
+				let resultColor = '#f1c40f';
+				if (battle.winner === targetId) {
+					result = 'Win';
+					resultColor = '#2ecc71';
+				} else if (battle.winner && battle.winner !== targetId) {
+					result = 'Loss';
+					resultColor = '#e74c3c';
 				}
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching battle history: ${e.message}`);
-			}
-		},
+				
+				const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
+				const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
+				const date = new Date(battle.battleTime).toLocaleDateString();
+				const battleType = battle.type === 'live' ? '🎯' : '🤖';
+				
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${battleType}</td>`;
+				output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
+				output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
+				output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
+				output += `<td>${playerPackValue} vs ${opponentPackValue}</td>`;
+				output += `<td>${date}</td>`;
+				output += `</tr>`;
+			});
+			
+			output += `</table>`;
+			output += `</div>`;
+			output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
+		}
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching battle history: ${e.message}`);
+	}
+},
 
 		async season(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const [action] = target.split(',').map(p => p.trim());
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const [action] = target.split(',').map(p => p.trim());
 	
-			try {
-				if (toID(action) === 'end' && this.checkCan('globalban')) {
-					// Admin command to force end season
-					const success = await TCG_Ranking.forceEndSeason();
-					if (success) {
-						this.sendReply("Current season has been ended and rewards distributed. New season started!");
-					} else {
-						this.errorReply("No active season found to end.");
-					}
-					return;
-				}
-		
-				// Show current season info
-				const seasonInfo = await TCG_Ranking.getCurrentSeasonInfo();
-				if (!seasonInfo) {
-					return this.sendReplyBox("No active season found.");
-				}
-		
-				const { season, daysRemaining, hoursRemaining } = seasonInfo;
-		
-				let output += `<h3>${season.name}</h3>`;
-				output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
-				output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
-				output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
-		
-				output += `<h4>Season Rewards (Top 10)</h4>`;
-				output += `<table class="themed-table">`;
-				output += `<tr class="themed-table-header"><th>Rank</th><th>Credits</th><th>Title</th></tr>`;
-		
-				Object.entries(TCG_Ranking.SEASON_REWARDS).forEach(([rank, reward]) => {
-					output += `<tr class="themed-table-row">`;
-					output += `<td>#${rank}</td>`;
-					output += `<td>${reward.credits}</td>`;
-					output += `<td>${reward.title}</td>`;
-					output += `</tr>`;
-				});
-		
-				output += `</table>`;
-		
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching season info: ${e.message}`);
+	try {
+		if (toID(action) === 'end' && this.checkCan('globalban')) {
+			// Admin command to force end season
+			const success = await TCG_Ranking.forceEndSeason();
+			if (success) {
+				this.sendReply("Current season has been ended and rewards distributed. New season started!");
+			} else {
+				this.errorReply("No active season found to end.");
 			}
-		},
+			return;
+		}
 		
+		// Show current season info
+		const seasonInfo = await TCG_Ranking.getCurrentSeasonInfo();
+		if (!seasonInfo) {
+			return this.sendReplyBox("No active season found.");
+		}
+		
+		const { season, daysRemaining, hoursRemaining } = seasonInfo;
+		
+		let output += `<h3>${season.name}</h3>`;
+		output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
+		output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
+		output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
+		
+		// ADD SCROLLABLE CONTAINER HERE
+		output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		output += `<h4>Season Rewards (Top 10)</h4>`;
+		output += `<table class="themed-table">`;
+		output += `<tr class="themed-table-header"><th>Rank</th><th>Credits</th><th>Title</th></tr>`;
+		
+		Object.entries(TCG_Ranking.SEASON_REWARDS).forEach(([rank, reward]) => {
+			output += `<tr class="themed-table-row">`;
+			output += `<td>#${rank}</td>`;
+			output += `<td>${reward.credits}</td>`;
+			output += `<td>${reward.title}</td>`;
+			output += `</tr>`;
+		});
+		
+		output += `</table>`;
+		output += `</div>`;
+		
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching season info: ${e.message}`);
+	}
+},
+		
+
 		async seasonhistory(target, room, user) {
-			await TCG_Ranking.getPlayerRanking(user.id);
-			if (!this.runBroadcast()) return;
-			const targetUser = target.trim() || user.name;
-			const targetId = toID(targetUser);
+	await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	const targetUser = target.trim() || user.name;
+	const targetId = toID(targetUser);
 	
-			try {
-				const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
+	try {
+		const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
 		
-				let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
+		let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
 		
-				if (seasonRewards.length === 0) {
-					output += `<p>${targetUser} has not received any season rewards yet.</p>`;
-				} else {
-					output += `<table class="themed-table">`;
-					output += `<tr class="themed-table-header"><th>Season</th><th>Rank</th><th>Credits</th><th>Title</th><th>Date</th></tr>`;
+		if (seasonRewards.length === 0) {
+			output += `<p>${targetUser} has not received any season rewards yet.</p>`;
+		} else {
+			// ADD SCROLLABLE CONTAINER HERE
+			output += `<div style="max-height: 360px; overflow-y: auto;">`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header"><th>Season</th><th>Rank</th><th>Credits</th><th>Title</th><th>Date</th></tr>`;
 			
-					seasonRewards.forEach(reward => {
-						const date = new Date(reward.claimedAt).toLocaleDateString();
-						output += `<tr class="themed-table-row">`;
-						output += `<td>${reward.seasonId.replace(/season_(\d+)_.*/, 'Season $1')}</td>`;
-						output += `<td>#${reward.rank}</td>`;
-						output += `<td>${reward.credits}</td>`;
-						output += `<td>${reward.title || '-'}</td>`;
-						output += `<td>${date}</td>`;
-						output += `</tr>`;
-					});
+			seasonRewards.forEach(reward => {
+				const date = new Date(reward.claimedAt).toLocaleDateString();
+				output += `<tr class="themed-table-row">`;
+				output += `<td>${reward.seasonId.replace(/season_(\d+)_.*/, 'Season $1')}</td>`;
+				output += `<td>#${reward.rank}</td>`;
+				output += `<td>${reward.credits}</td>`;
+				output += `<td>${reward.title || '-'}</td>`;
+				output += `<td>${date}</td>`;
+				output += `</tr>`;
+			});
 			
-					output += `</table>`;
-				}
-				this.sendReplyBox(output);
-			} catch (e: any) {
-				return this.errorReply(`Error fetching season history: ${e.message}`);
-			}
-		},
+			output += `</table>`;
+			output += `</div>`;
+		}
+	
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching season history: ${e.message}`);
+	}
+},
+		
 
 		async milestones(target, room, user) {
 			if (!this.runBroadcast()) return;
