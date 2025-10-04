@@ -3,7 +3,6 @@
  * Handles ELO rating calculations and competitive battle rankings.
  */
 
-import { MongoDB } from '../../mongodb_module';
 import { 
 	PlayerRanking,
 	BattleHistory,
@@ -342,7 +341,11 @@ export async function updatePlayerRanking(
 	}
 	
 	// SAVE THE RANKING FIRST before checking milestones
-	await PlayerRankings.upsert({ userId }, ranking);
+	await PlayerRankings.updateOne(
+		{ userId },
+		{ $set: ranking },
+		{ upsert: true }
+	);
 	
 	// Check for ELO milestones (only if ELO increased)
 	let eloMilestones = [];
@@ -491,7 +494,11 @@ export async function getWeeklyMilestones(userId: string): Promise<WeeklyMilesto
 			claimedMilestones: [],
 			totalMilestoneCredits: 0,
 		};
-		await WeeklyMilestonesCollection.upsert({ userId }, milestones);
+		await WeeklyMilestonesCollection.updateOne(
+			{ userId },
+			{ $set: milestones },
+			{ upsert: true }
+		);
 	}
 	
 	return milestones;
@@ -511,7 +518,11 @@ export async function updateMilestoneProgress(
 	milestones[type] += amount;
 	
 	// Save progress
-	await WeeklyMilestonesCollection.upsert({ userId }, milestones);
+	await WeeklyMilestonesCollection.updateOne(
+		{ userId },
+		{ $set: milestones },
+		{ upsert: true }
+	);
 }
 
 /**
@@ -584,7 +595,11 @@ export async function claimMilestone(userId: string, milestoneId: string): Promi
 	milestones.totalMilestoneCredits += milestone.reward;
 	
 	await Promise.all([
-		WeeklyMilestonesCollection.upsert({ userId }, milestones),
+		WeeklyMilestonesCollection.updateOne(
+			{ userId },
+			{ $set: milestones },
+			{ upsert: true }
+		),
 		TCG_Economy.grantCurrency(userId, milestone.reward)
 	]);
 	
@@ -648,7 +663,11 @@ export async function getDailyChallenges(userId: string): Promise<DailyChallenge
 		dailyChallenge.lastReset = todayStart;
 		dailyChallenge.challengeHistory = [];
 		dailyChallenge.totalCreditsEarnedToday = 0;
-		await DailyChallenges.upsert({ userId }, dailyChallenge);
+		await DailyChallenges.updateOne(
+			{ userId },
+			{ $set: dailyChallenge },
+			{ upsert: true }
+		);
 	}
 	
 	return dailyChallenge;
@@ -663,12 +682,9 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
 	
 	// Get ALL players excluding the challenger and those already challenged today
 	// No battle requirement - anyone can be challenged
-	const allPlayers = await PlayerRankings.findSorted(
-		{
-			userId: { $ne: challengerId }
-		},
-		{ elo: -1 },
-		LEADERBOARD_CHALLENGE_RANGE
+	const allPlayers = await PlayerRankings.find(
+		{ userId: { $ne: challengerId } },
+		{ sort: { elo: -1 }, limit: LEADERBOARD_CHALLENGE_RANGE }
 	);
 	
 	// If no existing players, create a dummy ranking for the challenger to get started
@@ -883,7 +899,11 @@ export async function executeSimulatedChallenge(
 			timestamp: Date.now(),
 			creditsEarned: challengerCredits,
 		});
-		await DailyChallenges.upsert({ userId: challengerId }, dailyChallenge);
+		await DailyChallenges.updateOne(
+			{ userId: challengerId },
+			{ $set: dailyChallenge },
+			{ upsert: true }
+		);
 		
 		return {
 			success: true,
@@ -931,7 +951,7 @@ export async function getDailyChallengeStatus(userId: string): Promise<{
  * Get top players by ELO
  */
 export async function getLeaderboard(limit: number = 10): Promise<PlayerRanking[]> {
-	return PlayerRankings.findSorted({}, { elo: -1 }, limit);
+	return PlayerRankings.find({}, { sort: { elo: -1 }, limit });
 }
 
 /**
@@ -939,7 +959,7 @@ export async function getLeaderboard(limit: number = 10): Promise<PlayerRanking[
  */
 export async function getPlayerRankPosition(userId: string): Promise<number> {
 	const playerRanking = await getPlayerRanking(userId);
-	const higherRankedCount = await PlayerRankings.count({ elo: { $gt: playerRanking.elo } });
+	const higherRankedCount = await PlayerRankings.countDocuments({ elo: { $gt: playerRanking.elo } });
 	return higherRankedCount + 1;
 }
 
@@ -965,10 +985,9 @@ export async function getPlayersInRank(rank: string): Promise<PlayerRanking[]> {
  * Get seasonal leaderboard
  */
 export async function getSeasonalLeaderboard(limit: number = 10): Promise<PlayerRanking[]> {
-	return PlayerRankings.findSorted(
+	return PlayerRankings.find(
 		{ seasonWins: { $gt: 0 } },
-		{ seasonWins: -1, elo: -1 },
-		limit
+		{ sort: { seasonWins: -1, elo: -1 }, limit }
 	);
 }
 
@@ -978,10 +997,9 @@ export async function getSeasonalLeaderboard(limit: number = 10): Promise<Player
  * Get battle history for a player
  */
 export async function getPlayerBattleHistory(userId: string, limit: number = 10): Promise<BattleHistory[]> {
-	return BattleHistories.findSorted(
+	return BattleHistories.find(
 		{ $or: [{ player1: userId }, { player2: userId }] },
-		{ battleTime: -1 },
-		limit
+		{ sort: { battleTime: -1 }, limit }
 	);
 }
 
@@ -989,17 +1007,16 @@ export async function getPlayerBattleHistory(userId: string, limit: number = 10)
  * Get recent battles across all players
  */
 export async function getRecentBattles(limit: number = 20): Promise<BattleHistory[]> {
-	return BattleHistories.findSorted({}, { battleTime: -1 }, limit);
+	return BattleHistories.find({}, { sort: { battleTime: -1 }, limit });
 }
 
 /**
  * Get recent simulated battles for a user
  */
 export async function getSimulatedBattleHistory(userId: string, limit: number = 10): Promise<SimulatedBattle[]> {
-	return SimulatedBattles.findSorted(
+	return SimulatedBattles.find(
 		{ $or: [{ challengerId: userId }, { targetId: userId }] },
-		{ timestamp: -1 },
-		limit
+		{ sort: { timestamp: -1 }, limit }
 	);
 }
 
@@ -1020,7 +1037,7 @@ export async function initializeSeasonSystem(): Promise<void> {
  */
 async function createNewSeason(): Promise<RankingSeason> {
 	const now = Date.now();
-	const seasonNumber = await RankingSeasons.count({}) + 1;
+	const seasonNumber = await RankingSeasons.countDocuments({}) + 1;
 	
 	const season: RankingSeason = {
 		seasonId: `season_${seasonNumber}_${now}`,
@@ -1153,7 +1170,7 @@ export async function getCurrentSeason(): Promise<RankingSeason | null> {
  * Get season rewards for a user
  */
 export async function getUserSeasonRewards(userId: string): Promise<SeasonReward[]> {
-	return SeasonRewards.findSorted({ userId }, { claimedAt: -1 }, 10);
+	return SeasonRewards.find({ userId }, { sort: { claimedAt: -1 }, limit: 10 });
 }
 
 /**
@@ -1196,10 +1213,9 @@ export async function forceEndSeason(): Promise<boolean> {
  * Get completed seasons with their final leaderboards
  */
 export async function getCompletedSeasons(limit: number = 5): Promise<RankingSeason[]> {
-	return RankingSeasons.findSorted(
+	return RankingSeasons.find(
 		{ isCompleted: true },
-		{ endTime: -1 },
-		limit
+		{ sort: { endTime: -1 }, limit }
 	);
 }
 
@@ -1266,4 +1282,3 @@ export function getOpponentEloRange(playerElo: number): { min: number; max: numb
 		max: playerElo + range
 	};
 }
-
