@@ -88,7 +88,8 @@ export const coreCommands: Chat.ChatCommands = {
 		
 		try {
 			const balance = await TCG_Economy.getUserBalance(targetUser);
-			this.sendReplyBox(`<strong>${Impulse.nameColor(targetUsername, true)}'s Balance:</strong> ${balance} Credits.`);
+			const content = `<strong>${Impulse.nameColor(targetUsername, true)}'s Balance:</strong> ${balance} Credits.`;
+			this.sendReplyBox(content);
 		} catch (e: any) {
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
