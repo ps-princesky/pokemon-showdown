@@ -109,7 +109,7 @@ export const collectionCommands: Chat.ChatCommands = {
 			const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
 
 			let totalPoints = 0;
-			let totalBattleValue = 0; // NEW: Track total battle value
+			let totalBattleValue = 0;
 			for (const item of collection.cards) {
 				const card = cardMap.get(item.cardId);
 				if (card) {
@@ -122,7 +122,7 @@ export const collectionCommands: Chat.ChatCommands = {
 
 			const filteredUserCards = collection.cards.filter(item => cardMap.has(item.cardId));
 
-			// NEW: Enhanced sorting
+			// Enhanced sorting
 			filteredUserCards.sort((a, b) => {
 				const cardA = cardMap.get(a.cardId);
 				const cardB = cardMap.get(b.cardId);
@@ -143,7 +143,7 @@ export const collectionCommands: Chat.ChatCommands = {
 				}
 			});
 
-			// NEW: Pagination logic
+			// Pagination logic
 			const totalCards = filteredUserCards.length;
 			const totalPages = Math.ceil(totalCards / CARDS_PER_PAGE);
 			const startIndex = (page - 1) * CARDS_PER_PAGE;
@@ -153,32 +153,15 @@ export const collectionCommands: Chat.ChatCommands = {
 			const cardsToDisplay = paginatedCards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
 			const quantityMap = new Map(paginatedCards.map(item => [item.cardId, item.quantity]));
 			
-			// NEW: Enhanced stats display with battle value
-			let content = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;">` +
-				`<div style="padding: 10px; background: rgba(52,152,219,0.1); border: 2px solid #3498db; border-radius: 6px; text-align: center;">` +
-				`<div style="font-size: 1.2em; font-weight: bold; color: #3498db;">${collection.stats?.totalCards || 0}</div>` +
-				`<div style="font-size: 0.85em; color: #666;">Total Cards</div>` +
-				`</div>` +
-				`<div style="padding: 10px; background: rgba(155,89,182,0.1); border: 2px solid #9b59b6; border-radius: 6px; text-align: center;">` +
-				`<div style="font-size: 1.2em; font-weight: bold; color: #9b59b6;">${collection.stats?.uniqueCards || 0}</div>` +
-				`<div style="font-size: 0.85em; color: #666;">Unique Cards</div>` +
-				`</div>` +
-				`<div style="padding: 10px; background: rgba(241,196,15,0.1); border: 2px solid #f1c40f; border-radius: 6px; text-align: center;">` +
-				`<div style="font-size: 1.2em; font-weight: bold; color: #f39c12;">${totalPoints}</div>` +
-				`<div style="font-size: 0.85em; color: #666;">Total Points</div>` +
-				`</div>`;
+			// Stats summary above table
+			let content = `<p style="text-align: center; font-size: 1.1em; margin-bottom: 15px;">` +
+				`<strong>Total Cards:</strong> ${collection.stats?.totalCards || 0} | ` +
+				`<strong>Total Points:</strong> ${totalPoints} | ` +
+				`<strong>Unique Cards:</strong> ${collection.stats?.uniqueCards || 0} | ` +
+				`<strong>Total Battle Value:</strong> ${totalBattleValue}` +
+				`</p>`;
 			
-			// NEW: Total Battle Value stat
-			if (totalBattleValue > 0) {
-				content += `<div style="padding: 10px; background: rgba(231,76,60,0.1); border: 2px solid #e74c3c; border-radius: 6px; text-align: center;">` +
-					`<div style="font-size: 1.2em; font-weight: bold; color: #e74c3c;">⚔️ ${totalBattleValue}</div>` +
-					`<div style="font-size: 0.85em; color: #666;">Battle Power</div>` +
-					`</div>`;
-			}
-			
-			content += `</div>`;
-			
-			// NEW: Enhanced table with battle value column
+			// Table with battle value column
 			content += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
 				`<tr class="themed-table-header">` +
 				`<th>Name</th>` +
@@ -201,7 +184,7 @@ export const collectionCommands: Chat.ChatCommands = {
 					`<td>${card.type || card.supertype}</td>` +
 					`<td>${card.hp || '-'}</td>`;
 				
-				// NEW: Battle Value with color coding
+				// Battle Value with color coding
 				if (card.battleValue) {
 					let bvColor = '#95a5a6';
 					if (card.battleValue >= 150) bvColor = '#e74c3c';
@@ -223,7 +206,7 @@ export const collectionCommands: Chat.ChatCommands = {
 				content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top ${PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT} of ${filteredUserCards.length} matching cards.</em></p>`;
 			}
 			
-			// NEW: Sort controls
+			// Sort controls
 			content += `<div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">` +
 				`<strong style="font-size: 0.9em;">Sort by:</strong> ` +
 				`<button name="send" value="/tcg collection ${targetUsername}, sort:rarity">Rarity</button> ` +
@@ -268,7 +251,7 @@ export const collectionCommands: Chat.ChatCommands = {
 			const ownedCardIds = new Set(userCollection?.cards?.map(c => c.cardId) || []);
 			const missingCards: TCGCard[] = [];
 			let ownedCount = 0;
-			let totalBattleValue = 0; // NEW: Track battle value of missing cards
+			let totalBattleValue = 0;
 
 			for (const card of allSetCards) {
 				if (ownedCardIds.has(card.cardId)) {
@@ -286,7 +269,6 @@ export const collectionCommands: Chat.ChatCommands = {
 			
 			let content = `<p><strong>Collector:</strong> ${Impulse.nameColor(targetUsername, true)} | <strong>Completion:</strong> ${ownedCount} / ${totalInSet} cards (${percentage}%)</p>`;
 			
-			// NEW: Show potential battle value
 			if (totalBattleValue > 0 && missingCards.length > 0) {
 				content += `<p style="color: #e74c3c; font-weight: bold;">⚔️ Missing Battle Value: ${totalBattleValue}</p>`;
 			}
@@ -300,14 +282,14 @@ export const collectionCommands: Chat.ChatCommands = {
 			if (missingCards.length > 0) {
 				content += `<h4 style="margin-top: 15px;">Missing Cards:</h4>`;
 				
-				// NEW: Sort by battle value (highest first)
+				// Sort by battle value (highest first)
 				missingCards.sort((a, b) => {
 					const bvDiff = (b.battleValue || 0) - (a.battleValue || 0);
 					if (bvDiff !== 0) return bvDiff;
 					return getCardPoints(b) - getCardPoints(a);
 				});
 				
-				// NEW: Enhanced table with battle value
+				// Table with battle value
 				let tableHtml = `<div style="max-height: 300px; overflow-y: auto;"><table class="themed-table">` +
 					`<tr class="themed-table-header">` +
 					`<th>Name</th>` +
@@ -316,7 +298,7 @@ export const collectionCommands: Chat.ChatCommands = {
 					`</tr>`;
 				
 				for (const card of missingCards) {
-					const rarityColor = TCG_UI.getRarityColor(card.rarity);
+					const rarityColor = getRarityColor(card.rarity);
 					
 					tableHtml += `<tr class="themed-table-row">` +
 						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
@@ -388,14 +370,14 @@ export const collectionCommands: Chat.ChatCommands = {
 
 				const cards = await TCGCards.find({ cardId: { $in: collection.wishlist } }).toArray();
 				
-				// NEW: Sort by battle value (highest first)
+				// Sort by battle value (highest first)
 				cards.sort((a, b) => {
 					const bvDiff = (b.battleValue || 0) - (a.battleValue || 0);
 					if (bvDiff !== 0) return bvDiff;
 					return getCardPoints(b) - getCardPoints(a);
 				});
 
-				// NEW: Calculate total battle value
+				// Calculate total battle value
 				const totalBattleValue = cards.reduce((sum, card) => sum + (card.battleValue || 0), 0);
 				
 				let content = '';
@@ -403,7 +385,7 @@ export const collectionCommands: Chat.ChatCommands = {
 					content += `<p style="text-align: center; color: #e74c3c; font-weight: bold; margin-bottom: 10px;">⚔️ Total Wishlist Battle Value: ${totalBattleValue}</p>`;
 				}
 				
-				// NEW: Enhanced table with battle value
+				// Table with battle value
 				content += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
 					`<tr class="themed-table-header">` +
 					`<th>Name</th>` +
@@ -413,7 +395,7 @@ export const collectionCommands: Chat.ChatCommands = {
 					`</tr>`;
 				
 				for (const card of cards) {
-					const rarityColor = TCG_UI.getRarityColor(card.rarity);
+					const rarityColor = getRarityColor(card.rarity);
 					
 					content += `<tr class="themed-table-row">` +
 						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
