@@ -1,0 +1,145 @@
+/**
+ * Shared helper functions for TCG commands
+ */
+
+import { TCGCard, UserCollection } from '../../../impulse/psgo-plugin/tcg_data';
+import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { PACK_CONFIG, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
+
+/**
+ * Get card points from rarity
+ */
+export function getCardPoints(card: TCGCard): number {
+	switch (card.rarity) {
+		case 'Common': case '1st Edition': case 'Shadowless': return 5;
+		case 'Uncommon': return 10;
+		case 'Reverse Holo': return 15;
+		case 'Rare': return 20;
+		case 'Double Rare': case 'Promo': case 'Black Star Promo': return 25;
+		case 'Rare Holo': case 'Classic Collection': return 30;
+		case 'Rare Holo 1st Edition': return 35;
+		case 'Rare SP': return 40;
+		case 'Rare Holo EX': case 'Rare Holo GX': case 'Rare Holo V': return 45;
+		case 'Rare BREAK': case 'Rare Prime': case 'LEGEND': case 'Prism Star': return 50;
+		case 'Rare Holo VMAX': case 'Rare Holo VSTAR': return 55;
+		case 'Rare ex': return 60;
+		case 'Radiant Rare': return 60;
+		case 'Amazing Rare': case 'Shining': return 65;
+		case 'ACE SPEC Rare': case 'Rare ACE': return 70;
+		case 'Full Art': case 'Rare Ultra': return 75;
+		case 'Rare Shiny': case 'Shiny Rare': return 80;
+		case 'Trainer Gallery': case 'Character Rare': case 'Rare Shiny GX': case 'Shiny Ultra Rare': return 85;
+		case 'Illustration Rare': return 90;
+		case 'Rare Holo LV.X': return 95;
+		case 'Rare Holo Star': return 100;
+		case 'Character Super Rare': return 110;
+		case 'Rare Secret': return 120;
+		case 'Special Illustration Rare': return 150;
+		case 'Rare Rainbow': return 160;
+		case 'Gold Full Art': case 'Rare Gold': case 'Hyper Rare': return 175;
+		case 'Gold Star': return 200;
+		default: return 5;
+	}
+}
+
+/**
+ * Convert hex color to rgba
+ */
+export function hexToRgba(hex: string, alpha: number): string {
+	if (!/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
+		return `rgba(128, 128, 128, ${alpha})`;
+	}
+	let c = hex.substring(1).split('');
+	if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
+	const num = parseInt(c.join(''), 16);
+	const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * Generate a pack of cards
+ */
+export async function generatePack(setId: string): Promise<TCGCard[] | null> {
+	const setCards = await TCGCards.find({ set: setId });
+	if (setCards.length === 0) return null;
+
+	const commons = setCards.filter(c => c.rarity === 'Common');
+	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
+	const raresPool = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
+
+	const pack: TCGCard[] = [];
+	const usedCardIds = new Set<string>();
+
+	const pickRandom = (pool: TCGCard[]): TCGCard => {
+		let attempts = 0;
+		while (attempts < PACK_CONFIG.MAX_UNIQUE_ATTEMPTS) {
+			const randomCard = pool[Math.floor(Math.random() * pool.length)];
+			if (!pool.length || !randomCard) break;
+			if (!usedCardIds.has(randomCard.cardId)) {
+				usedCardIds.add(randomCard.cardId);
+				return randomCard;
+			}
+			attempts++;
+		}
+		return pool[Math.floor(Math.random() * pool.length)];
+	};
+
+	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
+		if (setCards.length < PACK_CONFIG.PACK_SIZE) {
+			return setCards;
+		}
+		for (let i = 0; i < PACK_CONFIG.PACK_SIZE; i++) {
+			pack.push(pickRandom(setCards));
+		}
+		return pack;
+	}
+	
+	const reverseHoloPool = [...commons, ...uncommons];
+
+	// Use config values
+	for (let i = 0; i < PACK_CONFIG.COMMONS_PER_PACK; i++) pack.push(pickRandom(commons));
+	for (let i = 0; i < PACK_CONFIG.UNCOMMONS_PER_PACK; i++) pack.push(pickRandom(uncommons));
+	for (let i = 0; i < PACK_CONFIG.REVERSE_HOLO_SLOTS; i++) pack.push(pickRandom(reverseHoloPool));
+
+	const hitRoll = Math.random() * 100;
+	let chosenRarityTier: string;
+
+	// Use config rarity rates
+	if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE) chosenRarityTier = 'Rare';
+	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO) chosenRarityTier = 'Rare Holo';
+	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO + PACK_CONFIG.RARITY_RATES.ULTRA_RARE) {
+		chosenRarityTier = PACK_CONFIG.ULTRA_RARES[Math.floor(Math.random() * PACK_CONFIG.ULTRA_RARES.length)];
+	} else {
+		chosenRarityTier = PACK_CONFIG.SECRET_RARES[Math.floor(Math.random() * PACK_CONFIG.SECRET_RARES.length)];
+	}
+
+	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
+	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
+	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
+	if (hitPool.length === 0) hitPool = raresPool;
+
+	pack.push(pickRandom(hitPool));
+	
+	return pack;
+}
+
+/**
+ * Ensure user has a collection record
+ */
+export async function ensureUserCollection(userId: string): Promise<UserCollection> {
+	let collection = await UserCollections.findOne({ userId });
+	if (!collection) {
+		collection = {
+			userId,
+			cards: [],
+			packs: [],
+			stats: { totalCards: 0, uniqueCards: 0, totalPoints: 0 },
+			lastUpdated: Date.now(),
+		};
+	} else {
+		if (!collection.cards) collection.cards = [];
+		if (!collection.packs) collection.packs = [];
+		if (!collection.stats) collection.stats = { totalCards: 0, uniqueCards: 0, totalPoints: 0 };
+	}
+	return collection;
+}
