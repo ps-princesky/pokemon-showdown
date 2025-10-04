@@ -13,10 +13,9 @@ import { TCGCards, UserCollections, ShopStateCollection } from './tcg_collection
 import * as TCG_Ranking from './tcg_ranking';
 
 // State variables
-const SHOP_PACK_PRICE = 150;
+const SHOP_PACK_PRICE = 100;
 const SHOP_ROTATION_HOURS = 24;
 const SHOP_PACK_SLOTS = 5;
-
 const battleChallenges: Map<string, { 
 	from: string; 
 	wager: number; 
