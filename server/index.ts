@@ -27,9 +27,8 @@ try {
 }
 
 import { FS, Repl } from '../lib';
-// Import MongoDB For Initialisation
+// Import MongoDB module (but NOT TCG modules yet - those will be loaded after connection)
 import { MongoDB } from '../impulse/mongodb_module';
-import * as TCG_Ranking from '../impulse/psgo-plugin/tcg_ranking';
 
 /*********************************************************
  * Set up most of our globals
@@ -116,6 +115,9 @@ async function initializeMongoDB() {
 		await MongoDB.connect(Config.mongodb);
 		Monitor.notice(`MongoDB connected successfully to database: ${Config.mongodb.database}`);
 		
+		// NOW it's safe to load TCG modules (using dynamic import)
+		const TCG_Ranking = await import('../impulse/psgo-plugin/tcg_ranking');
+		
 		// Run season maintenance after MongoDB is connected
 		await TCG_Ranking.runSeasonMaintenance();
 		
@@ -127,6 +129,8 @@ async function initializeMongoDB() {
 				Monitor.error('Error in season maintenance: ' + error);
 			}
 		}, 60 * 60 * 1000); // 1 hour
+		
+		Monitor.notice('TCG system initialized successfully');
 		
 	} catch (error) {
 		Monitor.error('Failed to connect to MongoDB: ' + error);
