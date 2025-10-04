@@ -7,7 +7,7 @@
 
 import { TCGCard } from './tcg_data';
 import { TCGCards } from './tcg_collections';
-import { BATTLE_CONFIG } from './tcg_config';
+import { BATTLE_CONFIG, STATUS_CONDITIONS, EFFECTIVENESS } from './tcg_config';
 
 // ==================== BATTLE INTERFACES ====================
 
@@ -17,7 +17,7 @@ export interface BattleParticipant {
 	maxHP: number;
 	energy: number;
 	status: 'normal' | 'paralyzed' | 'poisoned' | 'burned' | 'asleep' | 'confused';
-	statusTurns: number; // How many turns status has been active
+	statusTurns: number;
 }
 
 export interface BattleAction {
@@ -55,7 +55,7 @@ export interface BattleStats {
 
 export interface BattlePreview {
 	predictedWinner: 'player1' | 'player2' | 'toss-up';
-	winProbability: number; // 0-100
+	winProbability: number;
 	player1Advantages: string[];
 	player2Advantages: string[];
 	reasoning: string;
@@ -78,30 +78,30 @@ function getTypeEffectiveness(
 } {
 	let multiplier = 1.0;
 	let flatModifier = 0;
-	let effectiveness = 'normal';
+	let effectiveness = EFFECTIVENESS.NORMAL;
 	
 	// Check weaknesses
-	if (defenderWeaknesses && defenderWeaknesses.length > 0) {
+	if (BATTLE_CONFIG.ENABLE_TYPE_EFFECTIVENESS && defenderWeaknesses && defenderWeaknesses.length > 0) {
 		const weakness = defenderWeaknesses.find(w => w.type === attackerType);
 		if (weakness) {
 			if (weakness.value.includes('×')) {
 				const value = parseFloat(weakness.value.replace('×', ''));
-				multiplier = value;
+				multiplier = value || BATTLE_CONFIG.WEAKNESS_MULTIPLIER_DEFAULT;
 			} else if (weakness.value.includes('+')) {
 				flatModifier = parseInt(weakness.value.replace('+', ''));
 			}
-			effectiveness = 'super effective';
+			effectiveness = EFFECTIVENESS.SUPER_EFFECTIVE;
 		}
 	}
 	
 	// Check resistances
-	if (defenderResistances && defenderResistances.length > 0) {
+	if (BATTLE_CONFIG.ENABLE_TYPE_EFFECTIVENESS && defenderResistances && defenderResistances.length > 0) {
 		const resistance = defenderResistances.find(r => r.type === attackerType);
 		if (resistance) {
 			if (resistance.value.includes('-')) {
-				flatModifier = parseInt(resistance.value); // Already negative
+				flatModifier = parseInt(resistance.value);
 			}
-			effectiveness = 'not very effective';
+			effectiveness = EFFECTIVENESS.NOT_VERY_EFFECTIVE;
 		}
 	}
 	
@@ -126,9 +126,9 @@ function calculateDamage(
 	const damageBeforeModifiers = baseDamage;
 	let isCritical = false;
 	
-	// Critical hit chance (5%)
-	if (Math.random() < 0.05) {
-		baseDamage = Math.floor(baseDamage * 1.5);
+	// Critical hit chance
+	if (Math.random() < BATTLE_CONFIG.CRITICAL_HIT_CHANCE) {
+		baseDamage = Math.floor(baseDamage * BATTLE_CONFIG.CRITICAL_HIT_MULTIPLIER);
 		isCritical = true;
 	}
 	
@@ -144,25 +144,24 @@ function calculateDamage(
 	baseDamage += flatModifier;
 	
 	// Status effects on attacker
-	if (attacker.status === 'paralyzed') {
-		// Paralyzed Pokemon deal 50% damage
-		baseDamage = Math.floor(baseDamage * 0.5);
-	} else if (attacker.status === 'poisoned') {
-		// Poisoned Pokemon deal 75% damage
-		baseDamage = Math.floor(baseDamage * 0.75);
-	} else if (attacker.status === 'confused') {
-		// 50% chance to hit itself
-		if (Math.random() < 0.5) {
-			baseDamage = 0; // Confused and hurt itself
+	if (BATTLE_CONFIG.ENABLE_STATUS_CONDITIONS) {
+		if (attacker.status === STATUS_CONDITIONS.PARALYZED) {
+			baseDamage = Math.floor(baseDamage * BATTLE_CONFIG.PARALYZED_DAMAGE_MULTIPLIER);
+		} else if (attacker.status === STATUS_CONDITIONS.POISONED) {
+			baseDamage = Math.floor(baseDamage * BATTLE_CONFIG.POISONED_DAMAGE_MULTIPLIER);
+		} else if (attacker.status === STATUS_CONDITIONS.CONFUSED) {
+			if (Math.random() < BATTLE_CONFIG.CONFUSION_SELF_HIT_CHANCE) {
+				baseDamage = 0;
+			}
 		}
 	}
 	
-	// Random variance (±10%)
-	const variance = 0.9 + Math.random() * 0.2;
+	// Random variance
+	const variance = 1 - BATTLE_CONFIG.DAMAGE_VARIANCE + (Math.random() * BATTLE_CONFIG.DAMAGE_VARIANCE * 2);
 	baseDamage = Math.floor(baseDamage * variance);
 	
-	// Minimum 0 damage
-	baseDamage = Math.max(0, baseDamage);
+	// Minimum damage
+	baseDamage = Math.max(BATTLE_CONFIG.MIN_DAMAGE, baseDamage);
 	
 	return {
 		damage: baseDamage,
@@ -179,40 +178,43 @@ function applyStatusEffects(participant: BattleParticipant): {
 	damage: number;
 	message: string;
 } {
+	if (!BATTLE_CONFIG.ENABLE_STATUS_CONDITIONS) {
+		return { damage: 0, message: '' };
+	}
+	
 	let damage = 0;
 	let message = '';
 	
 	switch (participant.status) {
-		case 'poisoned':
-			damage = 10;
-			message = `${participant.card.name} is hurt by poison (10 damage)`;
+		case STATUS_CONDITIONS.POISONED:
+			damage = BATTLE_CONFIG.POISON_DAMAGE;
+			message = `${participant.card.name} is hurt by poison (${damage} damage)`;
 			break;
-		case 'burned':
-			damage = 20;
-			message = `${participant.card.name} is hurt by burn (20 damage)`;
+		case STATUS_CONDITIONS.BURNED:
+			damage = BATTLE_CONFIG.BURN_DAMAGE;
+			message = `${participant.card.name} is hurt by burn (${damage} damage)`;
 			break;
-		case 'asleep':
-			// 50% chance to wake up
-			if (Math.random() < 0.5) {
-				participant.status = 'normal';
+		case STATUS_CONDITIONS.ASLEEP:
+			if (Math.random() < BATTLE_CONFIG.SLEEP_WAKE_CHANCE) {
+				participant.status = STATUS_CONDITIONS.NORMAL as any;
 				participant.statusTurns = 0;
 				message = `${participant.card.name} woke up!`;
 			} else {
 				message = `${participant.card.name} is fast asleep`;
 			}
 			break;
-		case 'paralyzed':
-			// Paralysis wears off after 1 turn
-			if (participant.statusTurns >= 1) {
-				participant.status = 'normal';
+		case STATUS_CONDITIONS.PARALYZED:
+			if (participant.statusTurns >= BATTLE_CONFIG.PARALYSIS_DURATION) {
+				participant.status = STATUS_CONDITIONS.NORMAL as any;
 				participant.statusTurns = 0;
 				message = `${participant.card.name} is no longer paralyzed`;
 			}
 			break;
-		case 'confused':
-			// Confusion wears off after 2-4 turns
-			if (participant.statusTurns >= 2 + Math.floor(Math.random() * 3)) {
-				participant.status = 'normal';
+		case STATUS_CONDITIONS.CONFUSED:
+			const confusionDuration = BATTLE_CONFIG.CONFUSION_MIN_DURATION + 
+									 Math.floor(Math.random() * (BATTLE_CONFIG.CONFUSION_MAX_DURATION - BATTLE_CONFIG.CONFUSION_MIN_DURATION + 1));
+			if (participant.statusTurns >= confusionDuration) {
+				participant.status = STATUS_CONDITIONS.NORMAL as any;
 				participant.statusTurns = 0;
 				message = `${participant.card.name} snapped out of confusion`;
 			}
@@ -230,31 +232,30 @@ function checkStatusInfliction(attack: NonNullable<TCGCard['attacks']>[0]): {
 	status: BattleParticipant['status'];
 	chance: number;
 } | null {
+	if (!BATTLE_CONFIG.ENABLE_STATUS_CONDITIONS) {
+		return null;
+	}
+	
 	const attackText = (attack.text || '').toLowerCase();
 	
-	// Poison
 	if (attackText.includes('poison')) {
-		return { status: 'poisoned', chance: 0.3 };
+		return { status: STATUS_CONDITIONS.POISONED as any, chance: BATTLE_CONFIG.STATUS_INFLICT_CHANCE };
 	}
 	
-	// Burn
 	if (attackText.includes('burn')) {
-		return { status: 'burned', chance: 0.3 };
+		return { status: STATUS_CONDITIONS.BURNED as any, chance: BATTLE_CONFIG.STATUS_INFLICT_CHANCE };
 	}
 	
-	// Paralyze
 	if (attackText.includes('paralyze') || attackText.includes('paralysis')) {
-		return { status: 'paralyzed', chance: 0.3 };
+		return { status: STATUS_CONDITIONS.PARALYZED as any, chance: BATTLE_CONFIG.STATUS_INFLICT_CHANCE };
 	}
 	
-	// Sleep
 	if (attackText.includes('sleep') || attackText.includes('asleep')) {
-		return { status: 'asleep', chance: 0.5 };
+		return { status: STATUS_CONDITIONS.ASLEEP as any, chance: BATTLE_CONFIG.SLEEP_WAKE_CHANCE };
 	}
 	
-	// Confuse
 	if (attackText.includes('confuse') || attackText.includes('confusion')) {
-		return { status: 'confused', chance: 0.3 };
+		return { status: STATUS_CONDITIONS.CONFUSED as any, chance: BATTLE_CONFIG.STATUS_INFLICT_CHANCE };
 	}
 	
 	return null;
@@ -272,64 +273,62 @@ function selectBestAttack(
 		return null;
 	}
 	
-	// Filter attacks that can be used with current energy
 	const availableAttacks = participant.card.attacks.filter(
 		attack => attack.convertedEnergyCost <= participant.energy
 	);
 	
 	if (availableAttacks.length === 0) {
-		// Return cheapest attack to show energy requirement
 		return participant.card.attacks.reduce((cheapest, attack) => 
 			attack.convertedEnergyCost < cheapest.convertedEnergyCost ? attack : cheapest
 		);
 	}
 	
-	// Strategy: Choose attack based on situation
 	const opponentHPPercent = opponent.currentHP / opponent.maxHP;
 	
-	// Sort attacks by effectiveness
 	const scoredAttacks = availableAttacks.map(attack => {
 		let score = attack.damage;
 		
-		// Bonus for high damage when opponent is low HP
+		// Finishing blow bonus
 		if (opponentHPPercent < 0.3 && attack.damage >= opponent.currentHP) {
-			score += 100; // Prioritize finishing blow
+			score += BATTLE_CONFIG.AI_FINISHING_BLOW_BONUS;
 		}
 		
-		// Bonus for energy efficiency
+		// Energy efficiency
 		const efficiency = attack.damage / Math.max(1, attack.convertedEnergyCost);
-		score += efficiency * 10;
+		score += efficiency * BATTLE_CONFIG.AI_EFFICIENCY_WEIGHT;
 		
-		// Bonus for status effects
+		// Status effect bonus
 		const statusEffect = checkStatusInfliction(attack);
 		if (statusEffect) {
-			score += 20;
+			score += BATTLE_CONFIG.AI_STATUS_EFFECT_BONUS;
 		}
 		
-		// Bonus for type advantage
+		// Type advantage bonus
 		const attackerType = participant.card.type || 'Colorless';
 		const typeCheck = getTypeEffectiveness(
 			attackerType,
 			opponent.card.weaknesses,
 			opponent.card.resistances
 		);
-		if (typeCheck.effectiveness === 'super effective') {
-			score += 30;
+		if (typeCheck.effectiveness === EFFECTIVENESS.SUPER_EFFECTIVE) {
+			score += BATTLE_CONFIG.AI_TYPE_ADVANTAGE_BONUS;
 		}
 		
 		return { attack, score };
 	});
 	
-	// Return highest scoring attack
 	scoredAttacks.sort((a, b) => b.score - a.score);
 	return scoredAttacks[0].attack;
 }
 
 /**
- * Check if participant can act (not asleep)
+ * Check if participant can act
  */
 function canAct(participant: BattleParticipant): boolean {
-	return participant.status !== 'asleep';
+	if (!BATTLE_CONFIG.ENABLE_STATUS_CONDITIONS) {
+		return true;
+	}
+	return participant.status !== STATUS_CONDITIONS.ASLEEP;
 }
 
 // ==================== BATTLE SIMULATOR ====================
@@ -338,7 +337,6 @@ function canAct(participant: BattleParticipant): boolean {
  * Simulate a battle between two Pokemon cards
  */
 export async function simulateBattle(card1Id: string, card2Id: string): Promise<BattleResult> {
-	// Fetch cards from database
 	const [card1, card2] = await Promise.all([
 		TCGCards.findOne({ cardId: card1Id }),
 		TCGCards.findOne({ cardId: card2Id })
@@ -352,13 +350,12 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 		throw new Error('Both cards must be Pokémon');
 	}
 	
-	// Initialize battle participants
 	const player1: BattleParticipant = {
 		card: card1,
 		currentHP: card1.hp || 60,
 		maxHP: card1.hp || 60,
-		energy: BATTLE_CONFIG.STARTING_ENERGY || 3,
-		status: 'normal',
+		energy: BATTLE_CONFIG.STARTING_ENERGY,
+		status: STATUS_CONDITIONS.NORMAL as any,
 		statusTurns: 0
 	};
 	
@@ -366,12 +363,11 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 		card: card2,
 		currentHP: card2.hp || 60,
 		maxHP: card2.hp || 60,
-		energy: BATTLE_CONFIG.STARTING_ENERGY || 3,
-		status: 'normal',
+		energy: BATTLE_CONFIG.STARTING_ENERGY,
+		status: STATUS_CONDITIONS.NORMAL as any,
 		statusTurns: 0
 	};
 	
-	// Initialize stats tracking
 	const player1Stats: BattleStats = {
 		totalDamageDealt: 0,
 		totalDamageTaken: 0,
@@ -390,14 +386,12 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 	
 	const battleLog: BattleAction[] = [];
 	let currentTurn = 1;
-	const maxTurns = BATTLE_CONFIG.MAX_TURNS || 15;
+	const maxTurns = BATTLE_CONFIG.MAX_TURNS;
 	
-	// Determine who goes first (based on speed)
 	const player1Speed = card1.battleStats?.speed || 50;
 	const player2Speed = card2.battleStats?.speed || 50;
 	let isPlayer1Turn = player1Speed >= player2Speed;
 	
-	// Add battle start log
 	battleLog.push({
 		turn: 0,
 		attacker: 'System',
@@ -419,7 +413,7 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 		
 		attackerStats.turnsActive++;
 		
-		// Apply status effects at start of turn
+		// Apply status effects
 		const statusEffect = applyStatusEffects(attacker);
 		if (statusEffect.message) {
 			battleLog.push({
@@ -437,12 +431,8 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			attackerStats.totalDamageTaken += statusEffect.damage;
 		}
 		
-		// Check if knocked out by status
-		if (attacker.currentHP <= 0) {
-			break;
-		}
+		if (attacker.currentHP <= 0) break;
 		
-		// Check if can act
 		if (!canAct(attacker)) {
 			battleLog.push({
 				turn: currentTurn,
@@ -459,15 +449,13 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			continue;
 		}
 		
-		// Add energy at start of turn
-		attacker.energy += BATTLE_CONFIG.ENERGY_PER_TURN || 1;
-		attacker.energy = Math.min(10, attacker.energy);
+		// Add energy
+		attacker.energy += BATTLE_CONFIG.ENERGY_PER_TURN;
+		attacker.energy = Math.min(BATTLE_CONFIG.MAX_ENERGY, attacker.energy);
 		
-		// Select attack
 		const selectedAttack = selectBestAttack(attacker, defender, currentTurn);
 		
 		if (!selectedAttack) {
-			// No attacks available
 			battleLog.push({
 				turn: currentTurn,
 				attacker: attackerName,
@@ -482,7 +470,6 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			continue;
 		}
 		
-		// Check if enough energy
 		if (selectedAttack.convertedEnergyCost > attacker.energy) {
 			battleLog.push({
 				turn: currentTurn,
@@ -498,34 +485,29 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			continue;
 		}
 		
-		// Use energy
 		attacker.energy -= selectedAttack.convertedEnergyCost;
 		attackerStats.energyUsed += selectedAttack.convertedEnergyCost;
 		attackerStats.attacksUsed++;
 		
-		// Calculate damage
 		const damageResult = calculateDamage(attacker, defender, selectedAttack, currentTurn);
 		
-		// Apply damage
 		defender.currentHP = Math.max(0, defender.currentHP - damageResult.damage);
 		attackerStats.totalDamageDealt += damageResult.damage;
 		defenderStats.totalDamageTaken += damageResult.damage;
 		
-		// Check for status infliction
 		const statusInfliction = checkStatusInfliction(selectedAttack);
 		let statusMessage = '';
-		if (statusInfliction && defender.status === 'normal' && Math.random() < statusInfliction.chance) {
+		if (statusInfliction && defender.status === STATUS_CONDITIONS.NORMAL && Math.random() < statusInfliction.chance) {
 			defender.status = statusInfliction.status;
 			defender.statusTurns = 0;
 			statusMessage = ` ${defenderName} is now ${statusInfliction.status}!`;
 		}
 		
-		// Build action description
 		let description = `${attackerName} used ${selectedAttack.name}!`;
 		if (damageResult.isCritical) {
 			description += ' Critical hit!';
 		}
-		if (damageResult.effectiveness !== 'normal') {
+		if (damageResult.effectiveness !== EFFECTIVENESS.NORMAL) {
 			description += ` It's ${damageResult.effectiveness}!`;
 		}
 		if (damageResult.damage === 0 && damageResult.damageBeforeModifiers > 0) {
@@ -550,7 +532,6 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			description
 		});
 		
-		// Check for knockout
 		if (defender.currentHP <= 0) {
 			battleLog.push({
 				turn: currentTurn,
@@ -564,7 +545,6 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 			break;
 		}
 		
-		// Switch turns
 		isPlayer1Turn = !isPlayer1Turn;
 		currentTurn++;
 	}
@@ -580,7 +560,6 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 		winner = 'player2';
 		battleSummary = `${card2.name} wins! (${player2.currentHP}/${player2.maxHP} HP remaining)`;
 	} else if (currentTurn > maxTurns) {
-		// Time limit reached
 		if (player1.currentHP > player2.currentHP) {
 			winner = 'player1';
 			battleSummary = `${card1.name} wins by HP! (${player1.currentHP} vs ${player2.currentHP})`;
@@ -611,10 +590,9 @@ export async function simulateBattle(card1Id: string, card2Id: string): Promise<
 }
 
 /**
- * Simulate a pack battle (uses best card from each pack)
+ * Simulate a pack battle
  */
 export async function simulatePackBattle(pack1: TCGCard[], pack2: TCGCard[]): Promise<BattleResult> {
-	// Filter Pokemon only
 	const pokemon1 = pack1.filter(card => card.supertype === 'Pokémon' && card.battleValue);
 	const pokemon2 = pack2.filter(card => card.supertype === 'Pokémon' && card.battleValue);
 	
@@ -622,7 +600,6 @@ export async function simulatePackBattle(pack1: TCGCard[], pack2: TCGCard[]): Pr
 		throw new Error('Both packs must contain at least one Pokémon');
 	}
 	
-	// Select strongest Pokemon from each pack
 	const best1 = pokemon1.reduce((best, card) => 
 		(card.battleValue || 0) > (best.battleValue || 0) ? card : best
 	);
@@ -631,95 +608,98 @@ export async function simulatePackBattle(pack1: TCGCard[], pack2: TCGCard[]): Pr
 		(card.battleValue || 0) > (best.battleValue || 0) ? card : best
 	);
 	
-	// Simulate battle between best Pokemon
 	return simulateBattle(best1.cardId, best2.cardId);
 }
 
 /**
- * Get battle preview (predict outcome without simulating)
+ * Get battle preview
  */
 export function getBattlePreview(card1: TCGCard, card2: TCGCard): BattlePreview {
 	const p1Advantages: string[] = [];
 	const p2Advantages: string[] = [];
 	
-	let player1Score = 50; // Start at 50% each
+	let player1Score = 50;
 	let player2Score = 50;
 	
-	// Battle value comparison (20% weight)
+	// Battle value comparison
 	const p1BV = card1.battleValue || 0;
 	const p2BV = card2.battleValue || 0;
 	if (p1BV > p2BV) {
 		const diff = Math.min(20, ((p1BV - p2BV) / p2BV) * 20);
-		player1Score += diff;
-		player2Score -= diff;
+		player1Score += diff * BATTLE_CONFIG.PREVIEW_BATTLE_VALUE_WEIGHT / 0.20;
+		player2Score -= diff * BATTLE_CONFIG.PREVIEW_BATTLE_VALUE_WEIGHT / 0.20;
 		p1Advantages.push(`Higher battle value (${p1BV} vs ${p2BV})`);
 	} else if (p2BV > p1BV) {
 		const diff = Math.min(20, ((p2BV - p1BV) / p1BV) * 20);
-		player2Score += diff;
-		player1Score -= diff;
+		player2Score += diff * BATTLE_CONFIG.PREVIEW_BATTLE_VALUE_WEIGHT / 0.20;
+		player1Score -= diff * BATTLE_CONFIG.PREVIEW_BATTLE_VALUE_WEIGHT / 0.20;
 		p2Advantages.push(`Higher battle value (${p2BV} vs ${p1BV})`);
 	}
 	
-	// HP comparison (15% weight)
+	// HP comparison
 	const p1HP = card1.hp || 60;
 	const p2HP = card2.hp || 60;
 	if (p1HP > p2HP) {
 		const diff = Math.min(15, ((p1HP - p2HP) / p2HP) * 15);
-		player1Score += diff;
-		player2Score -= diff;
+		player1Score += diff * BATTLE_CONFIG.PREVIEW_HP_WEIGHT / 0.15;
+		player2Score -= diff * BATTLE_CONFIG.PREVIEW_HP_WEIGHT / 0.15;
 		p1Advantages.push(`More HP (${p1HP} vs ${p2HP})`);
 	} else if (p2HP > p1HP) {
 		const diff = Math.min(15, ((p2HP - p1HP) / p1HP) * 15);
-		player2Score += diff;
-		player1Score -= diff;
+		player2Score += diff * BATTLE_CONFIG.PREVIEW_HP_WEIGHT / 0.15;
+		player1Score -= diff * BATTLE_CONFIG.PREVIEW_HP_WEIGHT / 0.15;
 		p2Advantages.push(`More HP (${p2HP} vs ${p1HP})`);
 	}
 	
-	// Attack power (20% weight)
+	// Attack power
 	const p1Attack = card1.battleStats?.attackPower || 0;
 	const p2Attack = card2.battleStats?.attackPower || 0;
 	if (p1Attack > p2Attack) {
 		const diff = Math.min(20, ((p1Attack - p2Attack) / p2Attack) * 20);
-		player1Score += diff;
-		player2Score -= diff;
+		player1Score += diff * BATTLE_CONFIG.PREVIEW_ATTACK_WEIGHT / 0.20;
+		player2Score -= diff * BATTLE_CONFIG.PREVIEW_ATTACK_WEIGHT / 0.20;
 		p1Advantages.push(`Stronger attacks (${p1Attack} vs ${p2Attack})`);
 	} else if (p2Attack > p1Attack) {
 		const diff = Math.min(20, ((p2Attack - p1Attack) / p1Attack) * 20);
-		player2Score += diff;
-		player1Score -= diff;
+		player2Score += diff * BATTLE_CONFIG.PREVIEW_ATTACK_WEIGHT / 0.20;
+		player1Score -= diff * BATTLE_CONFIG.PREVIEW_ATTACK_WEIGHT / 0.20;
 		p2Advantages.push(`Stronger attacks (${p2Attack} vs ${p1Attack})`);
 	}
 	
-	// Speed (10% weight)
+	// Speed
 	const p1Speed = card1.battleStats?.speed || 50;
 	const p2Speed = card2.battleStats?.speed || 50;
 	if (p1Speed > p2Speed) {
 		const diff = Math.min(10, ((p1Speed - p2Speed) / p2Speed) * 10);
-		player1Score += diff;
-		player2Score -= diff;
+		player1Score += diff * BATTLE_CONFIG.PREVIEW_SPEED_WEIGHT / 0.10;
+		player2Score -= diff * BATTLE_CONFIG.PREVIEW_SPEED_WEIGHT / 0.10;
 		p1Advantages.push(`Faster (${p1Speed} vs ${p2Speed} speed)`);
 	} else if (p2Speed > p1Speed) {
 		const diff = Math.min(10, ((p2Speed - p1Speed) / p1Speed) * 10);
-		player2Score += diff;
-		player1Score -= diff;
+		player2Score += diff * BATTLE_CONFIG.PREVIEW_SPEED_WEIGHT / 0.10;
+		player1Score -= diff * BATTLE_CONFIG.PREVIEW_SPEED_WEIGHT / 0.10;
 		p2Advantages.push(`Faster (${p2Speed} vs ${p1Speed} speed)`);
 	}
 	
-	// Type effectiveness (25% weight)
-	if (card1.type && card2.weaknesses) {
-		const hasAdvantage = card2.weaknesses.some(w => w.type === card1.type);
-		if (hasAdvantage) {
-			player1Score += 25;
-			player2Score -= 25;
-			p1Advantages.push(`Type advantage (${card1.type} vs ${card2.type})`);
+	// Type effectiveness
+	if (BATTLE_CONFIG.ENABLE_TYPE_EFFECTIVENESS) {
+		if (card1.type && card2.weaknesses) {
+			const hasAdvantage = card2.weaknesses.some(w => w.type === card1.type);
+			if (hasAdvantage) {
+				const bonus = 25 * BATTLE_CONFIG.PREVIEW_TYPE_WEIGHT / 0.25;
+				player1Score += bonus;
+				player2Score -= bonus;
+				p1Advantages.push(`Type advantage (${card1.type} vs ${card2.type})`);
+			}
 		}
-	}
-	if (card2.type && card1.weaknesses) {
-		const hasAdvantage = card1.weaknesses.some(w => w.type === card2.type);
-		if (hasAdvantage) {
-			player2Score += 25;
-			player1Score -= 25;
-			p2Advantages.push(`Type advantage (${card2.type} vs ${card1.type})`);
+		if (card2.type && card1.weaknesses) {
+			const hasAdvantage = card1.weaknesses.some(w => w.type === card2.type);
+			if (hasAdvantage) {
+				const bonus = 25 * BATTLE_CONFIG.PREVIEW_TYPE_WEIGHT / 0.25;
+				player2Score += bonus;
+				player1Score -= bonus;
+				p2Advantages.push(`Type advantage (${card2.type} vs ${card1.type})`);
+			}
 		}
 	}
 	
@@ -728,14 +708,13 @@ export function getBattlePreview(card1: TCGCard, card2: TCGCard): BattlePreview 
 	player1Score = (player1Score / total) * 100;
 	player2Score = (player2Score / total) * 100;
 	
-	// Determine predicted winner
 	let predictedWinner: 'player1' | 'player2' | 'toss-up';
 	let winProbability: number;
 	
-	if (player1Score >= 60) {
+	if (player1Score >= BATTLE_CONFIG.WIN_PROBABILITY_THRESHOLD) {
 		predictedWinner = 'player1';
 		winProbability = player1Score;
-	} else if (player2Score >= 60) {
+	} else if (player2Score >= BATTLE_CONFIG.WIN_PROBABILITY_THRESHOLD) {
 		predictedWinner = 'player2';
 		winProbability = player2Score;
 	} else {
@@ -743,12 +722,10 @@ export function getBattlePreview(card1: TCGCard, card2: TCGCard): BattlePreview 
 		winProbability = 50;
 	}
 	
-	// Estimate turns based on HP and attack power
 	const avgHP = (p1HP + p2HP) / 2;
 	const avgAttack = (p1Attack + p2Attack) / 2;
 	const estimatedTurns = avgAttack > 0 ? Math.ceil(avgHP / avgAttack) * 2 : 10;
 	
-	// Generate reasoning
 	let reasoning: string;
 	if (predictedWinner === 'player1') {
 		reasoning = `${card1.name} has the advantage with ${p1Advantages.length} key factors in their favor (${Math.round(player1Score)}% win probability)`;
@@ -769,12 +746,12 @@ export function getBattlePreview(card1: TCGCard, card2: TCGCard): BattlePreview 
 }
 
 /**
- * Simulate multiple battles and get win statistics
+ * Simulate multiple battles
  */
 export async function simulateMultipleBattles(
 	card1Id: string,
 	card2Id: string,
-	numberOfBattles: number = 100
+	numberOfBattles: number = BATTLE_CONFIG.DEFAULT_SIMULATION_COUNT
 ): Promise<{
 	player1Wins: number;
 	player2Wins: number;
@@ -783,12 +760,14 @@ export async function simulateMultipleBattles(
 	player1WinRate: number;
 	player2WinRate: number;
 }> {
+	const battles = Math.min(numberOfBattles, BATTLE_CONFIG.MAX_SIMULATION_COUNT);
+	
 	let player1Wins = 0;
 	let player2Wins = 0;
 	let draws = 0;
 	let totalTurns = 0;
 	
-	for (let i = 0; i < numberOfBattles; i++) {
+	for (let i = 0; i < battles; i++) {
 		const result = await simulateBattle(card1Id, card2Id);
 		
 		if (result.winner === 'player1') player1Wins++;
@@ -802,8 +781,8 @@ export async function simulateMultipleBattles(
 		player1Wins,
 		player2Wins,
 		draws,
-		averageTurns: Math.round(totalTurns / numberOfBattles),
-		player1WinRate: Math.round((player1Wins / numberOfBattles) * 100),
-		player2WinRate: Math.round((player2Wins / numberOfBattles) * 100)
+		averageTurns: Math.round(totalTurns / battles),
+		player1WinRate: Math.round((player1Wins / battles) * 100),
+		player2WinRate: Math.round((player2Wins / battles) * 100)
 	};
 }
