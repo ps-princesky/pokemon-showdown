@@ -57,18 +57,10 @@ export const PACK_CONFIG = {
 
 // ==================== BATTLE SYSTEM CONFIGURATION ====================
 export const BATTLE_CONFIG = {
-
-	/** Battle challenge timeout (in minutes) */
-	TIMEOUT_MINUTES: 2,
-	/** Maximum wager amount */
-	MAX_WAGER: 10000,
-	/** Minimum wager amount */
-	MIN_WAGER: 1,
-	
-	// General battle settings
-	MAX_WAGER: 10000,                        // Maximum wager for pack battles
-	MIN_WAGER: 1,                            // Minimum wager
+	// Battle challenge settings
 	TIMEOUT_MINUTES: 2,                      // Challenge timeout
+	MAX_WAGER: 10000,                        // Maximum wager amount
+	MIN_WAGER: 1,                            // Minimum wager amount
 	
 	// Simple battle simulator settings
 	STARTING_ENERGY: 3,                      // Starting energy per Pokemon
@@ -135,6 +127,7 @@ export const BATTLE_CONFIG = {
 	SAVE_BATTLE_LOGS: true,                  // Save battle logs to database
 	MAX_BATTLE_LOG_ENTRIES: 50,              // Maximum log entries per battle
 } as const;
+
 
 // ==================== STATUS CONDITION TYPES ====================
 export const STATUS_CONDITIONS = {
