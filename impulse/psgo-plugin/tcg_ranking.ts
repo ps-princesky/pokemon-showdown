@@ -429,18 +429,11 @@ export async function executeSimulatedChallenge(
 			return { success: false, error: "You have already challenged this player today." };
 		}
 		
-		// Check if both players are eligible
-		const [challengerEligible, targetEligible] = await Promise.all([
-			isEligibleForRanked(challengerId),
-			isEligibleForRanked(targetId)
+		// Ensure both players have ranking records (this creates them if they don't exist)
+		await Promise.all([
+			getPlayerRanking(challengerId),
+			getPlayerRanking(targetId)
 		]);
-		
-		if (!challengerEligible) {
-			return { success: false, error: "You need at least 5 battles to participate in ranked battles." };
-		}
-		if (!targetEligible) {
-			return { success: false, error: "Target player is not eligible for ranked battles." };
-		}
 		
 		// Get available sets
 		const availableSets = await TCGCards.distinct('set');
@@ -503,6 +496,7 @@ export async function executeSimulatedChallenge(
 		return { success: false, error: error.message };
 	}
 }
+
 
 /**
  * Get daily challenge status for display
