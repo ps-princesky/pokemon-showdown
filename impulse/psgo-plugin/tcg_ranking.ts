@@ -22,7 +22,7 @@ import {
 	SeasonRewards
 } from './tcg_collections';
 import * as TCG_Economy from './tcg_economy';
-
+import { getCardPoints } from './pokemon-tcg';
 // ==================== CONSTANTS ====================
 
 export const RANK_THRESHOLDS = {
@@ -112,42 +112,6 @@ function getDivisionFromElo(elo: number, rank: string): number {
 	const progress = (elo - currentThreshold) / (nextThreshold - currentThreshold);
 	
 	return Math.min(5, Math.max(1, Math.ceil(progress * 5)));
-}
-
-/**
- * Helper function to get card points from rarity
- */
-function getCardPointsFromRarity(rarity: string): number {
-	switch (rarity) {
-		case 'Common': case '1st Edition': case 'Shadowless': return 5;
-		case 'Uncommon': return 10;
-		case 'Reverse Holo': return 15;
-		case 'Rare': return 20;
-		case 'Double Rare': case 'Promo': case 'Black Star Promo': return 25;
-		case 'Rare Holo': case 'Classic Collection': return 30;
-		case 'Rare Holo 1st Edition': return 35;
-		case 'Rare SP': return 40;
-		case 'Rare Holo EX': case 'Rare Holo GX': case 'Rare Holo V': return 45;
-		case 'Rare BREAK': case 'Rare Prime': case 'LEGEND': case 'Prism Star': return 50;
-		case 'Rare Holo VMAX': case 'Rare Holo VSTAR': return 55;
-		case 'Rare ex': return 60;
-		case 'Radiant Rare': return 60;
-		case 'Amazing Rare': case 'Shining': return 65;
-		case 'ACE SPEC Rare': case 'Rare ACE': return 70;
-		case 'Full Art': case 'Rare Ultra': return 75;
-		case 'Rare Shiny': case 'Shiny Rare': return 80;
-		case 'Trainer Gallery': case 'Character Rare': case 'Rare Shiny GX': case 'Shiny Ultra Rare': return 85;
-		case 'Illustration Rare': return 90;
-		case 'Rare Holo LV.X': return 95;
-		case 'Rare Holo Star': return 100;
-		case 'Character Super Rare': return 110;
-		case 'Rare Secret': return 120;
-		case 'Special Illustration Rare': return 150;
-		case 'Rare Rainbow': return 160;
-		case 'Gold Full Art': case 'Rare Gold': case 'Hyper Rare': return 175;
-		case 'Gold Star': return 200;
-		default: return 5;
-	}
 }
 
 // ==================== PLAYER RANKING FUNCTIONS ====================
@@ -386,18 +350,24 @@ async function simulatePackOpening(setId: string): Promise<{ pack: any[], totalV
 	// Simplified pack generation
 	const commons = setCards.filter((c: any) => c.rarity === 'Common');
 	const uncommons = setCards.filter((c: any) => c.rarity === 'Uncommon');
-	const rares = setCards.filter((c: any) => c.rarity.includes('Rare'));
+	const rares = setCards.filter((c: any) => c.rarity && c.rarity.includes('Rare'));
 	
 	const allCards = [...commons, ...uncommons, ...rares];
+	
+	if (allCards.length === 0) {
+		throw new Error(`No valid cards found for set ${setId}`);
+	}
 	
 	// Generate 10 random cards
 	for (let i = 0; i < 10; i++) {
 		const randomCard = allCards[Math.floor(Math.random() * allCards.length)];
-		pack.push(randomCard);
-		
-		// Calculate points
-		const points = getCardPointsFromRarity(randomCard.rarity);
-		totalValue += points;
+		if (randomCard) {
+			pack.push(randomCard);
+
+			// Use the imported getCardPoints function
+			const points = getCardPoints(randomCard);
+			totalValue += points;
+		}
 	}
 	
 	return { pack, totalValue };
