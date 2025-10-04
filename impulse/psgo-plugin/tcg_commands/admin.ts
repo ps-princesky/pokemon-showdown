@@ -248,5 +248,18 @@ export const adminCommands: Chat.ChatCommands = {
 	this.checkCan('globalban');
 	clearPackCaches();
 	this.sendReply('Pack caches cleared.');
+	},
+
+	async cachestats(target, room, user) {
+	this.checkCan('globalban');
+	const { getCacheStats } = await import('./shared');
+	const stats = getCacheStats();
+	
+	let output = `<strong>TCG Cache Statistics:</strong><br/>`;
+	output += `Valid Sets Loaded: ${stats.validSetsLoaded ? '✅ Yes' : '❌ No'} (${stats.validSetsCount} sets)<br/>`;
+	output += `Cached Set Pools: ${stats.cachedSetsCount}<br/>`;
+	output += `Estimated Memory: ~${stats.estimatedMemoryMB}MB`;
+	
+	this.sendReplyBox(output);
 	}
 };
