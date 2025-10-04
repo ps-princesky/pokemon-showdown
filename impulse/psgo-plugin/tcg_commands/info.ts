@@ -37,13 +37,9 @@ export const infoCommands: Chat.ChatCommands = {
 			const points = getCardPoints(card);
 
 			let borderColor = rarityColorHex;
-			let glowEffect = '';
 			const specialSubtype = card.subtypes.find(s => SPECIAL_SUBTYPES[s]);
 			if (specialSubtype && SPECIAL_SUBTYPES[specialSubtype]) {
 				borderColor = SPECIAL_SUBTYPES[specialSubtype].color;
-				if (SPECIAL_SUBTYPES[specialSubtype].glow) {
-					glowEffect = `box-shadow: 0 0 12px ${borderColor}50;`;
-				}
 			}
 		
 			const formattedSubtypes = card.subtypes.map(s => {
@@ -53,7 +49,7 @@ export const infoCommands: Chat.ChatCommands = {
 
 			// Outer scrollable container
 			let output = `<div style="max-height: 360px; overflow-y: auto;">` +
-				`<div style="border: 2px solid ${borderColor}; ${glowEffect} border-radius: 8px; padding: 12px; overflow: hidden; ${backgroundStyle}">` +
+				`<div style="border: 2px solid ${borderColor}; border-radius: 8px; padding: 12px; overflow: hidden; ${backgroundStyle}">` +
 				`<table style="width: 100%; border-collapse: collapse;"><tr>`;
 		
 			if (card.imageUrl) {
@@ -71,8 +67,8 @@ export const infoCommands: Chat.ChatCommands = {
 			}
 
 			output += `<td style="vertical-align: top; line-height: 1.5;">` +
-				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">${card.name}</div>` +
-				`<div style="color: ${rarityColorHex}; font-weight: bold; font-size: 1em; margin-bottom: 12px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">${card.rarity}</div>`;
+				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px;">${card.name}</div>` +
+				`<div style="color: ${rarityColorHex}; font-weight: bold; font-size: 1em; margin-bottom: 12px;">${card.rarity}</div>`;
 
 			// Compact info table
 			const infoRows = [];
@@ -92,7 +88,7 @@ export const infoCommands: Chat.ChatCommands = {
 			});
 			output += `</table>`;
 
-			// Battle Stats - IMPROVED with better contrast for both themes
+			// Battle Stats - removed glow effects and improved contrast
 			if (card.battleStats) {
 				output += `<div style="margin-top: 12px; padding: 10px; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 0.85em; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">` +
 					`<strong style="display: block; margin-bottom: 8px; color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); font-size: 1.1em;">⚔️ Battle Stats</strong>` +
@@ -109,9 +105,9 @@ export const infoCommands: Chat.ChatCommands = {
 					const percent = Math.round((stat.value / stat.max) * 100);
 					output += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">` +
 						`<span style="color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); min-width: 38px; font-weight: bold; font-size: 0.95em;">${stat.label}:</span>` +
-						`<span style="font-weight: bold; color: ${stat.color}; text-shadow: 0 1px 3px rgba(0,0,0,0.3); min-width: 32px; font-size: 1.05em;">${stat.value}</span>` +
+						`<span style="font-weight: bold; color: ${stat.color}; min-width: 32px; font-size: 1.05em;">${stat.value}</span>` +
 						`<div style="flex: 1; background: rgba(255,255,255,0.4); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(0,0,0,0.2); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">` +
-						`<div style="background: ${stat.color}; height: 100%; width: ${percent}%; box-shadow: 0 0 6px ${stat.color}; transition: width 0.3s ease;"></div>` +
+						`<div style="background: ${stat.color}; height: 100%; width: ${percent}%; transition: width 0.3s ease;"></div>` +
 						`</div>` +
 						`</div>`;
 				});
@@ -213,7 +209,7 @@ export const infoCommands: Chat.ChatCommands = {
 		const query: any = {};
 		const searchTerms: string[] = [];
 		let page = 1;
-		let sortBy: 'name' | 'battleValue' | 'hp' | 'rarity' = 'name'; // NEW: Sort option
+		let sortBy: 'name' | 'battleValue' | 'hp' | 'rarity' = 'name'; // Default sort by name
 
 		const commandArgs = [];
 		for (const filter of filters) {
@@ -228,7 +224,7 @@ export const infoCommands: Chat.ChatCommands = {
 				continue; 
 			}
 			
-			// NEW: Handle sort parameter
+			// Handle sort parameter
 			if (toID(key) === 'sort') {
 				if (['name', 'battlevalue', 'hp', 'rarity'].includes(toID(value))) {
 					sortBy = toID(value) === 'battlevalue' ? 'battleValue' : toID(value) as any;
@@ -263,7 +259,7 @@ export const infoCommands: Chat.ChatCommands = {
 						else query.hp = amount;
 					}
 					break;
-				// NEW: Battle value filter
+				// Battle value filter
 				case 'battlevalue':
 				case 'bv':
 					const bvMatch = value.match(/([<>=]+)?\s*(\d+)/);
@@ -301,7 +297,7 @@ export const infoCommands: Chat.ChatCommands = {
 				return this.sendReply(`No cards found matching your criteria.`);
 			}
 
-			// NEW: Enhanced sorting
+			// Enhanced sorting
 			paginatedResults.sort((a, b) => {
 				switch (sortBy) {
 					case 'battleValue':
@@ -318,7 +314,7 @@ export const infoCommands: Chat.ChatCommands = {
 				}
 			});
 
-			// NEW: Enhanced table with battle data
+			// Enhanced table with battle data
 			let tableHtml = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
 			
 			// Headers
@@ -328,7 +324,7 @@ export const infoCommands: Chat.ChatCommands = {
 				`<th>Rarity</th>` +
 				`<th>Type</th>` +
 				`<th>HP</th>` +
-				`<th>⚔️ BV</th>` + // NEW: Battle Value column
+				`<th>⚔️ BV</th>` +
 				`</tr>`;
 
 			// Rows
@@ -342,7 +338,7 @@ export const infoCommands: Chat.ChatCommands = {
 					`<td>${card.type || card.supertype}</td>` +
 					`<td>${card.hp || '-'}</td>`;
 				
-				// NEW: Battle Value with color coding
+				// Battle Value with color coding
 				if (card.battleValue) {
 					let bvColor = '#95a5a6'; // Gray default
 					if (card.battleValue >= 150) bvColor = '#e74c3c'; // Red for high
@@ -378,7 +374,7 @@ export const infoCommands: Chat.ChatCommands = {
 				content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
 			}
 			
-			// NEW: Sort controls
+			// Sort controls
 			content += `<div style="margin-top: 8px;">` +
 				`<strong style="font-size: 0.9em;">Sort by:</strong> ` +
 				`<button name="send" value="${commandString}, sort:name">Name</button> ` +
