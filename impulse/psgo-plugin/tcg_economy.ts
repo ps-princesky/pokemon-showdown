@@ -3,16 +3,15 @@
  * Handles all currency operations for the TCG plugin.
  */
 
-import { MongoDB } from '../../impulse/mongodb_module';
-import { UserCollection } from './tcg_data';
 import { UserCollections } from './tcg_collections';
+import { UserCollection } from './tcg_data';
 
 /**
  * Gets the currency balance for a specific user.
  */
 export async function getUserBalance(userId: string): Promise<number> {
-	const collection = await UserCollections.findOne({ userId });
-	return collection?.currency || 0;
+	const userCollection = await UserCollections.findOne({ userId });
+	return userCollection?.currency || 0;
 }
 
 /**
@@ -25,7 +24,6 @@ export async function grantCurrency(userId: string, amount: number): Promise<boo
 		{ $inc: { currency: amount } },
 		{ upsert: true }
 	);
-	// Assume success if no error is thrown, to correctly handle upserts.
 	return true;
 }
 
@@ -38,7 +36,7 @@ export async function deductCurrency(userId: string, amount: number): Promise<bo
 		{ userId, currency: { $gte: amount } },
 		{ $inc: { currency: -amount } }
 	);
-	return result > 0;
+	return result.modifiedCount > 0;
 }
 
 /**
@@ -51,7 +49,6 @@ export async function setCurrency(userId: string, amount: number): Promise<boole
 		{ $set: { currency: amount } },
 		{ upsert: true }
 	);
-	// Assume success if no error is thrown, to correctly handle upserts.
 	return true;
 }
 
