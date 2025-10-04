@@ -26,23 +26,23 @@ import { getCardPoints } from './pokemon-tcg';
 // ==================== CONSTANTS ====================
 
 export const RANK_THRESHOLDS = {
-	'Bronze III': 0,
-	'Bronze II': 800,
-	'Bronze I': 900,
-	'Silver III': 1000,
-	'Silver II': 1100,
-	'Silver I': 1200,
-	'Gold III': 1300,
-	'Gold II': 1400,
-	'Gold I': 1500,
-	'Platinum III': 1600,
-	'Platinum II': 1700,
-	'Platinum I': 1800,
-	'Diamond III': 1900,
-	'Diamond II': 2000,
-	'Diamond I': 2100,
-	'Master': 2200,
-	'Grandmaster': 2400,
+	'Bronze III': 100,
+	'Bronze II': 500,
+	'Bronze I': 600,
+	'Silver III': 800,
+	'Silver II': 1000,
+	'Silver I': 1400,
+	'Gold III': 1600,
+	'Gold II': 1800,
+	'Gold I': 2000,
+	'Platinum III': 3000,
+	'Platinum II': 3500,
+	'Platinum I': 4000,
+	'Diamond III': 5000,
+	'Diamond II': 5500,
+	'Diamond I': 6000,
+	'Master': 8000,
+	'Grandmaster': 10000,
 } as const;
 
 export const RANK_COLORS = {
@@ -385,6 +385,8 @@ export async function executeSimulatedChallenge(
 	battle?: SimulatedBattle;
 	challengerRanking?: PlayerRanking;
 	targetRanking?: PlayerRanking;
+	challengerPack?: any[];
+	targetPack?: any[];
 }> {
 	try {
 		// Check if challenger has challenges remaining
@@ -460,12 +462,15 @@ export async function executeSimulatedChallenge(
 			battle: simulatedBattle,
 			challengerRanking: battleResult.player1Ranking,
 			targetRanking: battleResult.player2Ranking,
+			challengerPack: challengerResult.pack,
+			targetPack: targetResult.pack,
 		};
 		
 	} catch (error: any) {
 		return { success: false, error: error.message };
 	}
 }
+
 
 
 /**
