@@ -1292,87 +1292,99 @@ async rankedbattle(target, room, user) {
 	const [action, ...args] = target.split(',').map(p => p.trim());
 
 	switch (toID(action)) {
-		case 'challenge': {
-			const [targetUsername] = args;
-			if (!targetUsername) {
-				return this.errorReply("Usage: /tcg rankedbattle challenge, [user]");
-			}
+			case 'challenge': {
+	const [targetUsername] = args;
+	if (!targetUsername) {
+		return this.errorReply("Usage: /tcg rankedbattle challenge, [user]");
+	}
 
-			const challengerId = user.id;
-			const targetId = toID(targetUsername);
+	const challengerId = user.id;
+	const targetId = toID(targetUsername);
 
-			if (challengerId === targetId) {
-				return this.errorReply("You cannot challenge yourself.");
-			}
+	if (challengerId === targetId) {
+		return this.errorReply("You cannot challenge yourself.");
+	}
 
-			try {
-				const result = await TCG_Ranking.executeSimulatedChallenge(challengerId, targetId);
-				
-				if (!result.success) {
-					return this.errorReply(result.error || "Challenge failed.");
-				}
-
-				const battle = result.battle!;
-				const challengerRanking = result.challengerRanking!;
-				const targetRanking = result.targetRanking!;
-
-				// Determine winner
-				let resultText = '';
-				let resultColor = '#f1c40f';
-				if (battle.winner === challengerId) {
-					resultText = 'Victory!';
-					resultColor = '#2ecc71';
-				} else if (battle.winner === targetId) {
-					resultText = 'Defeat!';
-					resultColor = '#e74c3c';
-				} else {
-					resultText = 'Draw!';
-					resultColor = '#f1c40f';
-				}
-
-				const challengerEloChange = TCG_Ranking.formatEloChange(battle.challengerEloChange);
-				const targetEloChange = TCG_Ranking.formatEloChange(battle.targetEloChange);
-				const challengerColor = TCG_Ranking.getRankColor(challengerRanking.rank);
-				const targetColor = TCG_Ranking.getRankColor(targetRanking.rank);
-
-				let output = `<div class="infobox">`;
-				output += `<h2 style="text-align:center;">⚔️ Ranked Challenge Battle</h2>`;
-				output += `<div style="text-align:center; margin: 10px 0;">`;
-				output += `<strong>${Impulse.nameColor(user.name, true)}</strong> challenged <strong>${Impulse.nameColor(targetUsername, true)}</strong>`;
-				output += `</div>`;
-
-				output += `<table style="width:100%; margin: 10px 0;"><tr>`;
-				output += `<td style="width:50%; text-align:center; padding:10px; border-right: 1px solid #ddd;">`;
-				output += `<strong>${user.name}</strong><br/>`;
-				output += `Pack Value: <strong>${battle.challengerPackValue}</strong> pts<br/>`;
-				output += `<span style="color: ${challengerColor};">${challengerRanking.rank}</span><br/>`;
-				output += `<span style="color: ${battle.challengerEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${challengerRanking.elo} (${challengerEloChange})</span>`;
-				output += `</td>`;
-				output += `<td style="width:50%; text-align:center; padding:10px;">`;
-				output += `<strong>${targetUsername}</strong><br/>`;
-				output += `Pack Value: <strong>${battle.targetPackValue}</strong> pts<br/>`;
-				output += `<span style="color: ${targetColor};">${targetRanking.rank}</span><br/>`;
-				output += `<span style="color: ${battle.targetEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${targetRanking.elo} (${targetEloChange})</span>`;
-				output += `</td></tr></table>`;
-
-				output += `<div style="text-align:center; color: ${resultColor}; font-size: 1.3em; font-weight: bold; margin: 15px 0; padding: 10px; border: 2px solid ${resultColor}; border-radius: 8px;">`;
-				output += resultText;
-				output += `</div>`;
-
-				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(challengerId);
-				output += `<div style="text-align:center; margin-top: 10px; font-size: 0.9em; color: #666;">`;
-				output += `Challenges remaining today: <strong>${challengeStatus.challengesRemaining}/10</strong>`;
-				output += `</div>`;
-				output += `</div>`;
-
-				this.sendReplyBox(output);
-
-			} catch (e: any) {
-				return this.errorReply(`Error executing challenge: ${e.message}`);
-			}
-			break;
+	try {
+		const result = await TCG_Ranking.executeSimulatedChallenge(challengerId, targetId);
+		
+		if (!result.success) {
+			return this.errorReply(result.error || "Challenge failed.");
 		}
 
+		const battle = result.battle!;
+		const challengerRanking = result.challengerRanking!;
+		const targetRanking = result.targetRanking!;
+		const challengerPack = result.challengerPack || [];
+		const targetPack = result.targetPack || [];
+
+		// Determine winner
+		let resultText = '';
+		let resultColor = '#f1c40f';
+		if (battle.winner === challengerId) {
+			resultText = 'Victory!';
+			resultColor = '#2ecc71';
+		} else if (battle.winner === targetId) {
+			resultText = 'Defeat!';
+			resultColor = '#e74c3c';
+		} else {
+			resultText = 'Draw!';
+			resultColor = '#f1c40f';
+		}
+
+		const challengerEloChange = TCG_Ranking.formatEloChange(battle.challengerEloChange);
+		const targetEloChange = TCG_Ranking.formatEloChange(battle.targetEloChange);
+		const challengerColor = TCG_Ranking.getRankColor(challengerRanking.rank);
+		const targetColor = TCG_Ranking.getRankColor(targetRanking.rank);
+
+		// Helper function to build pack HTML
+		const buildPackHtml = (pack: TCGCard[]) => {
+			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+			return pack.map(c => `<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td><td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`).join('');
+		};
+
+		let output = `<div class="infobox">`;
+		output += `<h2 style="text-align:center;">⚔️ Ranked Challenge Battle</h2>`;
+		output += `<div style="text-align:center; margin: 10px 0;">`;
+		output += `<strong>${Impulse.nameColor(user.name, true)}</strong> challenged <strong>${Impulse.nameColor(targetUsername, true)}</strong>`;
+		output += `</div>`;
+
+		// Display ELO changes
+		output += `<div style="text-align:center; margin: 10px 0;">`;
+		output += `<span style="color: ${challengerColor}; font-weight: bold;">${user.name}: ${challengerRanking.rank} (${challengerRanking.elo} ${challengerEloChange})</span>`;
+		output += ` vs `;
+		output += `<span style="color: ${targetColor}; font-weight: bold;">${targetUsername}: ${targetRanking.rank} (${targetRanking.elo} ${targetEloChange})</span>`;
+		output += `</div>`;
+
+		// Display the packs
+		output += `<table style="width:100%;"><tr>`;
+		output += `<td style="width:50%; vertical-align:top; padding-right:5px;">`;
+		output += `<strong>${Impulse.nameColor(user.name, true)}'s Pack (Total: ${battle.challengerPackValue} Points)</strong>`;
+		output += `<table class="themed-table"> ${buildPackHtml(challengerPack)} </table>`;
+		output += `</td><td style="width:50%; vertical-align:top; padding-left:5px;">`;
+		output += `<strong>${Impulse.nameColor(targetUsername, true)}'s Pack (Total: ${battle.targetPackValue} Points)</strong>`;
+		output += `<table class="themed-table"> ${buildPackHtml(targetPack)} </table>`;
+		output += `</td></tr></table><hr/>`;
+
+		// Result
+		output += `<div style="text-align:center; color: ${resultColor}; font-size: 1.3em; font-weight: bold; margin: 15px 0; padding: 10px; border: 2px solid ${resultColor}; border-radius: 8px;">`;
+		output += resultText;
+		output += `</div>`;
+
+		// Challenge status
+		const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(challengerId);
+		output += `<div style="text-align:center; margin-top: 10px; font-size: 0.9em; color: #666;">`;
+		output += `Challenges remaining today: <strong>${challengeStatus.challengesRemaining}/10</strong>`;
+		output += `</div>`;
+		output += `</div>`;
+
+		this.sendReplyBox(output);
+
+	} catch (e: any) {
+		return this.errorReply(`Error executing challenge: ${e.message}`);
+	}
+	break;
+},
 		case 'targets': {
 			if (!this.runBroadcast()) return;
 			
