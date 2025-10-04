@@ -266,7 +266,7 @@ export const commands: Chat.ChatCommands = {
 			await TCG_Ranking.getPlayerRanking(user.id);
 			const userId = user.id;
 			const twentyFourHours = 24 * 60 * 60 * 1000;
-			const DAILY_CURRENCY_AWARD = 50;
+			const DAILY_CURRENCY_AWARD = 75;
 
 			try {
 				let collection = await UserCollections.findOne({ userId });
@@ -329,6 +329,7 @@ export const commands: Chat.ChatCommands = {
 				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
 				const pageContent = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CURRENCY_AWARD} Credits</strong>!</p><hr/>${tableHtml}`;
 				const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, pageContent);
+				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 				
 				this.sendReplyBox(output);
 			} catch (e: any) {
@@ -389,6 +390,7 @@ export const commands: Chat.ChatCommands = {
 
 				const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
 				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${target.trim()} Pack!`, tableHtml);
+				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 
 				this.sendReplyBox(output);
 			} catch (e: any) {
@@ -1163,6 +1165,7 @@ export const commands: Chat.ChatCommands = {
 					const displaySetName = setInfo ? setInfo.name : setId;
 			
 					return this.sendReply(`You have purchased one "${displaySetName}" pack! Use /tcg packs to view and open your packs.`);
+					await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
 			
 				} else { // View the shop
 					if (!this.runBroadcast()) return;
@@ -1257,6 +1260,7 @@ export const commands: Chat.ChatCommands = {
 					pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 					const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
 					const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
+					await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 					this.sendReplyBox(output);
 
 				} else { // View pack inventory
@@ -1354,14 +1358,29 @@ async rankedbattle(target, room, user) {
 		output += `<strong>${user.name}</strong><br/>`;
 		output += `Pack Value: <strong>${battle.challengerPackValue}</strong> pts<br/>`;
 		output += `<span style="color: ${challengerColor};">${challengerRanking.rank}</span><br/>`;
-		output += `<span style="color: ${battle.challengerEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${challengerRanking.elo} (${challengerEloChange})</span>`;
+		output += `<span style="color: ${battle.challengerEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${challengerRanking.elo} (${challengerEloChange})</span><br/>`;
+		output += `<span style="color: #f39c12;">+${result.challengerCredits || 0} Credits</span>`;
 		output += `</td>`;
 		output += `<td style="width:50%; text-align:center; padding:10px;">`;
 		output += `<strong>${targetUsername}</strong><br/>`;
 		output += `Pack Value: <strong>${battle.targetPackValue}</strong> pts<br/>`;
 		output += `<span style="color: ${targetColor};">${targetRanking.rank}</span><br/>`;
-		output += `<span style="color: ${battle.targetEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${targetRanking.elo} (${targetEloChange})</span>`;
+		output += `<span style="color: ${battle.targetEloChange >= 0 ? '#2ecc71' : '#e74c3c'};">${targetRanking.elo} (${targetEloChange})</span><br/>`;
+		output += `<span style="color: #f39c12;">+${result.targetCredits || 0} Credits</span>`;
 		output += `</td></tr></table>`;
+
+		// Show ELO milestone notifications
+		if (result.player1EloMilestones && result.player1EloMilestones.length > 0) {
+			output += `<div style="text-align:center; color: #f39c12; margin: 10px 0; padding: 8px; background: rgba(243,156,18,0.1); border-radius: 5px;">`;
+			output += `🎉 ${user.name} achieved: ${result.player1EloMilestones.map(m => `${m.name} (+${m.reward} Credits)`).join(', ')}`;
+			output += `</div>`;
+		}
+
+		if (result.player2EloMilestones && result.player2EloMilestones.length > 0) {
+			output += `<div style="text-align:center; color: #f39c12; margin: 10px 0; padding: 8px; background: rgba(243,156,18,0.1); border-radius: 5px;">`;
+			output += `🎉 ${targetUsername} achieved: ${result.player2EloMilestones.map(m => `${m.name} (+${m.reward} Credits)`).join(', ')}`;
+			output += `</div>`;
+		}
 
 		// Add the cards section below the main info
 		output += `<hr/>`;
@@ -1441,37 +1460,57 @@ async rankedbattle(target, room, user) {
 			break;
 		}
 
-		case 'status': {
-			if (!this.runBroadcast()) return;
-			
-			try {
-				const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
-				const nextReset = new Date(challengeStatus.nextReset);
+			case 'status': {
+	if (!this.runBroadcast()) return;
+	
+	try {
+		const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
+		const nextReset = new Date(challengeStatus.nextReset);
+		const dailyChallenge = await TCG_Ranking.getDailyChallenges(user.id);
 
-				let output = `<div class="infobox">`;
-				output += `<h3>Daily Challenge Status</h3>`;
-				output += `<p><strong>Challenges Remaining:</strong> ${challengeStatus.challengesRemaining}/10</p>`;
-				output += `<p><strong>Challenges Used:</strong> ${challengeStatus.challengesUsed}/10</p>`;
-				output += `<p><strong>Next Reset:</strong> ${nextReset.toLocaleString()}</p>`;
+		let output = `<div class="infobox">`;
+		output += `<h3>Daily Challenge Status</h3>`;
+		output += `<p><strong>Challenges Remaining:</strong> ${challengeStatus.challengesRemaining}/10</p>`;
+		output += `<p><strong>Challenges Used:</strong> ${challengeStatus.challengesUsed}/10</p>`;
+		output += `<p><strong>Credits Earned Today:</strong> ${dailyChallenge.totalCreditsEarnedToday || 0}</p>`;
+		output += `<p><strong>Next Reset:</strong> ${nextReset.toLocaleString()}</p>`;
 
-				if (challengeStatus.recentChallenges.length > 0) {
-					output += `<h4>Recent Challenges Today:</h4>`;
-					output += `<ul>`;
-					challengeStatus.recentChallenges.forEach(challenge => {
-						const time = new Date(challenge.timestamp).toLocaleTimeString();
-						output += `<li>${Impulse.nameColor(challenge.targetUserId, true)} at ${time}</li>`;
-					});
-					output += `</ul>`;
-				}
-
-				output += `</div>`;
-				this.sendReplyBox(output);
-
-			} catch (e: any) {
-				return this.errorReply(`Error fetching challenge status: ${e.message}`);
+		// Show reward breakdown
+		const battlesUsed = challengeStatus.challengesUsed;
+		const DAILY_CREDIT_BATTLES_LIMIT = 7;
+		const RANKED_BATTLE_REWARDS = { win: 8, loss: 3, draw: 5 };
+		const REDUCED_REWARD_MULTIPLIER = 0.3;
+		
+		if (battlesUsed > 0) {
+			output += `<h4>Reward Structure:</h4>`;
+			output += `<p>Next ${Math.max(0, DAILY_CREDIT_BATTLES_LIMIT - battlesUsed)} battles: Full rewards (${RANKED_BATTLE_REWARDS.win} win/${RANKED_BATTLE_REWARDS.loss} loss/${RANKED_BATTLE_REWARDS.draw} draw)</p>`;
+			if (challengeStatus.challengesRemaining > 0 && battlesUsed >= DAILY_CREDIT_BATTLES_LIMIT) {
+				const reducedWin = Math.floor(RANKED_BATTLE_REWARDS.win * REDUCED_REWARD_MULTIPLIER);
+				const reducedLoss = Math.floor(RANKED_BATTLE_REWARDS.loss * REDUCED_REWARD_MULTIPLIER);
+				const reducedDraw = Math.floor(RANKED_BATTLE_REWARDS.draw * REDUCED_REWARD_MULTIPLIER);
+				output += `<p>Remaining battles: Reduced rewards (${reducedWin} win/${reducedLoss} loss/${reducedDraw} draw)</p>`;
 			}
-			break;
 		}
+
+		if (challengeStatus.recentChallenges.length > 0) {
+			output += `<h4>Recent Challenges Today:</h4>`;
+			output += `<ul>`;
+			challengeStatus.recentChallenges.forEach(challenge => {
+				const time = new Date(challenge.timestamp).toLocaleTimeString();
+				output += `<li>${Impulse.nameColor(challenge.targetUserId, true)} at ${time}</li>`;
+			});
+			output += `</ul>`;
+		}
+
+		output += `</div>`;
+		this.sendReplyBox(output);
+
+	} catch (e: any) {
+		return this.errorReply(`Error fetching challenge status: ${e.message}`);
+	}
+	break;
+			}
+			
 
 		default:
 			this.errorReply("Usage: /tcg rankedbattle [challenge/targets/status], [user]");
@@ -1737,6 +1776,91 @@ async seasonhistory(target, room, user) {
 	}
 },
 
+		async milestones(target, room, user) {
+	if (!this.runBroadcast()) return;
+	
+	try {
+		const available = await TCG_Ranking.getAvailableMilestones(user.id);
+		const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
+		
+		let output = `<div class="infobox">`;
+		output += `<h3>🏆 Weekly Milestones - Week ${summary.weekNumber}</h3>`;
+		output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
+		output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
+		output += `<hr/>`;
+		
+		// Group milestones by category
+		const categories = {
+			'Battle Milestones': available.filter(m => m.milestoneId.includes('battles') || m.milestoneId.includes('wins')),
+			'Collection Milestones': available.filter(m => m.milestoneId.includes('packs') || m.milestoneId.includes('opened')),
+			'Economy Milestones': available.filter(m => m.milestoneId.includes('credits')),
+		};
+		
+		for (const [category, milestones] of Object.entries(categories)) {
+			if (milestones.length === 0) continue;
+			
+			output += `<h4>${category}</h4>`;
+			output += `<table class="themed-table">`;
+			output += `<tr class="themed-table-header"><th>Achievement</th><th>Progress</th><th>Reward</th><th>Action</th></tr>`;
+			
+			milestones.forEach(milestone => {
+				const progressPercent = Math.min(100, Math.round((milestone.progress / milestone.requirement) * 100));
+				const progressColor = milestone.canClaim ? '#2ecc71' : progressPercent >= 80 ? '#f39c12' : '#3498db';
+				
+				output += `<tr class="themed-table-row">`;
+				output += `<td><strong>${milestone.name}</strong><br/><small>${milestone.description}</small></td>`;
+				output += `<td>`;
+				output += `<div style="background: #ddd; border-radius: 3px; overflow: hidden;">`;
+				output += `<div style="width: ${progressPercent}%; background: ${progressColor}; padding: 2px 5px; color: white; font-size: 11px; text-align: center;">`;
+				output += `${milestone.progress}/${milestone.requirement}`;
+				output += `</div></div>`;
+				output += `</td>`;
+				output += `<td><strong>${milestone.reward}</strong> Credits</td>`;
+				output += `<td>`;
+				if (milestone.canClaim) {
+					output += `<button name="send" value="/tcg claimmilestone ${milestone.milestoneId}" style="background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 3px;">Claim</button>`;
+				} else {
+					output += `<span style="color: #999; font-size: 11px;">${progressPercent}%</span>`;
+				}
+				output += `</td>`;
+				output += `</tr>`;
+			});
+			
+			output += `</table>`;
+		}
+		
+		output += `</div>`;
+		this.sendReplyBox(output);
+	} catch (e: any) {
+		return this.errorReply(`Error fetching milestones: ${e.message}`);
+	}
+},
+
+async claimmilestone(target, room, user) {
+	const milestoneId = target.trim();
+	if (!milestoneId) {
+		return this.errorReply("Usage: /tcg claimmilestone [milestone_id]");
+	}
+	
+	try {
+		const result = await TCG_Ranking.claimMilestone(user.id, milestoneId);
+		
+		if (!result.success) {
+			return this.errorReply(result.error || "Failed to claim milestone.");
+		}
+		
+		this.sendReply(`🎉 Congratulations! You've earned the "${result.milestoneName}" achievement and received ${result.reward} Credits!`);
+		
+		// Show updated balance
+		const balance = await TCG_Economy.getUserBalance(user.id);
+		this.sendReply(`Your balance is now: ${balance} Credits.`);
+		
+	} catch (e: any) {
+		return this.errorReply(`Error claiming milestone: ${e.message}`);
+	}
+},
+		
+
 		async initseason(target, room, user) {
 			this.checkCan('globalban');
 	
@@ -1762,40 +1886,43 @@ async seasonhistory(target, room, user) {
 		},
 		
 	},
-	
+
 	tcghelp: [
-		'/tcg daily - Claim your free random pack of the day and some credits.',
-		'/tcg currency [user] - Check your or another user\'s credit balance.',
-		'/tcg pay [user], [amount] - Give credits to another user.',
-		'/tcg shop - View the daily rotating card pack shop.',
-		'/tcg shop buy, [set ID] - Buy a booster pack from the shop.',
-		'/tcg packs - View and open your saved packs.',
-		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
-		'/tcg battle accept, [user] - Accept a pack battle challenge.',
-		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
-		'/tcg card [cardId] - View the details of a specific card.',
-		'/tcg search [filter]:[value] - Search for cards in the database.',
-		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
-		'/tcg wishlist [user] - View a user\'s wishlist.',
-		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
-		'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
-		'/tcg stats [total|unique|points] - View global TCG statistics.',
-		'/tcg sets - View all Pokemon TCG sets.',
-		'/tcg rarities - View all card rarities.',
-		'/tcg types - View all supertypes, types, and subtypes.',
-		'@ /tcg givecurrency [user], [amount] - Give credits to a user.',
-		'@ /tcg takecurrency [user], [amount] - Take credits from a user.',
-		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
-		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
-		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
-		'/tcg rankedbattle challenge, [user] - Challenge a user to a simulated ranked battle (10 daily, no wager).',
-		'/tcg rankedbattle targets - View available players you can challenge today.',
-		'/tcg rankedbattle status - Check your daily challenge status and history.',
-		'/tcg season - View current season information and rewards.',
-		'/tcg seasonhistory [user] - View season reward history for a user.',
-		'/tcg ranking [user] - View ranking information for a user.',
-		'/tcg leaderboard [elo|seasonal] - View the ELO or seasonal leaderboards.',
-		'/tcg battlehistory [user] - View ranked battle history for a user.',
-		'@ /tcg season end - Force end the current season (admin only).',
+	'/tcg daily - Claim your free random pack of the day and 75 credits.',
+	'/tcg currency [user] - Check your or another user\'s credit balance.',
+	'/tcg pay [user], [amount] - Give credits to another user.',
+	'/tcg shop - View the daily rotating card pack shop (100 credits each).',
+	'/tcg shop buy, [set ID] - Buy a booster pack from the shop.',
+	'/tcg packs - View and open your saved packs.',
+	'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
+	'/tcg battle accept, [user] - Accept a pack battle challenge.',
+	'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
+	'/tcg card [cardId] - View the details of a specific card.',
+	'/tcg search [filter]:[value] - Search for cards in the database.',
+	'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
+	'/tcg wishlist [user] - View a user\'s wishlist.',
+	'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
+	'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
+	'/tcg stats [total|unique|points] - View global TCG statistics.',
+	'/tcg sets - View all Pokemon TCG sets.',
+	'/tcg rarities - View all card rarities.',
+	'/tcg types - View all supertypes, types, and subtypes.',
+	'@ /tcg givecurrency [user], [amount] - Give credits to a user.',
+	'@ /tcg takecurrency [user], [amount] - Take credits from a user.',
+	'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
+	'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
+	'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
+	'/tcg rankedbattle challenge, [user] - Challenge a user to a simulated ranked battle (10 daily, earn credits).',
+	'/tcg rankedbattle targets - View available players you can challenge today.',
+	'/tcg rankedbattle status - Check your daily challenge status and credit earnings.',
+	'/tcg season - View current season information and rewards.',
+	'/tcg seasonhistory [user] - View season reward history for a user.',
+	'/tcg ranking [user] - View ranking information for a user.',
+	'/tcg leaderboard [elo|seasonal] - View the ELO or seasonal leaderboards.',
+	'/tcg battlehistory [user] - View ranked battle history for a user.',
+	'/tcg milestones - View weekly milestone progress and claim rewards.',
+	'/tcg claimmilestone [id] - Claim a completed milestone reward.',
+	'@ /tcg season end - Force end the current season..',
+	'@ /tcg initseadon - Force start a season, when there is no season.',
 	],
 };
