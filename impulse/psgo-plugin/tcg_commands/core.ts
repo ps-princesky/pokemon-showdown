@@ -2,12 +2,12 @@
  * Core TCG commands - daily, currency, pay
  */
 
-import * as TCG_Economy from '../tcg_economy';
-import * as TCG_UI from '../tcg_ui';
-import * as TCG_Ranking from '../tcg_ranking';
-import { TCGCards, UserCollections } from '../tcg_collections';
-import { TCGCard } from '../tcg_data';
-import { DAILY_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../tcg_config';
+import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
+import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
+import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
+import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { TCGCard } from '../../../impulse/psgo-plugin/tcg_data';
+import { DAILY_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints, ensureUserCollection, addCardToCollection, updateCollectionStats, formatPackCard, getRarityColor } from './shared';
 
 export const coreCommands: Chat.ChatCommands = {
