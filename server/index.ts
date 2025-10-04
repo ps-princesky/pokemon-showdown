@@ -300,3 +300,9 @@ if (Config.ofemain) {
 		addTimestamp: true,
 	});
 }
+
+// Start the server with proper async handling
+startServer().catch(err => {
+	console.error('Failed to start server:', err);
+	process.exit(1);
+});
