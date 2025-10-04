@@ -139,9 +139,18 @@ export const infoCommands: Chat.ChatCommands = {
 		}
 
 		try {
-			const { data: paginatedResults, total: totalResults, pages: totalPages } = await TCGCards.findWithPagination(
-				query, { page, limit: CARDS_PER_PAGE }
-			);
+			// Get total count
+			const totalResults = await TCGCards.countDocuments(query);
+			
+			// Calculate pagination
+			const skip = (page - 1) * CARDS_PER_PAGE;
+			const totalPages = Math.ceil(totalResults / CARDS_PER_PAGE);
+
+			// Get paginated results
+			const paginatedResults = await TCGCards.find(query)
+				.skip(skip)
+				.limit(CARDS_PER_PAGE)
+				.toArray();
 
 			if (totalResults === 0) {
 				return this.sendReply(`No cards found matching your criteria.`);
@@ -198,10 +207,13 @@ export const infoCommands: Chat.ChatCommands = {
 		}
 
 		try {
-			const totalUsers = await UserCollections.count({});
-			const totalCardsInDb = await TCGCards.count({});
+			const totalUsers = await UserCollections.countDocuments({});
+			const totalCardsInDb = await TCGCards.countDocuments({});
 
-			const topCollectors = await UserCollections.findSorted({}, sortQuery, PAGINATION_CONFIG.LEADERBOARD_SIZE);
+			const topCollectors = await UserCollections.find({})
+				.sort(sortQuery)
+				.limit(PAGINATION_CONFIG.LEADERBOARD_SIZE)
+				.toArray();
 		
 			let output = `<div class="infobox">` +
 				`<h3>TCG Collection Statistics</h3>` +
