@@ -13,7 +13,6 @@ import { generatePack, getCardPoints, ensureUserCollection, getValidPackSets } f
 export const coreCommands: Chat.ChatCommands = {
 	async daily(target, room, user) {
 		if (!this.runBroadcast()) return;
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const userId = user.id;
 		const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
 
@@ -109,6 +108,9 @@ export const coreCommands: Chat.ChatCommands = {
 
 			const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, tableHtml);
 			await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
+			TCG_Ranking.getPlayerRanking(user.id).catch(e => 
+        console.error('Ranking update failed:', e)
+    );
 			
 			this.sendReplyBox(output);
 		} catch (e: any) {
