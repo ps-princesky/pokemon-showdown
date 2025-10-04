@@ -3,13 +3,13 @@
  * Exports all command modules as a single commands object
  */
 
-import { coreCommands } from '../../../impulse/psgo-plugin/core';
-import { collectionCommands } from '../../../impulse/psgo-plugin/collection';
-import { shopCommands } from '../../../impulse/psgo-plugin/shop';
-import { battleCommands } from '../../../impulse/psgo-plugin/battle';
-import { rankingCommands } from '../../../impulse/psgo-plugin/ranking';
-import { infoCommands } from '../../../impulse/psgo-plugin/info';
-import { adminCommands } from '../../../impulse/psgo-plugin/admin';
+import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
+import { collectionCommands } from '../../../impulse/psgo-plugin/tcg_commands/collection';
+import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
+import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
+import { rankingCommands } from '../../../impulse/psgo-plugin/tcg_commands/ranking';
+import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
+import { adminCommands } from '../../../impulse/psgo-plugin/tcg_commands/admin';
 
 export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
