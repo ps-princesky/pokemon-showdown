@@ -6,7 +6,7 @@ import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { UserCollections, ShopStateCollection, TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
-import { POKEMON_SETS } from '../../../impulse/psgo-plugin/tcg_data';
+import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { SHOP_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints, ensureUserCollection } from './shared';
 
@@ -171,18 +171,16 @@ export const shopCommands: Chat.ChatCommands = {
 				
 				let pointsGained = 0;
 				let totalBattleValue = 0; // NEW: Track battle value
-				const newCards: string[] = []; // NEW: Track new cards
-				
 				for (const card of pack) {
 					pointsGained += getCardPoints(card);
-					if (card.battleValue) totalBattleValue += card.battleValue;
-					
+					if (card.battleValue) {
+						totalBattleValue += card.battleValue;
+					}
 					const existingCard = collection.cards.find(c => c.cardId === card.cardId);
 					if (existingCard) {
 						existingCard.quantity++;
 					} else {
 						collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
-						newCards.push(card.cardId); // Mark as new
 					}
 				}
 
@@ -199,111 +197,104 @@ export const shopCommands: Chat.ChatCommands = {
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 				const displaySetName = setInfo ? setInfo.name : setId;
 				
-				// Sort by battle value first, then rarity points
+				// NEW: Sort by battle value first, then rarity points
 				pack.sort((a, b) => {
 					const bvDiff = (b.battleValue || 0) - (a.battleValue || 0);
 					if (bvDiff !== 0) return bvDiff;
 					return getCardPoints(b) - getCardPoints(a);
 				});
-				
-				// NEW: Enhanced pack opening display
-				const getRarityColor = (rarity: string): string => {
-					const colors: {[key: string]: string} = {
-						'common': '#808080','uncommon': '#2ECC71','rare': '#3498DB','double rare': '#3CB371',
-						'rare holo': '#9B59B6','reverse holo': '#00CED1','rare ultra': '#E74C3C',
-						'illustration rare': '#4ECDC4','special illustration rare': '#C71585',
-						'rare secret': '#F39C12','rare rainbow': '#E91E63','hyper rare': '#FF10F0',
-					};
-					return colors[rarity.toLowerCase()] || '#808080';
-				};
-				
-				let content = `<div style="text-align: center; margin-bottom: 15px;">` +
-					`<h3 style="margin: 0;">🎴 ${displaySetName} Pack Opening!</h3>` +
-					`<div style="display: flex; justify-content: center; gap: 15px; margin-top: 10px; flex-wrap: wrap;">` +
-					`<div style="padding: 8px 15px; background: rgba(241,196,15,0.1); border: 2px solid #f1c40f; border-radius: 6px;">` +
-					`<strong style="color: #f39c12;">${pointsGained}</strong> Points` +
+
+				// NEW: Enhanced pack opening display with battle data highlights
+				let output = `<div class="themed-table-container">` +
+					`<h3 class="themed-table-title">🎴 ${user.name} opened a ${displaySetName} Pack!</h3>`;
+
+				// NEW: Pack summary stats
+				output += `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0;">` +
+					`<div style="padding: 10px; background: rgba(241,196,15,0.1); border: 2px solid #f1c40f; border-radius: 6px; text-align: center;">` +
+					`<div style="font-size: 1.2em; font-weight: bold; color: #f39c12;">${pointsGained}</div>` +
+					`<div style="font-size: 0.85em; color: #666;">Total Points</div>` +
 					`</div>`;
 				
 				if (totalBattleValue > 0) {
-					content += `<div style="padding: 8px 15px; background: rgba(231,76,60,0.1); border: 2px solid #e74c3c; border-radius: 6px;">` +
-						`<strong style="color: #e74c3c;">⚔️ ${totalBattleValue}</strong> Battle Value` +
+					output += `<div style="padding: 10px; background: rgba(231,76,60,0.1); border: 2px solid #e74c3c; border-radius: 6px; text-align: center;">` +
+						`<div style="font-size: 1.2em; font-weight: bold; color: #e74c3c;">⚔️ ${totalBattleValue}</div>` +
+						`<div style="font-size: 0.85em; color: #666;">Battle Value</div>` +
 						`</div>`;
 				}
 				
-				if (newCards.length > 0) {
-					content += `<div style="padding: 8px 15px; background: rgba(46,204,113,0.1); border: 2px solid #2ecc71; border-radius: 6px;">` +
-						`<strong style="color: #27ae60;">✨ ${newCards.length}</strong> New Card${newCards.length > 1 ? 's' : ''}` +
-						`</div>`;
+				output += `</div>`;
+
+				// NEW: Find highlight cards (high battle value or high rarity)
+				const highlightCards = pack.filter(card => {
+					const points = getCardPoints(card);
+					return (card.battleValue && card.battleValue >= 100) || points >= 60;
+				});
+
+				if (highlightCards.length > 0) {
+					output += `<div style="background: linear-gradient(135deg, rgba(231,76,60,0.1), rgba(241,196,15,0.1)); border: 2px solid #e74c3c; border-radius: 8px; padding: 12px; margin-bottom: 15px;">` +
+						`<strong style="color: #e74c3c; font-size: 1.1em;">✨ Highlight Pulls!</strong>` +
+						`<div style="margin-top: 8px;">`;
+					
+					highlightCards.forEach(card => {
+						const rarityColor = getRarityColor(card.rarity);
+						output += `<div style="margin: 6px 0; padding: 8px; background: rgba(255,255,255,0.5); border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">` +
+							`<div>` +
+							`<button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer; font-size: 1.05em;">${card.name}</button>` +
+							` <span style="color: ${rarityColor}; font-weight: bold;">(${card.rarity})</span>` +
+							`</div>`;
+						
+						if (card.battleValue) {
+							let bvColor = '#e74c3c';
+							if (card.battleValue >= 150) bvColor = '#c0392b';
+							output += `<div style="color: ${bvColor}; font-weight: bold;">⚔️ ${card.battleValue} BV</div>`;
+						}
+						
+						output += `</div>`;
+					});
+					
+					output += `</div></div>`;
 				}
-				
-				content += `</div></div><hr/>`;
-				
-				// NEW: Enhanced card table with highlights
-				content += `<div style="max-height: 400px; overflow-y: auto;"><table class="themed-table">` +
+
+				// Enhanced table with battle value
+				output += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
 					`<tr class="themed-table-header">` +
-					`<th>Card</th>` +
+					`<th>Name</th>` +
 					`<th>Rarity</th>` +
 					`<th>Type</th>` +
 					`<th>HP</th>` +
 					`<th>⚔️ BV</th>` +
-					`<th></th>` +
+					`<th>Pts</th>` +
 					`</tr>`;
-				
+
 				for (const card of pack) {
 					const rarityColor = getRarityColor(card.rarity);
-					const isNew = newCards.includes(card.cardId);
-					const isHighValue = card.battleValue && card.battleValue >= 100;
+					const points = getCardPoints(card);
 					
-					// Add highlight for new or high-value cards
-					let rowStyle = '';
-					if (isHighValue) {
-						rowStyle = 'background: linear-gradient(90deg, rgba(231,76,60,0.15), transparent); border-left: 3px solid #e74c3c;';
-					} else if (isNew) {
-						rowStyle = 'background: linear-gradient(90deg, rgba(46,204,113,0.15), transparent); border-left: 3px solid #2ecc71;';
-					}
-					
-					content += `<tr class="themed-table-row" style="${rowStyle}">` +
+					output += `<tr class="themed-table-row">` +
 						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-						`<td><span style="color: ${rarityColor}; font-weight: bold;">${card.rarity.toUpperCase()}</span></td>` +
+						`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
 						`<td>${card.type || card.supertype}</td>` +
 						`<td>${card.hp || '-'}</td>`;
 					
-					// Battle Value
+					// Battle Value with color coding
 					if (card.battleValue) {
 						let bvColor = '#95a5a6';
 						if (card.battleValue >= 150) bvColor = '#e74c3c';
 						else if (card.battleValue >= 100) bvColor = '#f39c12';
 						else if (card.battleValue >= 70) bvColor = '#3498db';
 						
-						content += `<td><strong style="color: ${bvColor}; font-size: 1.1em;">${card.battleValue}</strong></td>`;
+						output += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
 					} else {
-						content += `<td>-</td>`;
+						output += `<td>-</td>`;
 					}
 					
-					// Badges
-					let badges = '';
-					if (isNew) badges += `<span style="background: #2ecc71; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; font-weight: bold; margin-right: 4px;">NEW</span>`;
-					if (isHighValue) badges += `<span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; font-weight: bold;">⚔️</span>`;
-					
-					content += `<td style="text-align: right;">${badges}</td>`;
-					content += `</tr>`;
+					output += `<td><strong>${points}</strong></td>` +
+						`</tr>`;
 				}
-				
-				content += `</table></div>`;
-				
-				// NEW: Pack summary footer
-				const bestCard = pack[0]; // Already sorted by battle value
-				if (bestCard && bestCard.battleValue && bestCard.battleValue >= 100) {
-					content += `<div style="margin-top: 15px; padding: 10px; background: rgba(231,76,60,0.1); border: 2px solid #e74c3c; border-radius: 6px; text-align: center;">` +
-						`<strong style="color: #e74c3c;">🎉 Best Pull:</strong> ` +
-						`<button name="send" value="/tcg card ${bestCard.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:#e74c3c; text-decoration:underline; cursor:pointer;">${bestCard.name}</button> ` +
-						`(⚔️ ${bestCard.battleValue})` +
-						`</div>`;
-				}
-				
-				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, content);
-				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 
+				output += `</table></div></div>`;
+
+				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 				this.sendReplyBox(output);
 
 			} else { // View pack inventory
