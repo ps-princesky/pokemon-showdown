@@ -2,69 +2,26 @@
  * Main file
  * Pokemon Showdown - http://pokemonshowdown.com/
  *
- * This is the main Pokemon Showdown app, and the file that the
- * `pokemon-showdown` script runs if you start Pokemon Showdown normally.
- *
- * This file sets up our SockJS server, which handles communication
- * between users and your server, and also sets up globals. You can
- * see details in their corresponding files, but here's an overview:
- *
- * Users - from users.ts
- *
- *   Most of the communication with users happens in users.ts, we just
- *   forward messages between the sockets.js and users.ts.
- *
- *   It exports the global tables `Users.users` and `Users.connections`.
- *
- * Rooms - from rooms.ts
- *
- *   Every chat room and battle is a room, and what they do is done in
- *   rooms.ts. There's also a global room which every user is in, and
- *   handles miscellaneous things like welcoming the user.
- *
- *   It exports the global table `Rooms.rooms`.
- *
- * Dex - from sim/dex.ts
- *
- *   Handles getting data about Pokemon, items, etc.
- *
- * Ladders - from ladders.ts and ladders-remote.ts
- *
- *   Handles Elo rating tracking for players.
- *
- * Chat - from chat.ts
- *
- *   Handles chat and parses chat commands like /me and /ban
- *
- * Sockets - from sockets.js
- *
- *   Used to abstract out network connections. sockets.js handles
- *   the actual server and connection set-up.
- *
  * @license MIT
  */
 try {
 	require('source-map-support').install();
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 } catch (e) {
 }
+
 // NOTE: This file intentionally doesn't use too many modern JavaScript
 // features, so that it doesn't crash old versions of Node.js, so we
 // can successfully print the "We require Node.js 22+" message.
 
-// I've gotten enough reports by people who don't use the launch
-// script that this is worth repeating here
 try {
-// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+	// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 	fetch;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 } catch (e) {
 	throw new Error("We require Node.js version 22 or later; you're using " + process.version);
 }
 
 try {
 	require.resolve('ts-chacha20');
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 } catch (e) {
 	throw new Error("Dependencies are unmet; run `npm ci` before launching Pokemon Showdown again.");
 }
@@ -76,8 +33,6 @@ import * as TCG_Ranking from '../impulse/psgo-plugin/tcg_ranking';
 
 /*********************************************************
  * Set up most of our globals
- * This is in a function because swc runs `import` before any code,
- * and many of our imports require the `Config` global to be set up.
  *********************************************************/
 function setupGlobals() {
 	const ConfigLoader = require('./config-loader');
@@ -95,8 +50,6 @@ function setupGlobals() {
 		FS('config/config.js').onModify(() => {
 			try {
 				global.Config = ConfigLoader.load(true);
-				// ensure that battle prefixes configured via the chat plugin are not overwritten
-				// by battle prefixes manually specified in config.js
 				Chat.plugins['username-prefixes']?.prefixManager.refreshConfig(true);
 				Monitor.notice('Reloaded ../config/config.js');
 			} catch (e: any) {
@@ -108,20 +61,7 @@ function setupGlobals() {
 	/********************
 	* Impulse Globals
 	*********************/
-
 	global.Impulse = {};
-
-	// Run season maintenance every hour
-	setInterval(async () => {
-		await TCG_Ranking.runSeasonMaintenance();
-	}, 60 * 60 * 1000); // 1 hour
-
-	// Also run it once on startup
-	TCG_Ranking.runSeasonMaintenance();
-
-	/********************
-	* Impulse Globals Ends
-	*********************/
 
 	const { Dex } = require('../sim/dex');
 	global.Dex = Dex;
@@ -147,7 +87,6 @@ function setupGlobals() {
 
 	const { Rooms } = require('./rooms');
 	global.Rooms = Rooms;
-	// We initialize the global room here because roomlogs.ts needs the Rooms global
 	Rooms.global = new Rooms.GlobalRoomState();
 
 	const Verifier = require('./verifier');
@@ -160,10 +99,11 @@ function setupGlobals() {
 	global.IPTools = IPTools;
 	void IPTools.loadHostsAndRanges();
 }
+
 setupGlobals();
 
 /**************************
-* Initialize MongoDB BEFORE anything else uses it
+* Initialize MongoDB
 **************************/
 async function initializeMongoDB() {
 	if (!Config.mongodb) {
@@ -192,21 +132,6 @@ async function initializeMongoDB() {
 		Monitor.error('Failed to connect to MongoDB: ' + error);
 		Monitor.warn('Server will continue without MongoDB support');
 	}
-}
-
-/****************
-* MongoDB End 
-***************/
-
-if (Config.crashguard) {
-	// graceful crash - allow current battles to finish before restarting
-	process.on('uncaughtException', (err: Error) => {
-		Monitor.crashlog(err, 'The main process');
-	});
-
-	process.on('unhandledRejection', err => {
-		Monitor.crashlog(err as any, 'A main process Promise');
-	});
 }
 
 /**************************
@@ -241,14 +166,9 @@ if (Config.crashguard) {
 	});
 }
 
-/**************************
-* Shutdown MongoDB Gracefully  *
-**************************/
-
 /*********************************************************
- * Start networking processes to be connected to
+ * Start networking processes
  *********************************************************/
-
 const { Sockets } = require('./sockets');
 global.Sockets = Sockets;
 
@@ -256,6 +176,9 @@ export function listen(port: number, bindAddress: string, workerCount: number) {
 	Sockets.listen(port, bindAddress, workerCount);
 }
 
+/*********************************************************
+ * Main startup sequence
+ *********************************************************/
 async function startServer() {
 	// CRITICAL: Initialize MongoDB FIRST, before starting the server
 	await initializeMongoDB();
@@ -272,33 +195,30 @@ async function startServer() {
 		Sockets.listen(port);
 	}
 	
-/*********************************************************
- * Set up our last global
- *********************************************************/
+	/*********************************************************
+	 * Set up TeamValidatorAsync after server starts
+	 *********************************************************/
+	const TeamValidatorAsync = require('./team-validator-async');
+	global.TeamValidatorAsync = TeamValidatorAsync;
 
-const TeamValidatorAsync = require('./team-validator-async');
-global.TeamValidatorAsync = TeamValidatorAsync;
+	/*********************************************************
+	 * Start up the REPL server
+	 *********************************************************/
+	// eslint-disable-next-line no-eval
+	Repl.start('app', cmd => eval(cmd));
 
-/*********************************************************
- * Start up the REPL server
- *********************************************************/
+	/*********************************************************
+	 * Fully initialized, run startup hook
+	 *********************************************************/
+	if (Config.startuphook) {
+		process.nextTick(Config.startuphook);
+	}
 
-// eslint-disable-next-line no-eval
-Repl.start('app', cmd => eval(cmd));
-
-/*********************************************************
- * Fully initialized, run startup hook
- *********************************************************/
-
-if (Config.startuphook) {
-	process.nextTick(Config.startuphook);
-}
-
-if (Config.ofemain) {
-	// Create a heapdump if the process runs out of memory.
-	global.nodeOomHeapdump = (require as any)('node-oom-heapdump')({
-		addTimestamp: true,
-	});
+	if (Config.ofemain) {
+		global.nodeOomHeapdump = (require as any)('node-oom-heapdump')({
+			addTimestamp: true,
+		});
+	}
 }
 
 // Start the server with proper async handling
