@@ -108,20 +108,23 @@ export const shopCommands: Chat.ChatCommands = {
 				if (currentStock.length === 0) {
 					content += `<p>${ERROR_MESSAGES.SHOP_EMPTY}. Please check back later.</p>`;
 				} else {
-					content += `<h4>Booster Packs for Sale</h4>` +
-						`<table class="themed-table">` +
-						`<tr class="themed-table-header"><th>Set Name</th><th>Set ID</th><th>Price</th><th></th></tr>`;
-					for (const setId of currentStock) {
+					const rows = currentStock.map(setId => {
 						const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 						const setName = setInfo ? setInfo.name : setId;
-						content += `<tr class="themed-table-row">` +
-							`<td><strong>${setName}</strong></td>` +
-							`<td>${setId}</td>` +
-							`<td>${SHOP_CONFIG.PACK_PRICE} Credits</td>` +
-							`<td><button name="send" value="/tcg shop buy, ${setId}">Buy</button></td>` +
-							`</tr>`;
-					}
-					content += `</table>`;
+						return [
+							`<strong>${setName}</strong>`,
+							setId,
+							`${SHOP_CONFIG.PACK_PRICE} Credits`,
+							`<button name="send" value="/tcg shop buy, ${setId}">Buy</button>`
+						];
+					});
+
+					content += `<h4>Booster Packs for Sale</h4>` +
+						TCG_UI.buildTable({
+							headers: ['Set Name', 'Set ID', 'Price', ''],
+							rows,
+							scrollable: false
+						});
 				}
 				const output = TCG_UI.buildPage('TCG Card Shop', content);
 				this.sendReplyBox(output);
@@ -200,7 +203,11 @@ export const shopCommands: Chat.ChatCommands = {
 				if (!this.runBroadcast()) return;
 
 				if (!collection || !collection.packs?.length) {
-					return this.sendReplyBox(TCG_UI.buildPage(`${user.name}'s Unopened Packs`, `You do not have any unopened packs. You can buy some from the <code>/tcg shop</code>.`));
+					const output = TCG_UI.buildPage(
+						`${user.name}'s Unopened Packs`,
+						`You do not have any unopened packs. You can buy some from the <code>/tcg shop</code>.`
+					);
+					return this.sendReplyBox(output);
 				}
 
 				let content = `<p>Click a button below to open one pack.</p><hr/>` +
