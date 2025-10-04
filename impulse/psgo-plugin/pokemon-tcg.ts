@@ -638,7 +638,7 @@ export const commands: Chat.ChatCommands = {
 
 		const topCollectors = await UserCollections.findSorted({}, sortQuery, 5);
 	
-		let output += `<h3>TCG Collection Statistics</h3>`;
+		let output = `<h3>TCG Collection Statistics</h3>`;
 		output += `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
 		
 		// ADD SCROLLABLE CONTAINER HERE
@@ -684,7 +684,7 @@ export const commands: Chat.ChatCommands = {
 	if (!this.runBroadcast()) return;
 	
 	
-	let output += `<h3>Pokemon TCG Sets</h3>`;
+	let output = `<h3>Pokemon TCG Sets</h3>`;
 	
 	// UPDATE: Use consistent height
 	output += `<div style="max-height: 360px; overflow-y: auto;">`;
@@ -1433,7 +1433,7 @@ async rankedbattle(target, room, user) {
 		const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
 
 		
-		let output += `<h3>Available Challenge Targets</h3>`;
+		let output = `<h3>Available Challenge Targets</h3>`;
 		output += `<p>Challenges remaining: <strong>${challengeStatus.challengesRemaining}/10</strong></p>`;
 
 		if (availableTargets.length === 0) {
@@ -1582,7 +1582,7 @@ async ranking(target, room, user) {
 			title = 'ELO Leaderboard';
 		}
 		
-		let output += `<h3>${title}</h3>`;
+		let output = `<h3>${title}</h3>`;
 		
 		// ADD SCROLLABLE CONTAINER HERE
 		output += `<div style="max-height: 360px; overflow-y: auto;">`;
@@ -1632,7 +1632,7 @@ async ranking(target, room, user) {
 			TCG_Ranking.getPlayerBattleHistory(targetId, 5),
 			TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
 		]);
-		let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
+		let output = `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
 		
 		const allBattles = [
 			...battles.map(b => ({ ...b, type: 'live' })),
@@ -1727,7 +1727,7 @@ async ranking(target, room, user) {
 		
 		const { season, daysRemaining, hoursRemaining } = seasonInfo;
 		
-		let output += `<h3>${season.name}</h3>`;
+		let output = `<h3>${season.name}</h3>`;
 		output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
 		output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
 		output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
@@ -1765,7 +1765,7 @@ async ranking(target, room, user) {
 	try {
 		const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
 		
-		let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
+		let output = `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
 		
 		if (seasonRewards.length === 0) {
 			output += `<p>${targetUser} has not received any season rewards yet.</p>`;
@@ -1804,7 +1804,7 @@ async ranking(target, room, user) {
 				const available = await TCG_Ranking.getAvailableMilestones(user.id);
 				const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
 				
-				let output += `<h3> Weekly Milestones - Week ${summary.weekNumber}</h3>`;
+				let output = `<h3> Weekly Milestones - Week ${summary.weekNumber}</h3>`;
 				output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
 				output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
 				output += `<hr/>`;
