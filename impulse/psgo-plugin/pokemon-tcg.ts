@@ -1384,7 +1384,7 @@ async rankedbattle(target, room, user) {
 		return this.errorReply(`Error executing challenge: ${e.message}`);
 	}
 	break;
-},
+}
 		case 'targets': {
 			if (!this.runBroadcast()) return;
 			
