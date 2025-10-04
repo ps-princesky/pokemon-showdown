@@ -173,6 +173,7 @@ export const commands: Chat.ChatCommands = {
 
 		async collection(target, room, user) {
 			if (!this.runBroadcast()) return;
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const parts = target.split(',').map(p => p.trim());
 			const targetUsername = parts[0] || user.name;
 			const targetId = toID(targetUsername);
@@ -263,6 +264,7 @@ export const commands: Chat.ChatCommands = {
 
 		async daily(target, room, user) {
 			if (!this.runBroadcast()) return;
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const userId = user.id;
 			const twentyFourHours = 24 * 60 * 60 * 1000;
 			const DAILY_CURRENCY_AWARD = 50;
@@ -337,6 +339,7 @@ export const commands: Chat.ChatCommands = {
 		
 		async openpack(target, room, user) {
 			this.checkCan('globalban');
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!target) {
 				return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 			}
@@ -396,6 +399,7 @@ export const commands: Chat.ChatCommands = {
 
 		async card(target, room, user) {
 			if (!this.runBroadcast()) return;
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg card [cardId]");
 
 			const card = await TCGCards.findOne({ cardId: target.trim() });
@@ -455,6 +459,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async search(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			const CARDS_PER_PAGE = 60;
 
@@ -544,6 +549,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		
 		async setprogress(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
 			const targetUsername = parts[0] || user.name;
@@ -604,6 +610,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async stats(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			const sortBy = toID(target) || 'total';
 			let sortQuery: any = { 'stats.totalCards': -1 };
@@ -666,6 +673,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async sets(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			let content = `<div style="max-height: 380px; overflow-y: auto;">`;
 			const seriesGroups = new Map<string, TCGSet[]>();
@@ -694,6 +702,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async rarities(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			let content = `<div style="max-height: 380px; overflow-y: auto;">`;
 			content += `<ul style="list-style: none; padding: 10px;">`;
@@ -705,6 +714,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async wishlist(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			const parts = target.split(',').map(p => p.trim());
 			const action = parts.length > 1 ? toID(parts[0]) : 'view';
@@ -745,6 +755,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async types(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			let content = `<p><strong>Supertypes:</strong> ${SUPERTYPES.join(', ')}</p>`;
 			content += `<p><strong>Pokemon Types:</strong> ${POKEMON_TYPES.join(', ')}</p>`;
@@ -755,6 +766,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async battle(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const [action, ...args] = target.split(',').map(p => p.trim());
 
 			switch (toID(action)) {
@@ -946,6 +958,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		
 		async currency(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			if (!this.runBroadcast()) return;
 			const targetUser = toID(target) || user.id;
 			const targetUsername = target.trim() || user.name;
@@ -979,6 +992,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async takecurrency(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
@@ -1003,6 +1017,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async setcurrency(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			this.checkCan('globalban');
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
@@ -1027,6 +1042,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async pay(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 			if (!targetUser || !amountStr) {
 				return this.errorReply("Usage: /tcg pay [user], [amount]");
@@ -1056,6 +1072,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 		async shop(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const [action, ...args] = target.split(',').map(p => p.trim());
 			const userId = user.id;
 
@@ -1182,6 +1199,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		
 		async packs(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
 			const [action, ...args] = target.split(',').map(p => p.trim());
 			const userId = user.id;
 
@@ -1270,6 +1288,7 @@ export const commands: Chat.ChatCommands = {
 		},
 
 async rankedbattle(target, room, user) {
+	await TCG_Ranking.getPlayerRanking(user.id);
 	const [action, ...args] = target.split(',').map(p => p.trim());
 
 	switch (toID(action)) {
@@ -1474,6 +1493,7 @@ async ranking(target, room, user) {
 },
 
 async leaderboard(target, room, user) {
+	await TCG_Ranking.getPlayerRanking(user.id);
 	if (!this.runBroadcast()) return;
 	const type = toID(target) || 'elo';
 	
@@ -1607,6 +1627,7 @@ async battlehistory(target, room, user) {
 },
 
 async season(target, room, user) {
+	await TCG_Ranking.getPlayerRanking(user.id);
 	if (!this.runBroadcast()) return;
 	const [action] = target.split(',').map(p => p.trim());
 	
@@ -1658,6 +1679,7 @@ async season(target, room, user) {
 },
 
 async seasonhistory(target, room, user) {
+	await TCG_Ranking.getPlayerRanking(user.id);
 	if (!this.runBroadcast()) return;
 	const targetUser = target.trim() || user.name;
 	const targetId = toID(targetUser);
