@@ -55,7 +55,11 @@ export const collectionCommands: Chat.ChatCommands = {
 		try {
 			const collection = await UserCollections.findOne({ userId: targetId });
 			if (!collection || !collection.cards || collection.cards.length === 0) {
-				this.sendReplyBox(TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, `${targetUsername} doesn't have any cards in their collection yet!`));
+				const output = TCG_UI.buildPage(
+					`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`,
+					`${targetUsername} doesn't have any cards in their collection yet!`
+				);
+				this.sendReplyBox(output);
 				return;
 			}
 
@@ -143,7 +147,11 @@ export const collectionCommands: Chat.ChatCommands = {
 			const percentage = totalInSet > 0 ? Math.round((ownedCount / totalInSet) * 100) : 0;
 			
 			let content = `<p><strong>Collector:</strong> ${Impulse.nameColor(targetUsername, true)} | <strong>Completion:</strong> ${ownedCount} / ${totalInSet} cards</p>`;
-			content += `<div style="background: #555; border-radius: 4px; overflow: hidden;"><div style="width:${percentage}%; background: #2ecc71; padding: 4px 0; text-align: center; color: #fff; font-weight: bold;">${percentage}%</div></div>`;
+			content += TCG_UI.buildProgressBar({
+				current: ownedCount,
+				total: totalInSet,
+				showText: true
+			});
 
 			if (missingCards.length > 0) {
 				content += `<h4 style="margin-top: 15px;">Missing Cards:</h4>`;
@@ -181,14 +189,14 @@ export const collectionCommands: Chat.ChatCommands = {
 						{ $addToSet: { wishlist: card.cardId } }
 					);
 					return this.sendReply(`Added ${card.name} to your wishlist.`);
-				} else { // remove
+				} else {
 					await UserCollections.updateOne(
 						{ userId: user.id },
 						{ $pull: { wishlist: card.cardId } }
 					);
 					return this.sendReply(`Removed ${card.name} from your wishlist.`);
 				}
-			} else { // view
+			} else {
 				const targetUsername = parts[0] || user.name;
 				const targetId = toID(targetUsername);
 				const collection = await UserCollections.findOne({ userId: targetId });
