@@ -32,9 +32,10 @@ export const shopCommands: Chat.ChatCommands = {
 			const availableSets = await TCGCards.distinct('set');
 			if (availableSets.length === 0) {
 				// No sets available, update database with empty stock
-				await ShopStateCollection.upsert(
+				await ShopStateCollection.updateOne(
 					{ _id: 'main' },
-					{ stock: [], lastRotation: now }
+					{ $set: { stock: [], lastRotation: now } },
+					{ upsert: true }
 				);
 				return [];
 			}
@@ -49,9 +50,10 @@ export const shopCommands: Chat.ChatCommands = {
 			const newStock = availableSets.slice(0, SHOP_CONFIG.PACK_SLOTS);
 
 			// Update database with new stock and rotation time
-			await ShopStateCollection.upsert(
+			await ShopStateCollection.updateOne(
 				{ _id: 'main' },
-				{ stock: newStock, lastRotation: now }
+				{ $set: { stock: newStock, lastRotation: now } },
+				{ upsert: true }
 			);
 
 			return newStock;
@@ -84,7 +86,11 @@ export const shopCommands: Chat.ChatCommands = {
 					collection.packs.push({ setId, quantity: 1 });
 				}
 		
-				await UserCollections.upsert({ userId }, collection);
+				await UserCollections.updateOne(
+					{ userId },
+					{ $set: collection },
+					{ upsert: true }
+				);
 				await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
 
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
@@ -175,7 +181,11 @@ export const shopCommands: Chat.ChatCommands = {
 				collection.stats.uniqueCards = collection.cards.length;
 				collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
 				collection.lastUpdated = Date.now();
-				await UserCollections.upsert({ userId }, collection);
+				await UserCollections.updateOne(
+					{ userId },
+					{ $set: collection },
+					{ upsert: true }
+				);
 				
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 				const displaySetName = setInfo ? setInfo.name : setId;
