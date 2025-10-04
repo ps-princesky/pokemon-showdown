@@ -67,7 +67,7 @@ export const infoCommands: Chat.ChatCommands = {
 			}
 
 			output += `<td style="vertical-align: top; line-height: 1.5;">` +
-				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px;">${card.name}</div>` +
+				`<div style="font-size: 1.5em; font-weight: bold; margin-bottom: 4px; color: #fff;">${card.name}</div>` +
 				`<div style="color: ${rarityColorHex}; font-weight: bold; font-size: 1em; margin-bottom: 12px;">${card.rarity}</div>`;
 
 			// Compact info table
@@ -84,14 +84,14 @@ export const infoCommands: Chat.ChatCommands = {
 
 			output += `<table style="width: 100%; font-size: 0.9em;">`;
 			infoRows.forEach(([label, value]) => {
-				output += `<tr><td style="padding: 2px 8px 2px 0; color: #666; width: 100px;"><strong>${label}:</strong></td><td style="padding: 2px 0;">${value}</td></tr>`;
+				output += `<tr><td style="padding: 2px 8px 2px 0; color: #bbb; width: 100px;"><strong>${label}:</strong></td><td style="padding: 2px 0; color: #eee;">${value}</td></tr>`;
 			});
 			output += `</table>`;
 
-			// Battle Stats - removed glow effects and improved contrast
+			// Battle Stats - improved for dark mode
 			if (card.battleStats) {
-				output += `<div style="margin-top: 12px; padding: 10px; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 0.85em; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">` +
-					`<strong style="display: block; margin-bottom: 8px; color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); font-size: 1.1em;">⚔️ Battle Stats</strong>` +
+				output += `<div style="margin-top: 12px; padding: 10px; background: rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 0.85em;">` +
+					`<strong style="display: block; margin-bottom: 8px; color: #fff; font-size: 1.1em;">⚔️ Battle Stats</strong>` +
 					`<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">`;
 			
 				const stats = [
@@ -104,9 +104,9 @@ export const infoCommands: Chat.ChatCommands = {
 				stats.forEach(stat => {
 					const percent = Math.round((stat.value / stat.max) * 100);
 					output += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">` +
-						`<span style="color: #2c3e50; text-shadow: 0 1px 2px rgba(255,255,255,0.8); min-width: 38px; font-weight: bold; font-size: 0.95em;">${stat.label}:</span>` +
+						`<span style="color: #ccc; min-width: 38px; font-weight: bold; font-size: 0.95em;">${stat.label}:</span>` +
 						`<span style="font-weight: bold; color: ${stat.color}; min-width: 32px; font-size: 1.05em;">${stat.value}</span>` +
-						`<div style="flex: 1; background: rgba(255,255,255,0.4); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(0,0,0,0.2); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">` +
+						`<div style="flex: 1; background: rgba(0,0,0,0.4); height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2);">` +
 						`<div style="background: ${stat.color}; height: 100%; width: ${percent}%; transition: width 0.3s ease;"></div>` +
 						`</div>` +
 						`</div>`;
@@ -119,20 +119,20 @@ export const infoCommands: Chat.ChatCommands = {
 			// Attacks (Compact)
 			if (card.attacks && card.attacks.length > 0) {
 				output += `<div style="margin-top: 12px;">` +
-					`<strong style="color: #2c3e50; font-size: 0.95em;">⚔️ Attacks</strong>`;
+					`<strong style="color: #fff; font-size: 0.95em;">⚔️ Attacks</strong>`;
 			
 				card.attacks.forEach(attack => {
 					const energyCost = attack.cost && attack.cost.length > 0 
 						? attack.cost.map(e => `⚡`).join('')
 						: '';
 					
-					output += `<div style="margin: 6px 0; padding: 6px 8px; background: rgba(255,255,255,0.4); border-radius: 4px; border-left: 2px solid #e74c3c; font-size: 0.85em;">` +
-						`<div><strong>${energyCost} ${attack.name}</strong>` +
+					output += `<div style="margin: 6px 0; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 2px solid #e74c3c; font-size: 0.85em;">` +
+						`<div style="color: #fff;"><strong>${energyCost} ${attack.name}</strong>` +
 						(attack.damageText ? ` <span style="color: #e74c3c; float: right;">${attack.damageText}</span>` : '') +
 						`</div>`;
 				
 					if (attack.text) {
-						output += `<div style="margin-top: 3px; color: #666; font-size: 0.95em;">${attack.text}</div>`;
+						output += `<div style="margin-top: 3px; color: #bbb; font-size: 0.95em;">${attack.text}</div>`;
 					}
 				
 					output += `</div>`;
@@ -143,14 +143,14 @@ export const infoCommands: Chat.ChatCommands = {
 			// Abilities (Compact)
 			if (card.abilities && card.abilities.length > 0) {
 				output += `<div style="margin-top: 12px;">` +
-					`<strong style="color: #2c3e50; font-size: 0.95em;">✨ Abilities</strong>`;
+					`<strong style="color: #fff; font-size: 0.95em;">✨ Abilities</strong>`;
 			
 				card.abilities.forEach(ability => {
-					output += `<div style="margin: 6px 0; padding: 6px 8px; background: rgba(255,255,255,0.4); border-radius: 4px; border-left: 2px solid #9b59b6; font-size: 0.85em;">` +
-						`<div><strong>${ability.name}</strong> <span style="color: #9b59b6; font-size: 0.9em;">(${ability.type})</span></div>`;
+					output += `<div style="margin: 6px 0; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 2px solid #9b59b6; font-size: 0.85em;">` +
+						`<div style="color: #fff;"><strong>${ability.name}</strong> <span style="color: #9b59b6; font-size: 0.9em;">(${ability.type})</span></div>`;
 					
 					if (ability.text) {
-						output += `<div style="margin-top: 3px; color: #666; font-size: 0.95em;">${ability.text}</div>`;
+						output += `<div style="margin-top: 3px; color: #bbb; font-size: 0.95em;">${ability.text}</div>`;
 					}
 					output += `</div>`;
 				});
@@ -164,14 +164,14 @@ export const infoCommands: Chat.ChatCommands = {
 				if (card.weaknesses && card.weaknesses.length > 0) {
 					output += `<div style="flex: 1;">` +
 					`<strong style="color: #e74c3c;">🔻 Weakness:</strong> `;
-					output += card.weaknesses.map(w => `<span style="background: rgba(231,76,60,0.1); padding: 2px 6px; border-radius: 3px; margin-left: 4px;">${w.type} ${w.value}</span>`).join('');
+					output += card.weaknesses.map(w => `<span style="background: rgba(231,76,60,0.2); padding: 2px 6px; border-radius: 3px; margin-left: 4px; color: #fff;">${w.type} ${w.value}</span>`).join('');
 					output += `</div>`;
 				}
 
 				if (card.resistances && card.resistances.length > 0) {
 					output += `<div style="flex: 1;">` +
 					`<strong style="color: #3498db;">🛡️ Resistance:</strong> `;
-					output += card.resistances.map(r => `<span style="background: rgba(52,152,219,0.1); padding: 2px 6px; border-radius: 3px; margin-left: 4px;">${r.type} ${r.value}</span>`).join('');
+					output += card.resistances.map(r => `<span style="background: rgba(52,152,219,0.2); padding: 2px 6px; border-radius: 3px; margin-left: 4px; color: #fff;">${r.type} ${r.value}</span>`).join('');
 					output += `</div>`;
 				}
 
@@ -180,10 +180,10 @@ export const infoCommands: Chat.ChatCommands = {
 
 			// Flavor text & Artist (Compact footer)
 			if (card.cardText || card.artist) {
-				output += `<div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.1); font-size: 0.8em;">`;
+				output += `<div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 0.8em;">`;
 				
 				if (card.cardText) {
-					output += `<div style="font-style: italic; color: #777;">"${card.cardText}"</div>`;
+					output += `<div style="font-style: italic; color: #bbb;">"${card.cardText}"</div>`;
 				}
 			
 				if (card.artist) {
@@ -209,7 +209,7 @@ export const infoCommands: Chat.ChatCommands = {
 		const query: any = {};
 		const searchTerms: string[] = [];
 		let page = 1;
-		let sortBy: 'name' | 'battleValue' | 'hp' | 'rarity' = 'name'; // Default sort by name
+		let sortBy: 'name' | 'battleValue' | 'hp' | 'rarity' = 'name';
 
 		const commandArgs = [];
 		for (const filter of filters) {
@@ -217,14 +217,12 @@ export const infoCommands: Chat.ChatCommands = {
 			const value = valueParts.join(':').trim();
 			if (!key || !value) continue;
 			
-			// Handle page parameter
 			if (toID(key) === 'page') {
 				const pageNum = parseInt(value);
 				if (!isNaN(pageNum) && pageNum > 0) page = pageNum;
 				continue; 
 			}
 			
-			// Handle sort parameter
 			if (toID(key) === 'sort') {
 				if (['name', 'battlevalue', 'hp', 'rarity'].includes(toID(value))) {
 					sortBy = toID(value) === 'battlevalue' ? 'battleValue' : toID(value) as any;
@@ -259,7 +257,6 @@ export const infoCommands: Chat.ChatCommands = {
 						else query.hp = amount;
 					}
 					break;
-				// Battle value filter
 				case 'battlevalue':
 				case 'bv':
 					const bvMatch = value.match(/([<>=]+)?\s*(\d+)/);
@@ -297,7 +294,6 @@ export const infoCommands: Chat.ChatCommands = {
 				return this.sendReply(`No cards found matching your criteria.`);
 			}
 
-			// Enhanced sorting
 			paginatedResults.sort((a, b) => {
 				switch (sortBy) {
 					case 'battleValue':
@@ -314,10 +310,8 @@ export const infoCommands: Chat.ChatCommands = {
 				}
 			});
 
-			// Enhanced table with battle data
 			let tableHtml = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
 			
-			// Headers
 			tableHtml += `<tr class="themed-table-header">` +
 				`<th>Name</th>` +
 				`<th>Set</th>` +
@@ -327,7 +321,6 @@ export const infoCommands: Chat.ChatCommands = {
 				`<th>⚔️ BV</th>` +
 				`</tr>`;
 
-			// Rows
 			for (const card of paginatedResults) {
 				const rarityColor = getRarityColor(card.rarity);
 				
@@ -338,12 +331,11 @@ export const infoCommands: Chat.ChatCommands = {
 					`<td>${card.type || card.supertype}</td>` +
 					`<td>${card.hp || '-'}</td>`;
 				
-				// Battle Value with color coding
 				if (card.battleValue) {
-					let bvColor = '#95a5a6'; // Gray default
-					if (card.battleValue >= 150) bvColor = '#e74c3c'; // Red for high
-					else if (card.battleValue >= 100) bvColor = '#f39c12'; // Orange for medium-high
-					else if (card.battleValue >= 70) bvColor = '#3498db'; // Blue for medium
+					let bvColor = '#95a5a6';
+					if (card.battleValue >= 150) bvColor = '#e74c3c';
+					else if (card.battleValue >= 100) bvColor = '#f39c12';
+					else if (card.battleValue >= 70) bvColor = '#3498db';
 					
 					tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
 				} else {
@@ -361,11 +353,9 @@ export const infoCommands: Chat.ChatCommands = {
 				tableHtml +
 				`<p style="text-align:center; margin-top: 8px;">Showing ${paginatedResults.length} of ${totalResults} results.</p>`;
 			
-			// Pagination and sort controls
 			const commandString = `/tcg search ${commandArgs.filter(arg => !arg.startsWith('page:')).join(', ')}`;
 			content += `<div style="text-align: center; margin-top: 5px;">`;
 			
-			// Pagination
 			if (page > 1) {
 				content += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
 			}
@@ -374,7 +364,6 @@ export const infoCommands: Chat.ChatCommands = {
 				content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
 			}
 			
-			// Sort controls
 			content += `<div style="margin-top: 8px;">` +
 				`<strong style="font-size: 0.9em;">Sort by:</strong> ` +
 				`<button name="send" value="${commandString}, sort:name">Name</button> ` +
