@@ -2,10 +2,10 @@
  * Shop and pack opening TCG commands
  */
 
-import * as TCG_Economy from '../tcg_economy';
-import * as TCG_Ranking from '../tcg_ranking';
-import { TCGCards, UserCollections } from '../tcg_collections';
-import { SHOP_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../tcg_config';
+import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
+import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
+import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { SHOP_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints, ensureUserCollection, addCardToCollection, updateCollectionStats, formatPackCard, getRarityColor } from './shared';
 
 export const shopCommands: Chat.ChatCommands = {
