@@ -19,6 +19,7 @@ import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/
 import { getCardPoints, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
+
 	async card(target, room, user) {
 	if (!this.runBroadcast()) return;
 	await TCG_Ranking.getPlayerRanking(user.id);
@@ -108,7 +109,7 @@ export const infoCommands: Chat.ChatCommands = {
 		if (card.hp) infoRows.push(['HP', `<strong style="color: #e74c3c;">${card.hp}</strong>`]);
 		if (card.evolvesFrom) infoRows.push(['Evolves From', card.evolvesFrom]);
 		if (card.retreatCost && card.retreatCost.length > 0) {
-			infoRows.push(['Retreat', card.retreatCost.map(() => '⚡').join('')]);
+			infoRows.push(['Retreat', card.retreatCost.map(e => getEnergyIcon(e)).join(' ')]);
 		}
 		infoRows.push(['Points', `<strong>${points}</strong>`]);
 
@@ -153,7 +154,7 @@ export const infoCommands: Chat.ChatCommands = {
 		
 			card.attacks.forEach(attack => {
 				const energyCost = attack.cost && attack.cost.length > 0 
-					? attack.cost.map(e => `⚡`).join('')
+					? attack.cost.map(e => getEnergyIcon(e)).join(' ')
 					: '';
 				
 				output += `<div class="impulse-card-attack-container">` +
