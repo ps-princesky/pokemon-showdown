@@ -7,6 +7,7 @@ import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { VALIDATION_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
+import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { generatePack, getCardPoints, ensureUserCollection } from './shared';
 
 export const adminCommands: Chat.ChatCommands = {
@@ -86,10 +87,48 @@ export const adminCommands: Chat.ChatCommands = {
 				{ upsert: true }
 			);
 			
+			const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
+			const displaySetName = setInfo ? setInfo.name : setId;
+
 			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
-			const tableHtml = TCG_UI.generateCardTable(pack, ['name', 'set', 'rarity', 'type']);
-			const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${target.trim()} Pack!`, tableHtml);
+			// Build table with battle value
+			let tableHtml = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
+				`<tr class="themed-table-header">` +
+				`<th>Name</th>` +
+				`<th>Set</th>` +
+				`<th>Rarity</th>` +
+				`<th>Type</th>` +
+				`<th>⚔️ BV</th>` +
+				`</tr>`;
+
+			for (const card of pack) {
+				const rarityColor = getRarityColor(card.rarity);
+				
+				tableHtml += `<tr class="themed-table-row">` +
+					`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
+					`<td>${card.set}</td>` +
+					`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
+					`<td>${card.type || card.supertype}</td>`;
+				
+				// Battle Value with color coding
+				if (card.battleValue) {
+					let bvColor = '#95a5a6';
+					if (card.battleValue >= 150) bvColor = '#e74c3c';
+					else if (card.battleValue >= 100) bvColor = '#f39c12';
+					else if (card.battleValue >= 70) bvColor = '#3498db';
+					
+					tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
+				} else {
+					tableHtml += `<td>-</td>`;
+				}
+				
+				tableHtml += `</tr>`;
+			}
+
+			tableHtml += `</table></div>`;
+
+			const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
 			await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 
 			this.sendReplyBox(output);
