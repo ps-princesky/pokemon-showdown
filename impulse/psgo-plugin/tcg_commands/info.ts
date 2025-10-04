@@ -139,14 +139,10 @@ export const infoCommands: Chat.ChatCommands = {
 		}
 
 		try {
-			// Get total count
 			const totalResults = await TCGCards.countDocuments(query);
-			
-			// Calculate pagination
 			const skip = (page - 1) * CARDS_PER_PAGE;
 			const totalPages = Math.ceil(totalResults / CARDS_PER_PAGE);
 
-			// Get paginated results
 			const paginatedResults = await TCGCards.find(query)
 				.skip(skip)
 				.limit(CARDS_PER_PAGE)
@@ -215,17 +211,10 @@ export const infoCommands: Chat.ChatCommands = {
 				.limit(PAGINATION_CONFIG.LEADERBOARD_SIZE)
 				.toArray();
 		
-			let output = `<div class="infobox">` +
-				`<h3>TCG Collection Statistics</h3>` +
-				`<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>` +
-				`<div style="max-height: ${PAGINATION_CONFIG.MAX_HEIGHT}; overflow-y: auto;">`;
+			let content = `<p><strong>Total Collectors:</strong> ${totalUsers} | <strong>Unique Cards in Database:</strong> ${totalCardsInDb}</p>`;
 			
 			if (topCollectors.length > 0) {
-				output += `<h4>Top ${PAGINATION_CONFIG.LEADERBOARD_SIZE} Collectors by ${sortLabel}</h4>` +
-					`<table class="themed-table">` +
-					`<tr class="themed-table-header"><th>Rank</th><th>User</th><th>${sortLabel}</th></tr>`;
-
-				topCollectors.forEach((collector, idx) => {
+				const rows = topCollectors.map((collector, idx) => {
 					let statValue = 0;
 					switch (sortBy) {
 						case 'unique':
@@ -238,18 +227,21 @@ export const infoCommands: Chat.ChatCommands = {
 							statValue = collector.stats.totalCards;
 							break;
 					}
-					output += `<tr class="themed-table-row">` +
-						`<td>${idx + 1}</td>` +
-						`<td>${Impulse.nameColor(collector.userId, true)}</td>` +
-						`<td>${statValue}</td>` +
-						`</tr>`;
+					return [
+						`${idx + 1}`,
+						Impulse.nameColor(collector.userId, true),
+						`${statValue}`
+					];
 				});
-				output += `</table>`;
+
+				content += `<h4>Top ${PAGINATION_CONFIG.LEADERBOARD_SIZE} Collectors by ${sortLabel}</h4>` +
+					TCG_UI.buildTable({
+						headers: ['Rank', 'User', sortLabel],
+						rows
+					});
 			}
 			
-			output += `</div>` +
-				`</div>`;
-			
+			const output = TCG_UI.buildInfoBox('TCG Collection Statistics', content);
 			this.sendReplyBox(output);
 		} catch (e: any) {
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
@@ -260,10 +252,6 @@ export const infoCommands: Chat.ChatCommands = {
 		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!this.runBroadcast()) return;
 		
-		let output = `<div class="infobox">` +
-			`<h3>Pokemon TCG Sets</h3>` +
-			`<div style="max-height: ${PAGINATION_CONFIG.MAX_HEIGHT}; overflow-y: auto;">`;
-		
 		const seriesGroups = new Map<string, any[]>();
 		POKEMON_SETS.forEach(set => {
 			if (!seriesGroups.has(set.series)) {
@@ -272,34 +260,37 @@ export const infoCommands: Chat.ChatCommands = {
 			seriesGroups.get(set.series)!.push(set);
 		});
 
+		let content = '';
 		seriesGroups.forEach((sets, series) => {
-			output += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>` +
-				`<table class="themed-table">` +
-				`<tr class="themed-table-header"><th>Code</th><th>Name</th><th>Year</th></tr>`;
-			sets.forEach(set => {
-				output += `<tr class="themed-table-row">` +
-					`<td>${set.code}</td>` +
-					`<td><strong>${set.name}</strong></td>` +
-					`<td>${set.year}</td>` +
-					`</tr>`;
-			});
-			output += `</table>`;
+			const rows = sets.map(set => [
+				set.code,
+				`<strong>${set.name}</strong>`,
+				`${set.year}`
+			]);
+
+			content += `<h4 style="margin-top: 10px; margin-bottom: 5px;">${series} Series</h4>` +
+				TCG_UI.buildTable({
+					headers: ['Code', 'Name', 'Year'],
+					rows,
+					scrollable: false
+				});
 		});
-		output += `</div>` +
-			`</div>`;
+
+		const output = TCG_UI.buildInfoBox('Pokemon TCG Sets', TCG_UI.buildScrollableContainer(content));
 		this.sendReplyBox(output);
 	},
 
 	async rarities(target, room, user) {
 		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!this.runBroadcast()) return;
-		let content = `<div style="max-height: ${PAGINATION_CONFIG.MAX_HEIGHT}; overflow-y: auto;">` +
-			`<ul style="list-style: none; padding: 10px;">`;
+		let content = `<ul style="list-style: none; padding: 10px;">`;
 		RARITIES.forEach(rarity => {
 			content += `<li><span style="color: ${getRarityColor(rarity)}; font-weight: bold;">●</span> ${rarity}</li>`;
 		});
-		content += `</ul></div>`;
-		this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Rarities', content));
+		content += `</ul>`;
+		
+		const output = TCG_UI.buildPage('Pokemon TCG Rarities', TCG_UI.buildScrollableContainer(content));
+		this.sendReplyBox(output);
 	},
 
 	async types(target, room, user) {
@@ -310,6 +301,8 @@ export const infoCommands: Chat.ChatCommands = {
 			`<h4>Pokemon Subtypes</h4><p>${SUBTYPES.Pokemon.join(', ')}</p>` +
 			`<h4>Trainer Subtypes</h4><p>${SUBTYPES.Trainer.join(', ')}</p>` +
 			`<h4>Energy Subtypes</h4><p>${SUBTYPES.Energy.join(', ')}</p>`;
-		this.sendReplyBox(TCG_UI.buildPage('Pokemon TCG Data', content));
+		
+		const output = TCG_UI.buildPage('Pokemon TCG Data', content);
+		this.sendReplyBox(output);
 	},
-};
+};			
