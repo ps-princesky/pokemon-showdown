@@ -13,96 +13,98 @@ import { generatePack, getCardPoints, ensureUserCollection, addCardToCollection,
 export const coreCommands: Chat.ChatCommands = {
 
 	async daily(target, room, user) {
-		if (!this.runBroadcast()) return;
-		await TCG_Ranking.getPlayerRanking(user.id);
+	if (!this.runBroadcast()) return;
+	await TCG_Ranking.getPlayerRanking(user.id);
+	
+	const userId = user.id;
+	const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
+	
+	try {
+		let collection = await UserCollections.findOne({ userId });
 		
-		const userId = user.id;
-		const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
-		
-		try {
-			let collection = await UserCollections.findOne({ userId });
-			
-			if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
-				const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
-				const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-				const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-				return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
-			}
-			
-			// Updated for new card structure - sets can be arrays
-			const availableSets = await TCGCards.distinct('set');
-			const flatSets = availableSets.flat().filter(Boolean); // Flatten arrays and remove nulls
-			
-			if (flatSets.length === 0) {
-				return this.errorReply(ERROR_MESSAGES.SET_UNAVAILABLE);
-			}
-			
-			const randomSetId = flatSets[Math.floor(Math.random() * flatSets.length)];
-			const pack = await generatePack(randomSetId);
-			
-			if (!pack) {
-				return this.errorReply(`${ERROR_MESSAGES.PACK_GENERATION_FAILED} from set "${randomSetId}".`);
-			}
-			
-			collection = await ensureUserCollection(userId);
-			let pointsGained = 0;
-			
-			// Use helper functions for adding cards
-			for (const card of pack) {
-				pointsGained += getCardPoints(card);
-				addCardToCollection(collection, card.cardId, 1);
-			}
-			
-			// Update stats using helper
-			updateCollectionStats(collection);
-			collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
-			collection.currency = (collection.currency || 0) + DAILY_CONFIG.CURRENCY_AWARD;
-			collection.lastDaily = Date.now();
-			
-			await UserCollections.upsert({ userId }, collection);
-			
-			// Enhanced display for daily pack
-			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-			
-			let output = `<div class="infobox">` +
-				`<h2 style="text-align:center;">🎁 Daily Pack Claimed!</h2>` +
-				`<div style="text-align:center; margin:15px 0;">` +
-				`<div style="font-size:1.1em; margin-bottom:10px;">` +
-				`📦 Pack from <strong>${randomSetId.toUpperCase()}</strong>` +
-				`</div>` +
-				`<div style="color:#f39c12; font-size:1.1em; font-weight:bold;">` +
-				`+${DAILY_CONFIG.CURRENCY_AWARD} Credits | +${pointsGained} Points` +
-				`</div>` +
-				`</div><hr/>`;
-			
-			// Enhanced card display
-			pack.forEach(card => {
-				output += formatPackCard(card, true);
-			});
-			
-			// Highlight best card
-			const bestCard = pack[0];
-			if (bestCard) {
-				output += `<hr/>` +
-					`<div style="text-align:center; margin:15px 0; padding:10px; background:${getRarityColor(bestCard.rarity)}15; border-radius:5px;">` +
-					`<strong>🌟 Best Card:</strong> ` +
-					`<span style="color:${getRarityColor(bestCard.rarity)}; font-weight:bold;">${bestCard.name}</span>` +
-					` (${getCardPoints(bestCard)} pts)` +
-					`</div>`;
-			}
-			
-			output += `<div style="text-align:center; margin-top:15px; font-size:0.9em; color:#666;">` +
-				`Next daily pack in 24 hours` +
-				`</div></div>`;
-			
-			await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
-			this.sendReplyBox(output);
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+		if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
+			const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
+			const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+			const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+			return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
 		}
-	},
-
+		
+		// Get available sets - FIX: Remove .limit() and use direct array access
+		const allSets = await TCGCards.distinct('set');
+		const flatSets = allSets.flat().filter(Boolean);
+		
+		if (flatSets.length === 0) {
+			return this.errorReply(ERROR_MESSAGES.SET_UNAVAILABLE);
+		}
+		
+		const randomSetId = flatSets[Math.floor(Math.random() * flatSets.length)];
+		const pack = await generatePack(randomSetId);
+		
+		if (!pack) {
+			return this.errorReply(`${ERROR_MESSAGES.PACK_GENERATION_FAILED} from set "${randomSetId}".`);
+		}
+		
+		collection = await ensureUserCollection(userId);
+		let pointsGained = 0;
+		
+		// Add cards to collection properly
+		for (const card of pack) {
+			pointsGained += getCardPoints(card);
+			addCardToCollection(collection, card.cardId, 1);
+		}
+		
+		// Update stats and currency
+		updateCollectionStats(collection);
+		collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+		collection.currency = (collection.currency || 0) + DAILY_CONFIG.CURRENCY_AWARD;
+		collection.lastDaily = Date.now();
+		
+		// CRITICAL: Actually save the collection
+		await UserCollections.upsert({ userId }, collection);
+		
+		// Sort pack for display
+		pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+		
+		let output = `<div class="infobox">` +
+			`<h2 style="text-align:center;">🎁 Daily Pack Claimed!</h2>` +
+			`<div style="text-align:center; margin:15px 0;">` +
+			`<div style="font-size:1.1em; margin-bottom:10px;">` +
+			`📦 Pack from <strong>${randomSetId.toUpperCase()}</strong>` +
+			`</div>` +
+			`<div style="color:#f39c12; font-size:1.1em; font-weight:bold;">` +
+			`+${DAILY_CONFIG.CURRENCY_AWARD} Credits | +${pointsGained} Points` +
+			`</div>` +
+			`</div><hr/>`;
+		
+		// Display cards
+		pack.forEach(card => {
+			output += formatPackCard(card, true);
+		});
+		
+		// Highlight best card
+		const bestCard = pack[0];
+		if (bestCard) {
+			output += `<hr/>` +
+				`<div style="text-align:center; margin:15px 0; padding:10px; background:${getRarityColor(bestCard.rarity)}15; border-radius:5px;">` +
+				`<strong>🌟 Best Card:</strong> ` +
+				`<span style="color:${getRarityColor(bestCard.rarity)}; font-weight:bold;">${bestCard.name}</span>` +
+				` (${getCardPoints(bestCard)} pts)` +
+				`</div>`;
+		}
+		
+		output += `<div style="text-align:center; margin-top:15px; font-size:0.9em; color:#666;">` +
+			`Next daily pack in 24 hours` +
+			`</div></div>`;
+		
+		await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
+		this.sendReplyBox(output);
+		
+	} catch (e: any) {
+		console.error('Daily pack error:', e);
+		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
+	}
+},
+	
 	async currency(target, room, user) {
 		if (!this.runBroadcast()) return;
 		await TCG_Ranking.getPlayerRanking(user.id);
