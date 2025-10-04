@@ -1551,316 +1551,315 @@ async ranking(target, room, user) {
 	}
 },
 
-async leaderboard(target, room, user) {
-	await TCG_Ranking.getPlayerRanking(user.id);
-	if (!this.runBroadcast()) return;
-	const type = toID(target) || 'elo';
+		async leaderboard(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
+			if (!this.runBroadcast()) return;
+			const type = toID(target) || 'elo';
 	
-	try {
-		let leaderboard;
-		let title;
+			try {
+				let leaderboard;
+				let title;
 		
-		if (type === 'seasonal') {
-			leaderboard = await TCG_Ranking.getSeasonalLeaderboard(10);
-			title = 'Seasonal Leaderboard (Wins)';
-		} else {
-			leaderboard = await TCG_Ranking.getLeaderboard(10);
-			title = 'ELO Leaderboard';
-		}
-		
-		let output = `<div class="infobox">`;
-		output += `<h3>${title}</h3>`;
-		output += `<table class="themed-table">`;
-		output += `<tr class="themed-table-header">`;
-		output += `<th>Rank</th><th>Player</th><th>Rating/Rank</th><th>Record</th><th>Win Rate</th>`;
-		output += `</tr>`;
-		
-		leaderboard.forEach((player, index) => {
-			const rankColor = TCG_Ranking.getRankColor(player.rank);
-			const winRate = TCG_Ranking.getWinRate(player.wins, player.losses, player.draws);
-			const displayValue = type === 'seasonal' ? 
-				`${player.seasonWins || 0} wins` : 
-				`${player.elo} (${player.rank})`;
-			
-			output += `<tr class="themed-table-row">`;
-			output += `<td>${index + 1}</td>`;
-			output += `<td>${Impulse.nameColor(player.userId, true)}</td>`;
-			output += `<td><span style="color: ${rankColor};">${displayValue}</span></td>`;
-			output += `<td>${player.wins}W-${player.losses}L-${player.draws}D</td>`;
-			output += `<td>${winRate}%</td>`;
-			output += `</tr>`;
-		});
-		
-		output += `</table>`;
-		output += `<p style="text-align: center; margin-top: 10px;">`;
-		output += `<button name="send" value="/tcg leaderboard elo">ELO</button> | `;
-		output += `<button name="send" value="/tcg leaderboard seasonal">Seasonal</button>`;
-		output += `</p>`;
-		output += `</div>`;
-		
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		return this.errorReply(`Error fetching leaderboard: ${e.message}`);
-	}
-},
-
-async battlehistory(target, room, user) {
-	if (!this.runBroadcast()) return;
-	const targetUser = target.trim() || user.name;
-	const targetId = toID(targetUser);
-	
-	try {
-		const [battles, simulatedBattles] = await Promise.all([
-			TCG_Ranking.getPlayerBattleHistory(targetId, 5),
-			TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
-		]);
-
-		let output = `<div class="infobox">`;
-		output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
-		
-		const allBattles = [
-			...battles.map(b => ({ ...b, type: 'live' })),
-			...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
-		].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
-
-		if (allBattles.length === 0) {
-			output += `<p>${targetUser} has no ranked battle history.</p>`;
-		} else {
-			output += `<table class="themed-table">`;
-			output += `<tr class="themed-table-header">`;
-			output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
-			output += `</tr>`;
-			
-			allBattles.forEach(battle => {
-				const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
-				const opponent = battle.type === 'live' ? 
-					(isPlayer1 ? battle.player2 : battle.player1) :
-					(isPlayer1 ? battle.targetId : battle.challengerId);
-				
-				const playerPackValue = battle.type === 'live' ?
-					(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
-					(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
-				
-				const opponentPackValue = battle.type === 'live' ?
-					(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
-					(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
-				
-				const eloChange = battle.type === 'live' ?
-					(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
-					(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
-				
-				let result = 'Draw';
-				let resultColor = '#f1c40f';
-				if (battle.winner === targetId) {
-					result = 'Win';
-					resultColor = '#2ecc71';
-				} else if (battle.winner && battle.winner !== targetId) {
-					result = 'Loss';
-					resultColor = '#e74c3c';
+				if (type === 'seasonal') {
+					leaderboard = await TCG_Ranking.getSeasonalLeaderboard(10);
+					title = 'Seasonal Leaderboard (Wins)';
+				} else {
+					leaderboard = await TCG_Ranking.getLeaderboard(10);
+					title = 'ELO Leaderboard';
 				}
-				
-				const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
-				const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
-				const date = new Date(battle.battleTime).toLocaleDateString();
-				const battleType = battle.type === 'live' ? '🎯' : '🤖';
-				
-				output += `<tr class="themed-table-row">`;
-				output += `<td>${battleType}</td>`;
-				output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
-				output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
-				output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
-				output += `<td>${playerPackValue} vs ${opponentPackValue}</td>`;
-				output += `<td>${date}</td>`;
+				let output += `<h3>${title}</h3>`;
+				output += `<table class="themed-table">`;
+				output += `<tr class="themed-table-header">`;
+				output += `<th>Rank</th><th>Player</th><th>Rating/Rank</th><th>Record</th><th>Win Rate</th>`;
 				output += `</tr>`;
-			});
-			
-			output += `</table>`;
-			output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
-		}
-		
-		output += `</div>`;
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		return this.errorReply(`Error fetching battle history: ${e.message}`);
-	}
-},
 
-async season(target, room, user) {
-	await TCG_Ranking.getPlayerRanking(user.id);
-	if (!this.runBroadcast()) return;
-	const [action] = target.split(',').map(p => p.trim());
-	
-	try {
-		if (toID(action) === 'end' && this.checkCan('globalban')) {
-			// Admin command to force end season
-			const success = await TCG_Ranking.forceEndSeason();
-			if (success) {
-				this.sendReply("Current season has been ended and rewards distributed. New season started!");
-			} else {
-				this.errorReply("No active season found to end.");
+				leaderboard.forEach((player, index) => {
+					const rankColor = TCG_Ranking.getRankColor(player.rank);
+					const winRate = TCG_Ranking.getWinRate(player.wins, player.losses, player.draws);
+					const displayValue = type === 'seasonal' ? 
+						`${player.seasonWins || 0} wins` : 
+						`${player.elo} (${player.rank})`;
+			
+					output += `<tr class="themed-table-row">`;
+					output += `<td>${index + 1}</td>`;
+					output += `<td>${Impulse.nameColor(player.userId, true)}</td>`;
+					output += `<td><span style="color: ${rankColor};">${displayValue}</span></td>`;
+					output += `<td>${player.wins}W-${player.losses}L-${player.draws}D</td>`;
+					output += `<td>${winRate}%</td>`;
+					output += `</tr>`;
+				});
+		
+				output += `</table>`;
+				output += `<p style="text-align: center; margin-top: 10px;">`;
+				output += `<button name="send" value="/tcg leaderboard elo">ELO</button> | `;
+				output += `<button name="send" value="/tcg leaderboard seasonal">Seasonal</button>`;
+				output += `</p>`;
+		
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching leaderboard: ${e.message}`);
 			}
-			return;
-		}
-		
-		// Show current season info
-		const seasonInfo = await TCG_Ranking.getCurrentSeasonInfo();
-		if (!seasonInfo) {
-			return this.sendReplyBox("No active season found.");
-		}
-		
-		const { season, daysRemaining, hoursRemaining } = seasonInfo;
-		
-		let output = `<div class="infobox">`;
-		output += `<h3>🏆 ${season.name}</h3>`;
-		output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
-		output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
-		output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
-		
-		output += `<h4>Season Rewards (Top 10)</h4>`;
-		output += `<table class="themed-table">`;
-		output += `<tr class="themed-table-header"><th>Rank</th><th>Credits</th><th>Title</th></tr>`;
-		
-		Object.entries(TCG_Ranking.SEASON_REWARDS).forEach(([rank, reward]) => {
-			output += `<tr class="themed-table-row">`;
-			output += `<td>#${rank}</td>`;
-			output += `<td>${reward.credits}</td>`;
-			output += `<td>${reward.title}</td>`;
-			output += `</tr>`;
-		});
-		
-		output += `</table>`;
-		output += `</div>`;
-		
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		return this.errorReply(`Error fetching season info: ${e.message}`);
-	}
-},
+		},
 
-async seasonhistory(target, room, user) {
-	await TCG_Ranking.getPlayerRanking(user.id);
-	if (!this.runBroadcast()) return;
-	const targetUser = target.trim() || user.name;
-	const targetId = toID(targetUser);
+		async battlehistory(target, room, user) {
+			if (!this.runBroadcast()) return;
+			const targetUser = target.trim() || user.name;
+			const targetId = toID(targetUser);
 	
-	try {
-		const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
+			try {
+				const [battles, simulatedBattles] = await Promise.all([
+					TCG_Ranking.getPlayerBattleHistory(targetId, 5),
+					TCG_Ranking.getSimulatedBattleHistory(targetId, 5)
+				]);
+				let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Battle History</h3>`;
 		
-		let output = `<div class="infobox">`;
-		output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
-		
-		if (seasonRewards.length === 0) {
-			output += `<p>${targetUser} has not received any season rewards yet.</p>`;
-		} else {
-			output += `<table class="themed-table">`;
-			output += `<tr class="themed-table-header"><th>Season</th><th>Rank</th><th>Credits</th><th>Title</th><th>Date</th></tr>`;
+				const allBattles = [
+					...battles.map(b => ({ ...b, type: 'live' })),
+					...simulatedBattles.map(b => ({ ...b, type: 'simulated', battleTime: b.timestamp }))
+				].sort((a, b) => b.battleTime - a.battleTime).slice(0, 10);
+
+				if (allBattles.length === 0) {
+					output += `<p>${targetUser} has no ranked battle history.</p>`;
+				} else {
+					output += `<table class="themed-table">`;
+					output += `<tr class="themed-table-header">`;
+					output += `<th>Type</th><th>Opponent</th><th>Result</th><th>ELO Change</th><th>Pack Values</th><th>Date</th>`;
+					output += `</tr>`;
 			
-			seasonRewards.forEach(reward => {
-				const date = new Date(reward.claimedAt).toLocaleDateString();
-				output += `<tr class="themed-table-row">`;
-				output += `<td>${reward.seasonId.replace(/season_(\d+)_.*/, 'Season $1')}</td>`;
-				output += `<td>#${reward.rank}</td>`;
-				output += `<td>${reward.credits}</td>`;
-				output += `<td>${reward.title || '-'}</td>`;
-				output += `<td>${date}</td>`;
-				output += `</tr>`;
-			});
+					allBattles.forEach(battle => {
+						const isPlayer1 = (battle.type === 'live' ? battle.player1 : battle.challengerId) === targetId;
+						const opponent = battle.type === 'live' ? 
+							(isPlayer1 ? battle.player2 : battle.player1) :
+							(isPlayer1 ? battle.targetId : battle.challengerId);
+				
+						const playerPackValue = battle.type === 'live' ?
+							(isPlayer1 ? battle.player1PackValue : battle.player2PackValue) :
+							(isPlayer1 ? battle.challengerPackValue : battle.targetPackValue);
+				
+						const opponentPackValue = battle.type === 'live' ?
+							(isPlayer1 ? battle.player2PackValue : battle.player1PackValue) :
+							(isPlayer1 ? battle.targetPackValue : battle.challengerPackValue);
+				
+
+						const eloChange = battle.type === 'live' ?
+							(isPlayer1 ? battle.player1EloChange : battle.player2EloChange) :
+							(isPlayer1 ? battle.challengerEloChange : battle.targetEloChange);
+				
+						let result = 'Draw';
+						let resultColor = '#f1c40f';
+						if (battle.winner === targetId) {
+							result = 'Win';
+							resultColor = '#2ecc71';
+						} else if (battle.winner && battle.winner !== targetId) {
+							result = 'Loss';
+							resultColor = '#e74c3c';
+						}
+				
+						const eloChangeStr = TCG_Ranking.formatEloChange(eloChange);
+						const eloColor = eloChange >= 0 ? '#2ecc71' : '#e74c3c';
+						const date = new Date(battle.battleTime).toLocaleDateString();
+						const battleType = battle.type === 'live' ? '🎯' : '🤖';
+				
+						output += `<tr class="themed-table-row">`;
+						output += `<td>${battleType}</td>`;
+						output += `<td>${Impulse.nameColor(opponent, true)}</td>`;
+						output += `<td><span style="color: ${resultColor};">${result}</span></td>`;
+						output += `<td><span style="color: ${eloColor};">${eloChangeStr}</span></td>`;
+						output += `<td>${playerPackValue} vs ${opponentPackValue}</td>`;
+						output += `<td>${date}</td>`;
+						output += `</tr>`;
+					});
 			
-			output += `</table>`;
-		}
+					output += `</table>`;
+					output += `<p style="font-size: 0.9em; margin-top: 10px;">🎯 = Live Battle | 🤖 = Simulated Challenge</p>`;
+				}
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching battle history: ${e.message}`);
+			}
+		},
+
+		async season(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
+			if (!this.runBroadcast()) return;
+			const [action] = target.split(',').map(p => p.trim());
+	
+			try {
+				if (toID(action) === 'end' && this.checkCan('globalban')) {
+					// Admin command to force end season
+					const success = await TCG_Ranking.forceEndSeason();
+					if (success) {
+						this.sendReply("Current season has been ended and rewards distributed. New season started!");
+					} else {
+						this.errorReply("No active season found to end.");
+					}
+					return;
+				}
 		
-		output += `</div>`;
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		return this.errorReply(`Error fetching season history: ${e.message}`);
-	}
-},
+				// Show current season info
+				const seasonInfo = await TCG_Ranking.getCurrentSeasonInfo();
+				if (!seasonInfo) {
+					return this.sendReplyBox("No active season found.");
+				}
+		
+				const { season, daysRemaining, hoursRemaining } = seasonInfo;
+		
+				let output += `<h3>${season.name}</h3>`;
+				output += `<p><strong>Time Remaining:</strong> ${daysRemaining} days, ${hoursRemaining} hours</p>`;
+				output += `<p><strong>Started:</strong> ${new Date(season.startTime).toLocaleDateString()}</p>`;
+				output += `<p><strong>Ends:</strong> ${new Date(season.endTime).toLocaleDateString()}</p>`;
+		
+				output += `<h4>Season Rewards (Top 10)</h4>`;
+				output += `<table class="themed-table">`;
+				output += `<tr class="themed-table-header"><th>Rank</th><th>Credits</th><th>Title</th></tr>`;
+		
+				Object.entries(TCG_Ranking.SEASON_REWARDS).forEach(([rank, reward]) => {
+					output += `<tr class="themed-table-row">`;
+					output += `<td>#${rank}</td>`;
+					output += `<td>${reward.credits}</td>`;
+					output += `<td>${reward.title}</td>`;
+					output += `</tr>`;
+				});
+		
+				output += `</table>`;
+		
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching season info: ${e.message}`);
+			}
+		},
+		
+		async seasonhistory(target, room, user) {
+			await TCG_Ranking.getPlayerRanking(user.id);
+			if (!this.runBroadcast()) return;
+			const targetUser = target.trim() || user.name;
+			const targetId = toID(targetUser);
+	
+			try {
+				const seasonRewards = await TCG_Ranking.getUserSeasonRewards(targetId);
+		
+				let output += `<h3>${Impulse.nameColor(targetUser, true)}'s Season History</h3>`;
+		
+				if (seasonRewards.length === 0) {
+					output += `<p>${targetUser} has not received any season rewards yet.</p>`;
+				} else {
+					output += `<table class="themed-table">`;
+					output += `<tr class="themed-table-header"><th>Season</th><th>Rank</th><th>Credits</th><th>Title</th><th>Date</th></tr>`;
+			
+					seasonRewards.forEach(reward => {
+						const date = new Date(reward.claimedAt).toLocaleDateString();
+						output += `<tr class="themed-table-row">`;
+						output += `<td>${reward.seasonId.replace(/season_(\d+)_.*/, 'Season $1')}</td>`;
+						output += `<td>#${reward.rank}</td>`;
+						output += `<td>${reward.credits}</td>`;
+						output += `<td>${reward.title || '-'}</td>`;
+						output += `<td>${date}</td>`;
+						output += `</tr>`;
+					});
+			
+					output += `</table>`;
+				}
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching season history: ${e.message}`);
+			}
+		},
 
 		async milestones(target, room, user) {
-	if (!this.runBroadcast()) return;
+			if (!this.runBroadcast()) return;
 	
-	try {
-		const available = await TCG_Ranking.getAvailableMilestones(user.id);
-		const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
-		
-		let output = `<div class="infobox">`;
-		output += `<h3>🏆 Weekly Milestones - Week ${summary.weekNumber}</h3>`;
-		output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
-		output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
-		output += `<hr/>`;
-		
-		// Group milestones by category
-		const categories = {
-			'Battle Milestones': available.filter(m => m.milestoneId.includes('battles') || m.milestoneId.includes('wins')),
-			'Collection Milestones': available.filter(m => m.milestoneId.includes('packs') || m.milestoneId.includes('opened')),
-			'Economy Milestones': available.filter(m => m.milestoneId.includes('credits')),
-		};
-		
-		for (const [category, milestones] of Object.entries(categories)) {
-			if (milestones.length === 0) continue;
-			
-			output += `<h4>${category}</h4>`;
-			output += `<table class="themed-table">`;
-			output += `<tr class="themed-table-header"><th>Achievement</th><th>Progress</th><th>Reward</th><th>Action</th></tr>`;
-			
-			milestones.forEach(milestone => {
-				const progressPercent = Math.min(100, Math.round((milestone.progress / milestone.requirement) * 100));
-				const progressColor = milestone.canClaim ? '#2ecc71' : progressPercent >= 80 ? '#f39c12' : '#3498db';
+			try {
+				const available = await TCG_Ranking.getAvailableMilestones(user.id);
+				const summary = await TCG_Ranking.getWeeklyMilestoneSummary(user.id);
 				
-				output += `<tr class="themed-table-row">`;
-				output += `<td><strong>${milestone.name}</strong><br/><small>${milestone.description}</small></td>`;
-				output += `<td>`;
-				output += `<div style="background: #ddd; border-radius: 3px; overflow: hidden;">`;
-				output += `<div style="width: ${progressPercent}%; background: ${progressColor}; padding: 2px 5px; color: white; font-size: 11px; text-align: center;">`;
-				output += `${milestone.progress}/${milestone.requirement}`;
-				output += `</div></div>`;
-				output += `</td>`;
-				output += `<td><strong>${milestone.reward}</strong> Credits</td>`;
-				output += `<td>`;
-				if (milestone.canClaim) {
-					output += `<button name="send" value="/tcg claimmilestone ${milestone.milestoneId}" style="background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 3px;">Claim</button>`;
-				} else {
-					output += `<span style="color: #999; font-size: 11px;">${progressPercent}%</span>`;
-				}
-				output += `</td>`;
-				output += `</tr>`;
-			});
+				let output += `<h3> Weekly Milestones - Week ${summary.weekNumber}</h3>`;
+				output += `<p><strong>Time Remaining:</strong> ${summary.daysRemaining} days</p>`;
+				output += `<p><strong>Completed:</strong> ${summary.milestonesCompleted}/${summary.totalMilestones} | <strong>Credits Earned:</strong> ${summary.totalCreditsEarned}</p>`;
+				output += `<hr/>`;
+				output += `<div style="max-height: 360px; overflow-y: auto;">`;
+		
+				// Group milestones by category
+				const categories = {
+					'Battle Milestones': available.filter(m => m.milestoneId.includes('battles') || m.milestoneId.includes('wins')),
+					'Collection Milestones': available.filter(m => m.milestoneId.includes('packs') || m.milestoneId.includes('opened')),
+					'Economy Milestones': available.filter(m => m.milestoneId.includes('credits')),
+				};
+		
+				for (const [category, milestones] of Object.entries(categories)) {
+					if (milestones.length === 0) continue;
 			
-			output += `</table>`;
-		}
+					output += `<h4 style="margin-top: 15px; margin-bottom: 8px;">${category}</h4>`;
+					output += `<table class="themed-table">`;
+					output += `<tr class="themed-table-header"><th>Achievement</th><th>Progress</th><th>Reward</th><th>Action</th></tr>`;
+			
+					milestones.forEach(milestone => {
+						const progressPercent = Math.min(100, Math.round((milestone.progress / milestone.requirement) * 100));
+						const progressBarColor = milestone.canClaim ? '#27ae60' : '#2ecc71'; // Darker green if claimable
+						const progressBgColor = '#ecf0f1';
+				
+						output += `<tr class="themed-table-row">`;
+						output += `<td><strong>${milestone.name}</strong><br/><small style="color: #666;">${milestone.description}</small></td>`;
+						output += `<td style="width: 120px;">`;
+						output += `<div style="background: ${progressBgColor}; border-radius: 4px; overflow: hidden; border: 1px solid #bdc3c7; position: relative; height: 20px;">`;
+						output += `<div style="width: ${progressPercent}%; background: ${progressBarColor}; height: 100%; transition: width 0.3s ease;"></div>`;
+				
+						// Progress text overlay - always visible and readable
+						const textColor = progressPercent > 50 ? '#fff' : '#2c3e50'; // White text on dark, dark text on light
+						const textShadow = progressPercent > 50 ? 'text-shadow: 1px 1px 1px rgba(0,0,0,0.3);' : '';
+				
+						output += `<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: ${textColor}; ${textShadow}">`;
+						output += `${milestone.progress}/${milestone.requirement} (${progressPercent}%)`;
+						output += `</div>`;
+						output += `</div>`;
+						output += `</td>`;
+				
+						output += `<td><strong style="color: #f39c12;">${milestone.reward}</strong> Credits</td>`;
+						output += `<td>`;
+						if (milestone.canClaim) {
+							output += `<button name="send" value="/tcg claimmilestone ${milestone.milestoneId}" style="background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Claim</button>`;
+						} else if (progressPercent >= 80) {
+							output += `<span style="color: #f39c12; font-weight: bold; font-size: 12px;">Almost there!</span>`;
+						} else {
+							output += `<span style="color: #95a5a6; font-size: 12px;">${progressPercent}% complete</span>`;
+						}
+						output += `</td>`;
+						output += `</tr>`;
+					});
+			
+					output += `</table>`;
+				}
 		
-		output += `</div>`;
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		return this.errorReply(`Error fetching milestones: ${e.message}`);
-	}
-},
+				output += `</div>`;
+				this.sendReplyBox(output);
+			} catch (e: any) {
+				return this.errorReply(`Error fetching milestones: ${e.message}`);
+			}
+		},
+		
 
-async claimmilestone(target, room, user) {
-	const milestoneId = target.trim();
-	if (!milestoneId) {
-		return this.errorReply("Usage: /tcg claimmilestone [milestone_id]");
-	}
-	
-	try {
-		const result = await TCG_Ranking.claimMilestone(user.id, milestoneId);
+		async claimmilestone(target, room, user) {
+			const milestoneId = target.trim();
+			if (!milestoneId) {
+				return this.errorReply("Usage: /tcg claimmilestone [milestone_id]");
+			}
+			try {
+				const result = await TCG_Ranking.claimMilestone(user.id, milestoneId);
 		
-		if (!result.success) {
-			return this.errorReply(result.error || "Failed to claim milestone.");
-		}
+				if (!result.success) {
+					return this.errorReply(result.error || "Failed to claim milestone.");
+				}
 		
-		this.sendReply(`🎉 Congratulations! You've earned the "${result.milestoneName}" achievement and received ${result.reward} Credits!`);
+				this.sendReply(` Congratulations! You've earned the "${result.milestoneName}" achievement and received ${result.reward} Credits!`);
 		
-		// Show updated balance
-		const balance = await TCG_Economy.getUserBalance(user.id);
-		this.sendReply(`Your balance is now: ${balance} Credits.`);
+				// Show updated balance
+				const balance = await TCG_Economy.getUserBalance(user.id);
+				this.sendReply(`Your balance is now: ${balance} Credits.`);
 		
-	} catch (e: any) {
-		return this.errorReply(`Error claiming milestone: ${e.message}`);
-	}
-},
+			} catch (e: any) {
+				return this.errorReply(`Error claiming milestone: ${e.message}`);
+			}
+		},
 		
-
 		async initseason(target, room, user) {
 			this.checkCan('globalban');
 	
@@ -1870,7 +1869,6 @@ async claimmilestone(target, room, user) {
 				if (existingSeason) {
 					return this.errorReply("A season is already active.");
 				}
-		
 				// Initialize the season system
 				await TCG_Ranking.initializeSeasonSystem();
 		
@@ -1884,7 +1882,6 @@ async claimmilestone(target, room, user) {
 				return this.errorReply(`Error initializing season: ${e.message}`);
 			}
 		},
-		
 	},
 
 	tcghelp: [
@@ -1923,6 +1920,6 @@ async claimmilestone(target, room, user) {
 	'/tcg milestones - View weekly milestone progress and claim rewards.',
 	'/tcg claimmilestone [id] - Claim a completed milestone reward.',
 	'@ /tcg season end - Force end the current season..',
-	'@ /tcg initseadon - Force start a season, when there is no season.',
+	'@ /tcg initseason - Force start a season, when there is no season.',
 	],
 };
