@@ -23,19 +23,22 @@ export const adminCommands: Chat.ChatCommands = {
 		try {
 			const subtypes = subtypesStr ? subtypesStr.split('/').map(s => s.trim()) : [];
 			
-			await TCGCards.upsert(
+			await TCGCards.updateOne(
 				{ cardId },
 				{
-					cardId, 
-					name: name.substring(0, VALIDATION_LIMITS.MAX_CARD_NAME_LENGTH), 
-					set, 
-					rarity, 
-					supertype, 
-					subtypes,
-					type: type || undefined,
-					hp: hp ? parseInt(hp) : undefined,
-					stage: subtypes.includes('Basic') ? 'basic' : subtypes.includes('Stage 1') ? 'stage1' : subtypes.includes('Stage 2') ? 'stage2' : undefined,
-				}
+					$set: {
+						cardId, 
+						name: name.substring(0, VALIDATION_LIMITS.MAX_CARD_NAME_LENGTH), 
+						set, 
+						rarity, 
+						supertype, 
+						subtypes,
+						type: type || undefined,
+						hp: hp ? parseInt(hp) : undefined,
+						stage: subtypes.includes('Basic') ? 'basic' : subtypes.includes('Stage 1') ? 'stage1' : subtypes.includes('Stage 2') ? 'stage2' : undefined,
+					}
+				},
+				{ upsert: true }
 			);
 			return this.sendReply(`${SUCCESS_MESSAGES.CARD_ADDED}: "${name}" (${cardId}).`);
 		} catch (e: any) {
@@ -77,7 +80,11 @@ export const adminCommands: Chat.ChatCommands = {
 			collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
 			collection.lastUpdated = Date.now();
 
-			await UserCollections.upsert({ userId }, collection);
+			await UserCollections.updateOne(
+				{ userId },
+				{ $set: collection },
+				{ upsert: true }
+			);
 			
 			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
@@ -198,4 +205,3 @@ export const adminCommands: Chat.ChatCommands = {
 		}
 	},
 };
-    
