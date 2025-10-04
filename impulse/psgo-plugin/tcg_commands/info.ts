@@ -2,11 +2,11 @@
  * Information and search TCG commands
  */
 
-import * as TCG_UI from '../tcg_ui';
-import * as TCG_Ranking from '../tcg_ranking';
-import { TCGCards, UserCollections } from '../tcg_collections';
-import { TCGCard } from '../tcg_data';
-import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../tcg_config';
+import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
+import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
+import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
+import { TCGCard } from '../../../impulse/psgo-plugin/tcg_data';
+import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { getCardPoints, getRarityColor, getTypeColor, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
