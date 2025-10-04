@@ -8,7 +8,7 @@ import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { UserCollections, ShopStateCollection, TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
 import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { SHOP_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
-import { generatePack, getCardPoints, ensureUserCollection } from './shared';
+import { generatePack, getCardPoints, ensureUserCollection, getValidPackSets } from './shared';
 
 export const shopCommands: Chat.ChatCommands = {
 	async shop(target, room, user) {
@@ -28,10 +28,10 @@ export const shopCommands: Chat.ChatCommands = {
 				return shopState.stock; // No rotation needed, return current stock
 			}
 
-			// Need to rotate - get available sets
-			const availableSets = await TCGCards.distinct('set');
+			// Need to rotate - get available sets with valid rarity distribution
+			const availableSets = await getValidPackSets();
 			if (availableSets.length === 0) {
-				// No sets available, update database with empty stock
+				// No valid sets available, update database with empty stock
 				await ShopStateCollection.updateOne(
 					{ _id: 'main' },
 					{ $set: { stock: [], lastRotation: now } },
