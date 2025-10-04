@@ -76,30 +76,30 @@ const REDUCED_REWARD_MULTIPLIER = 0.3; // Battles 8-10 give 30% rewards
 
 // UPDATED: Balanced season rewards
 export const SEASON_REWARDS = {
-	1: { credits: 500, title: 'Grandmaster Champion' },
-	2: { credits: 400, title: 'Elite Duelist' },
-	3: { credits: 325, title: 'Master Tactician' },
-	4: { credits: 275, title: 'Legendary Trainer' },
-	5: { credits: 225, title: 'Expert Battler' },
-	6: { credits: 185, title: 'Skilled Challenger' },
-	7: { credits: 150, title: 'Rising Star' },
-	8: { credits: 125, title: 'Promising Duelist' },
-	9: { credits: 100, title: 'Dedicated Trainer' },
-	10: { credits: 75, title: 'Top Competitor' },
+	1: { credits: 1200, title: 'Grandmaster Champion' },
+	2: { credits: 1000, title: 'Elite Duelist' },
+	3: { credits: 900, title: 'Master Tactician' },
+	4: { credits: 800, title: 'Legendary Trainer' },
+	5: { credits: 700, title: 'Expert Battler' },
+	6: { credits: 600, title: 'Skilled Challenger' },
+	7: { credits: 500, title: 'Rising Star' },
+	8: { credits: 450, title: 'Promising Duelist' },
+	9: { credits: 350, title: 'Dedicated Trainer' },
+	10: { credits: 250, title: 'Top Competitor' },
 } as const;
 
 // NEW: ELO milestone rewards (one-time only)
 const ELO_MILESTONE_REWARDS = {
-	'silver_iii': { elo: 1000, reward: 100, name: 'Silver Promotion' },
-	'silver_i': { elo: 1200, reward: 150, name: 'High Silver' },
-	'gold_iii': { elo: 1300, reward: 200, name: 'Gold Promotion' },
-	'gold_i': { elo: 1500, reward: 300, name: 'High Gold' },
-	'platinum_iii': { elo: 1600, reward: 400, name: 'Platinum Promotion' },
-	'platinum_i': { elo: 1800, reward: 600, name: 'High Platinum' },
-	'diamond_iii': { elo: 1900, reward: 800, name: 'Diamond Promotion' },
-	'diamond_i': { elo: 2100, reward: 1000, name: 'High Diamond' },
+	'silver_iii': { elo: 1000, reward: 400, name: 'Silver Promotion' },
+	'silver_i': { elo: 1200, reward: 500, name: 'High Silver' },
+	'gold_iii': { elo: 1300, reward: 600, name: 'Gold Promotion' },
+	'gold_i': { elo: 1500, reward: 700, name: 'High Gold' },
+	'platinum_iii': { elo: 1600, reward: 800, name: 'Platinum Promotion' },
+	'platinum_i': { elo: 1800, reward: 900, name: 'High Platinum' },
+	'diamond_iii': { elo: 1900, reward: 1000, name: 'Diamond Promotion' },
+	'diamond_i': { elo: 2100, reward: 1100, name: 'High Diamond' },
 	'master': { elo: 2200, reward: 1500, name: 'Master Rank' },
-	'grandmaster': { elo: 2400, reward: 2000, name: 'Grandmaster Rank' },
+	'grandmaster': { elo: 2400, reward: 2500, name: 'Grandmaster Rank' },
 } as const;
 
 // NEW: Weekly milestone definitions
