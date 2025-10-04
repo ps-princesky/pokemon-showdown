@@ -299,32 +299,6 @@ export function getBestPokemon(cards: TCGCard[]): TCGCard | null {
 }
 
 /**
- * Format card for pack display
- */
-export function formatPackCard(card: TCGCard, showBattleInfo: boolean = true): string {
-	let cardHtml = `<div style="margin:5px 0; padding:5px; border-left:3px solid ${getRarityColor(card.rarity)};">`;
-	cardHtml += `<span style="font-weight:bold; color:${getRarityColor(card.rarity)};">${card.name}</span>`;
-	cardHtml += ` <span style="font-size:0.9em;">[${card.rarity}]</span>`;
-	
-	if (card.supertype === 'Pokémon' && showBattleInfo) {
-		if (card.hp) {
-			cardHtml += ` <span style="font-size:0.8em; color:#666;">(${card.hp} HP)</span>`;
-		}
-		if (card.type) {
-			cardHtml += ` <span style="font-size:0.8em; color:${getTypeColor(card.type)};">[${card.type}]</span>`;
-		}
-		if (card.battleValue) {
-			cardHtml += ` <span style="font-size:0.8em; color:#e74c3c;">(${card.battleValue} BV)</span>`;
-		}
-	}
-	
-	cardHtml += ` <span style="font-size:0.8em; color:#999;">(${getCardPoints(card)} pts)</span>`;
-	cardHtml += `</div>`;
-	
-	return cardHtml;
-}
-
-/**
  * Update collection stats
  */
 export function updateCollectionStats(collection: UserCollection): void {
