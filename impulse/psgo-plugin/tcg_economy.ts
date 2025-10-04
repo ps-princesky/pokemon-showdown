@@ -56,6 +56,12 @@ export async function getUserBalance(userId: string): Promise<number> {
 }
 
 /**
+ * Alias for getUserBalance for backward compatibility
+ */
+export const getCurrency = getUserBalance;
+
+
+/**
  * Grants a specified amount of currency to a user.
  */
 export async function grantCurrency(userId: string, amount: number): Promise<boolean> {
