@@ -13,9 +13,55 @@ export interface TCGCard {
 	supertype: string;
 	subtypes: string[];
 	type?: string;
+	types?: string[];
 	hp?: number;
 	stage?: string;
 	imageUrl?: string;
+	smallImageUrl?: string;
+	attacks?: {
+		name: string;
+		cost: string[];
+		convertedEnergyCost: number;
+		damage: number;
+		damageText: string;
+		text: string;
+	}[];
+	abilities?: {
+		name: string;
+		type: string;
+		text: string;
+	}[];
+	weaknesses?: {
+		type: string;
+		value: string;
+	}[];
+	resistances?: {
+		type: string;
+		value: string;
+	}[];
+	retreatCost?: string[];
+	convertedRetreatCost?: number;
+	battleStats?: {
+		attackPower: number;
+		defensePower: number;
+		speed: number;
+		energyCost: number;
+	};
+	battleValue?: number;
+	evolvesFrom?: string;
+	evolvesTo?: string[];
+	cardText?: string;
+	ruleText?: string;
+	artist?: string;
+	nationalPokedexNumbers?: number[];
+	legalities?: any;
+	regulationMark?: string;
+	tcgplayerId?: string;
+	cardmarketId?: string;
+	number?: string;
+	printedTotal?: number;
+	importedAt?: string;
+	dataVersion?: string;
 }
 
 export interface UserCollection {
