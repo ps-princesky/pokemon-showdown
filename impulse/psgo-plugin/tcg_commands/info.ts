@@ -75,7 +75,7 @@ export const infoCommands: Chat.ChatCommands = {
 				'Metal': 'steel'
 			};
 			const iconName = typeMap[energyType] || energyType.toLowerCase();
-			return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/types/masters/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+			return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/types/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
 		};
 
 		// Outer scrollable container
@@ -90,7 +90,7 @@ export const infoCommands: Chat.ChatCommands = {
 			// Battle Value Badge (if available)
 			if (card.battleValue) {
 				output += `<div style="margin-top: 8px; text-align: center; padding: 6px; background: rgba(231,76,60,0.9); color: white; border-radius: 4px; font-weight: bold; font-size: 0.95em;">` +
-					`⚡ Battle Value: ${card.battleValue}` +
+					`<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/mark/vigor-mark.png" alt="Battle Value" style="width: 16px; height: 16px; vertical-align: middle;"> Battle Value: ${card.battleValue}` +
 					`</div>`;
 			}
 		
