@@ -160,78 +160,85 @@ export function hexToRgba(hex: string, alpha: number): string {
  * Generate a pack of cards with enhanced filtering for new card structure
  */
 export async function generatePack(setId: string): Promise<TCGCard[] | null> {
-	// Updated to work with new card structure where set is an array
-	const setCards = await TCGCards.find({ 
-		$or: [
-			{ set: setId },
-			{ set: { $in: [setId] } },
-			{ cardId: { $regex: `^${setId}-` } }
-		]
-	});
-	
-	if (setCards.length === 0) return null;
-	
-	const commons = setCards.filter(c => c.rarity === 'Common');
-	const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
-	const raresPool = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
-	
-	const pack: TCGCard[] = [];
-	const usedCardIds = new Set<string>();
-	
-	const pickRandom = (pool: TCGCard[]): TCGCard => {
-		let attempts = 0;
-		while (attempts < PACK_CONFIG.MAX_UNIQUE_ATTEMPTS) {
-			const randomCard = pool[Math.floor(Math.random() * pool.length)];
-			if (!pool.length || !randomCard) break;
-			
-			if (!usedCardIds.has(randomCard.cardId)) {
-				usedCardIds.add(randomCard.cardId);
-				return randomCard;
+	try {
+		// Updated to work with new card structure where set is an array
+		const setCards = await TCGCards.find({ 
+			$or: [
+				{ set: setId },
+				{ set: { $in: [setId] } },
+				{ cardId: { $regex: `^${setId}-` } }
+			]
+		});
+		
+		if (setCards.length === 0) return null;
+		
+		const commons = setCards.filter(c => c.rarity === 'Common');
+		const uncommons = setCards.filter(c => c.rarity === 'Uncommon');
+		const raresPool = setCards.filter(c => c.rarity && c.rarity.includes('Rare'));
+		
+		const pack: TCGCard[] = [];
+		const usedCardIds = new Set<string>();
+		
+		const pickRandom = (pool: TCGCard[]): TCGCard => {
+			let attempts = 0;
+			while (attempts < PACK_CONFIG.MAX_UNIQUE_ATTEMPTS) {
+				const randomCard = pool[Math.floor(Math.random() * pool.length)];
+				if (!pool.length || !randomCard) break;
+				
+				if (!usedCardIds.has(randomCard.cardId)) {
+					usedCardIds.add(randomCard.cardId);
+					return randomCard;
+				}
+				attempts++;
 			}
-			attempts++;
-		}
-		return pool[Math.floor(Math.random() * pool.length)];
-	};
-	
-	// Handle small sets
-	if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
-		if (setCards.length < PACK_CONFIG.PACK_SIZE) {
-			return setCards;
+			return pool[Math.floor(Math.random() * pool.length)];
+		};
+		
+		// Handle small sets
+		if (commons.length === 0 || uncommons.length === 0 || raresPool.length === 0) {
+			if (setCards.length < PACK_CONFIG.PACK_SIZE) {
+				return setCards;
+			}
+			
+			for (let i = 0; i < PACK_CONFIG.PACK_SIZE; i++) {
+				pack.push(pickRandom(setCards));
+			}
+			return pack;
 		}
 		
-		for (let i = 0; i < PACK_CONFIG.PACK_SIZE; i++) {
-			pack.push(pickRandom(setCards));
+		const reverseHoloPool = [...commons, ...uncommons];
+		
+		// Use config values
+		for (let i = 0; i < PACK_CONFIG.COMMONS_PER_PACK; i++) pack.push(pickRandom(commons));
+		for (let i = 0; i < PACK_CONFIG.UNCOMMONS_PER_PACK; i++) pack.push(pickRandom(uncommons));
+		for (let i = 0; i < PACK_CONFIG.REVERSE_HOLO_SLOTS; i++) pack.push(pickRandom(reverseHoloPool));
+		
+		const hitRoll = Math.random() * 100;
+		let chosenRarityTier: string;
+		
+		// Use config rarity rates
+		if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE) chosenRarityTier = 'Rare';
+		else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO) chosenRarityTier = 'Rare Holo';
+		else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO + PACK_CONFIG.RARITY_RATES.ULTRA_RARE) {
+			chosenRarityTier = PACK_CONFIG.ULTRA_RARES[Math.floor(Math.random() * PACK_CONFIG.ULTRA_RARES.length)];
+		} else {
+			chosenRarityTier = PACK_CONFIG.SECRET_RARES[Math.floor(Math.random() * PACK_CONFIG.SECRET_RARES.length)];
 		}
+		
+		let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
+		if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
+		if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
+		if (hitPool.length === 0) hitPool = raresPool;
+		
+		pack.push(pickRandom(hitPool));
 		return pack;
+		
+	} catch (error) {
+		console.error('Error generating pack:', error);
+		return null;
 	}
-	
-	const reverseHoloPool = [...commons, ...uncommons];
-	
-	// Use config values
-	for (let i = 0; i < PACK_CONFIG.COMMONS_PER_PACK; i++) pack.push(pickRandom(commons));
-	for (let i = 0; i < PACK_CONFIG.UNCOMMONS_PER_PACK; i++) pack.push(pickRandom(uncommons));
-	for (let i = 0; i < PACK_CONFIG.REVERSE_HOLO_SLOTS; i++) pack.push(pickRandom(reverseHoloPool));
-	
-	const hitRoll = Math.random() * 100;
-	let chosenRarityTier: string;
-	
-	// Use config rarity rates
-	if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE) chosenRarityTier = 'Rare';
-	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO) chosenRarityTier = 'Rare Holo';
-	else if (hitRoll <= PACK_CONFIG.RARITY_RATES.RARE + PACK_CONFIG.RARITY_RATES.RARE_HOLO + PACK_CONFIG.RARITY_RATES.ULTRA_RARE) {
-		chosenRarityTier = PACK_CONFIG.ULTRA_RARES[Math.floor(Math.random() * PACK_CONFIG.ULTRA_RARES.length)];
-	} else {
-		chosenRarityTier = PACK_CONFIG.SECRET_RARES[Math.floor(Math.random() * PACK_CONFIG.SECRET_RARES.length)];
-	}
-	
-	let hitPool = raresPool.filter(c => c.rarity === chosenRarityTier);
-	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare Holo');
-	if (hitPool.length === 0) hitPool = raresPool.filter(c => c.rarity === 'Rare');
-	if (hitPool.length === 0) hitPool = raresPool;
-	
-	pack.push(pickRandom(hitPool));
-	return pack;
 }
+
 
 /**
  * Ensure user has a collection record
