@@ -163,9 +163,8 @@ function setupGlobals() {
 setupGlobals();
 
 /**************************
-* Initialise MongoDB.     *
+* Initialize MongoDB BEFORE anything else uses it
 **************************/
-
 async function initializeMongoDB() {
 	if (!Config.mongodb) {
 		Monitor.notice('MongoDB not configured - skipping initialization');
@@ -176,18 +175,28 @@ async function initializeMongoDB() {
 		Monitor.notice('Connecting to MongoDB...');
 		await MongoDB.connect(Config.mongodb);
 		Monitor.notice(`MongoDB connected successfully to database: ${Config.mongodb.database}`);
+		
+		// Run season maintenance after MongoDB is connected
+		await TCG_Ranking.runSeasonMaintenance();
+		
+		// Set up recurring season maintenance (every hour)
+		setInterval(async () => {
+			try {
+				await TCG_Ranking.runSeasonMaintenance();
+			} catch (error) {
+				Monitor.error('Error in season maintenance: ' + error);
+			}
+		}, 60 * 60 * 1000); // 1 hour
+		
 	} catch (error) {
 		Monitor.error('Failed to connect to MongoDB: ' + error);
 		Monitor.warn('Server will continue without MongoDB support');
 	}
 }
 
-// Initialize MongoDB immediately
-void initializeMongoDB();
-
-/**************************
-* Initialise MongoDB Ends *
-**************************/
+/****************
+* MongoDB End 
+***************/
 
 if (Config.crashguard) {
 	// graceful crash - allow current battles to finish before restarting
@@ -201,13 +210,11 @@ if (Config.crashguard) {
 }
 
 /**************************
-* Shutdown MongoDB Gracefully  *
+* Graceful Shutdown
 **************************/
-
-	async function gracefulShutdown(signal: string) {
+async function gracefulShutdown(signal: string) {
 	Monitor.notice(`Received ${signal}, shutting down gracefully...`);
 	
-	// Close MongoDB connection
 	try {
 		if (MongoDB.isConnected()) {
 			Monitor.notice('Closing MongoDB connection...');
@@ -224,6 +231,15 @@ if (Config.crashguard) {
 process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
 
+if (Config.crashguard) {
+	process.on('uncaughtException', (err: Error) => {
+		Monitor.crashlog(err, 'The main process');
+	});
+
+	process.on('unhandledRejection', err => {
+		Monitor.crashlog(err as any, 'A main process Promise');
+	});
+}
 
 /**************************
 * Shutdown MongoDB Gracefully  *
@@ -240,20 +256,22 @@ export function listen(port: number, bindAddress: string, workerCount: number) {
 	Sockets.listen(port, bindAddress, workerCount);
 }
 
-if (require.main === module) {
-	// Launch the server directly when app.js is the main module. Otherwise,
-	// in the case of app.js being imported as a module (e.g. unit tests),
-	// postpone launching until app.listen() is called.
-	let port;
-	for (const arg of process.argv) {
-		if (/^[0-9]+$/.test(arg)) {
-			port = parseInt(arg);
-			break;
+async function startServer() {
+	// CRITICAL: Initialize MongoDB FIRST, before starting the server
+	await initializeMongoDB();
+	
+	// Now start the server after MongoDB is ready
+	if (require.main === module) {
+		let port;
+		for (const arg of process.argv) {
+			if (/^[0-9]+$/.test(arg)) {
+				port = parseInt(arg);
+				break;
+			}
 		}
+		Sockets.listen(port);
 	}
-	Sockets.listen(port);
-}
-
+	
 /*********************************************************
  * Set up our last global
  *********************************************************/
