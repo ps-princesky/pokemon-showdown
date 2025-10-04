@@ -1,11 +1,12 @@
 /**
  * Collection-related TCG commands
+ * UPDATED: Enhanced to show battle data in collections
  */
 
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
-import { POKEMON_SETS } from '../../../impulse/psgo-plugin/tcg_data';
+import { POKEMON_SETS, getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { getCardPoints } from './shared';
 
@@ -142,9 +143,15 @@ export const collectionCommands: Chat.ChatCommands = {
 				}
 			});
 
-			const topCards = filteredUserCards.slice(0, PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT);
-			const cardsToDisplay = topCards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
-			const quantityMap = new Map(topCards.map(item => [item.cardId, item.quantity]));
+			// NEW: Pagination logic
+			const totalCards = filteredUserCards.length;
+			const totalPages = Math.ceil(totalCards / CARDS_PER_PAGE);
+			const startIndex = (page - 1) * CARDS_PER_PAGE;
+			const endIndex = startIndex + CARDS_PER_PAGE;
+			const paginatedCards = filteredUserCards.slice(startIndex, endIndex);
+
+			const cardsToDisplay = paginatedCards.map(item => cardMap.get(item.cardId)).filter((c): c is TCGCard => !!c);
+			const quantityMap = new Map(paginatedCards.map(item => [item.cardId, item.quantity]));
 			
 			// NEW: Enhanced stats display with battle value
 			let content = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;">` +
