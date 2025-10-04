@@ -1,5 +1,6 @@
 /**
  * Information and search TCG commands
+ * UPDATED: Enhanced search to show battle data
  */
 
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
@@ -19,28 +20,7 @@ import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/
 import { getCardPoints, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
-	async card(target, room, user) {
-		if (!this.runBroadcast()) return;
-		await TCG_Ranking.getPlayerRanking(user.id);
-		if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg card [cardId]");
-
-		try {
-			const card = await TCGCards.findOne({ cardId: target.trim() });
-			if (!card) return this.errorReply(`Card with ID "${target}" not found.`);
-
-			const rarityColorHex = getRarityColor(card.rarity);
-			const startColor = hexToRgba(rarityColorHex, 0.25);
-			const endColor = hexToRgba(rarityColorHex, 0.1);
-			const backgroundStyle = `background: linear-gradient(135deg, ${startColor}, ${endColor});`;
-
-			const cardNumber = card.cardId.split('-')[1] || '??';
-			const points = getCardPoints(card);
-
-			let borderColor = rarityColorHex;
-			let glowEffect = '';
-			const specialSubtype = card.subtypes.find(s => SPECIAL_SUBTYPES[s]);
-			if (specialSubtype && SPECIAL_SUBTYPES[specialSubtype]) {
-				borderColor = SPECIAL_SUBTYPES[specialSubtype].color;
+[specialSubtype].color;
 				if (SPECIAL_SUBTYPES[specialSubtype].glow) {
 					glowEffect = `box-shadow: 0 0 12px ${borderColor}50;`;
 				}
@@ -211,19 +191,33 @@ export const infoCommands: Chat.ChatCommands = {
 		const query: any = {};
 		const searchTerms: string[] = [];
 		let page = 1;
+		let sortBy: 'name' | 'battleValue' | 'hp' | 'rarity' = 'name'; // NEW: Sort option
 
 		const commandArgs = [];
 		for (const filter of filters) {
 			const [key, ...valueParts] = filter.split(':');
 			const value = valueParts.join(':').trim();
 			if (!key || !value) continue;
+			
+			// Handle page parameter
 			if (toID(key) === 'page') {
 				const pageNum = parseInt(value);
 				if (!isNaN(pageNum) && pageNum > 0) page = pageNum;
 				continue; 
 			}
+			
+			// NEW: Handle sort parameter
+			if (toID(key) === 'sort') {
+				if (['name', 'battlevalue', 'hp', 'rarity'].includes(toID(value))) {
+					sortBy = toID(value) === 'battlevalue' ? 'battleValue' : toID(value) as any;
+				}
+				commandArgs.push(filter);
+				continue;
+			}
+			
 			commandArgs.push(filter);
 			searchTerms.push(`<strong>${key}</strong>: "${value}"`);
+			
 			switch (toID(key)) {
 				case 'name': case 'set': case 'rarity': case 'supertype': case 'stage':
 					query[toID(key)] = { $regex: value, $options: 'i' };
@@ -247,13 +241,28 @@ export const infoCommands: Chat.ChatCommands = {
 						else query.hp = amount;
 					}
 					break;
+				// NEW: Battle value filter
+				case 'battlevalue':
+				case 'bv':
+					const bvMatch = value.match(/([<>=]+)?\s*(\d+)/);
+					if (bvMatch) {
+						const operator = bvMatch[1] || '=';
+						const amount = parseInt(bvMatch[2]);
+						if (isNaN(amount)) break;
+						if (operator === '>') query.battleValue = { $gt: amount };
+						else if (operator === '>=') query.battleValue = { $gte: amount };
+						else if (operator === '<') query.battleValue = { $lt: amount };
+						else if (operator === '<=') query.battleValue = { $lte: amount };
+						else query.battleValue = amount;
+					}
+					break;
 				default:
 					return this.errorReply(`Invalid filter: "${key}".`);
 			}
 		}
 
 		if (Object.keys(query).length === 0) {
-			return this.errorReply('No valid filters provided.');
+			return this.errorReply('No valid filters provided. Usage: /tcg search name:Pikachu, sort:battleValue');
 		}
 
 		try {
@@ -270,18 +279,75 @@ export const infoCommands: Chat.ChatCommands = {
 				return this.sendReply(`No cards found matching your criteria.`);
 			}
 
+			// NEW: Enhanced sorting
 			paginatedResults.sort((a, b) => {
-				const pointsDiff = getCardPoints(b) - getCardPoints(a);
-				if (pointsDiff !== 0) return pointsDiff;
-				return a.name.localeCompare(b.name);
+				switch (sortBy) {
+					case 'battleValue':
+						return (b.battleValue || 0) - (a.battleValue || 0);
+					case 'hp':
+						return (b.hp || 0) - (a.hp || 0);
+					case 'rarity':
+						const pointsDiff = getCardPoints(b) - getCardPoints(a);
+						if (pointsDiff !== 0) return pointsDiff;
+						return a.name.localeCompare(b.name);
+					case 'name':
+					default:
+						return a.name.localeCompare(b.name);
+				}
 			});
 
-			let content = `<p><em>Searching for: ${searchTerms.join(', ')}</em></p>` +
-				TCG_UI.generateCardTable(paginatedResults, ['id', 'name', 'set', 'rarity', 'type', 'subtypes', 'hp']) +
+			// NEW: Enhanced table with battle data
+			let tableHtml = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
+			
+			// Headers
+			tableHtml += `<tr class="themed-table-header">` +
+				`<th>Name</th>` +
+				`<th>Set</th>` +
+				`<th>Rarity</th>` +
+				`<th>Type</th>` +
+				`<th>HP</th>` +
+				`<th>⚔️ BV</th>` + // NEW: Battle Value column
+				`</tr>`;
+
+			// Rows
+			for (const card of paginatedResults) {
+				const rarityColor = getRarityColor(card.rarity);
+				
+				tableHtml += `<tr class="themed-table-row">` +
+					`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
+					`<td>${card.set}</td>` +
+					`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
+					`<td>${card.type || card.supertype}</td>` +
+					`<td>${card.hp || '-'}</td>`;
+				
+				// NEW: Battle Value with color coding
+				if (card.battleValue) {
+					let bvColor = '#95a5a6'; // Gray default
+					if (card.battleValue >= 150) bvColor = '#e74c3c'; // Red for high
+					else if (card.battleValue >= 100) bvColor = '#f39c12'; // Orange for medium-high
+					else if (card.battleValue >= 70) bvColor = '#3498db'; // Blue for medium
+					
+					tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
+				} else {
+					tableHtml += `<td>-</td>`;
+				}
+				
+				tableHtml += `</tr>`;
+			}
+
+			tableHtml += `</table></div>`;
+
+			let content = `<p><em>Searching for: ${searchTerms.join(', ')}</em>` +
+				(sortBy !== 'name' ? ` | <strong>Sorted by: ${sortBy === 'battleValue' ? 'Battle Value' : sortBy.toUpperCase()}</strong>` : '') +
+				`</p>` +
+				tableHtml +
 				`<p style="text-align:center; margin-top: 8px;">Showing ${paginatedResults.length} of ${totalResults} results.</p>`;
 			
-			const commandString = `/tcg search ${commandArgs.join(', ')}`;
+			// Pagination and sort controls
+			const commandString = `/tcg search ${commandArgs.filter(arg => !arg.startsWith('page:')).join(', ')}`;
 			content += `<div style="text-align: center; margin-top: 5px;">`;
+			
+			// Pagination
 			if (page > 1) {
 				content += `<button name="send" value="${commandString}, page:${page - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
 			}
@@ -289,9 +355,19 @@ export const infoCommands: Chat.ChatCommands = {
 			if ((page * CARDS_PER_PAGE) < totalResults) {
 				content += `<button name="send" value="${commandString}, page:${page + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
 			}
+			
+			// NEW: Sort controls
+			content += `<div style="margin-top: 8px;">` +
+				`<strong style="font-size: 0.9em;">Sort by:</strong> ` +
+				`<button name="send" value="${commandString}, sort:name">Name</button> ` +
+				`<button name="send" value="${commandString}, sort:battleValue">Battle Value</button> ` +
+				`<button name="send" value="${commandString}, sort:hp">HP</button> ` +
+				`<button name="send" value="${commandString}, sort:rarity">Rarity</button>` +
+				`</div>`;
+			
 			content += `</div>`;
 
-			const output = TCG_UI.buildPage('Search Results', content);
+			const output = TCG_UI.buildPage('🔍 Search Results', content);
 			this.sendReplyBox(output);
 		} catch (e: any) {
 			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
@@ -423,4 +499,4 @@ export const infoCommands: Chat.ChatCommands = {
 		const output = TCG_UI.buildPage('Pokemon TCG Data', content);
 		this.sendReplyBox(output);
 	},
-};			
+};
