@@ -3,7 +3,7 @@
  * Central definition of all MongoDB collections used by the TCG plugin.
  */
 
-import { MongoDB } from '../../mongodb_module';
+import { MongoDB } from '../../impulse/mongodb_module';
 
 // Existing collections
 export const TCGCards = MongoDB<TCGCard>('tcg_cards');
