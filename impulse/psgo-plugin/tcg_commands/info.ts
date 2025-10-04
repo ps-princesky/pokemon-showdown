@@ -19,7 +19,7 @@ import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/
 import { getCardPoints, hexToRgba } from './shared';
 
 export const infoCommands: Chat.ChatCommands = {
-   async card(target, room, user) {
+	async card(target, room, user) {
 	if (!this.runBroadcast()) return;
 	await TCG_Ranking.getPlayerRanking(user.id);
 	if (!target) return this.errorReply("Please specify a card ID. Usage: /tcg card [cardId]");
@@ -46,6 +46,36 @@ export const infoCommands: Chat.ChatCommands = {
 			const color = getSubtypeColor(s);
 			return color ? `<strong style="color: ${color}">${s}</strong>` : s;
 		}).join(', ');
+
+		// Helper function to get energy icon
+		const getEnergyIcon = (energyType: string) => {
+			const typeMap: {[key: string]: string} = {
+				'Fighting': 'fighting',
+				'Psychic': 'psychic',
+				'Poison': 'poison',
+				'Dragon': 'dragon',
+				'Ghost': 'ghost',
+				'Dark': 'dark',
+				'Darkness': 'dark',
+				'Ground': 'ground',
+				'Fire': 'fire',
+				'Fairy': 'fairy',
+				'Water': 'water',
+				'Flying': 'flying',
+				'Normal': 'normal',
+				'Colorless': 'normal',
+				'Rock': 'rock',
+				'Lightning': 'electric',
+				'Electric': 'electric',
+				'Bug': 'bug',
+				'Grass': 'grass',
+				'Ice': 'ice',
+				'Steel': 'steel',
+				'Metal': 'steel'
+			};
+			const iconName = typeMap[energyType] || energyType.toLowerCase();
+			return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/icons/type/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+		};
 
 		// Outer scrollable container
 		let output = `<div class="impulse-card">` +
