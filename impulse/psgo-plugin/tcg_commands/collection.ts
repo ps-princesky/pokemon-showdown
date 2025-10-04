@@ -61,7 +61,7 @@ export const collectionCommands: Chat.ChatCommands = {
 
 			query.cardId = { $in: collection.cards.map(c => c.cardId) };
 			
-			const allOwnedCards = await TCGCards.find(query);
+			const allOwnedCards = await TCGCards.find(query).toArray();
 			const cardMap = new Map(allOwnedCards.map(c => [c.cardId, c]));
 
 			let totalPoints = 0;
@@ -120,7 +120,7 @@ export const collectionCommands: Chat.ChatCommands = {
 
 			const [userCollection, allSetCards] = await Promise.all([
 				UserCollections.findOne({ userId: targetId }),
-				TCGCards.find({ set: cleanSetId }),
+				TCGCards.find({ set: cleanSetId }).toArray(),
 			]);
 
 			if (allSetCards.length === 0) {
@@ -176,10 +176,16 @@ export const collectionCommands: Chat.ChatCommands = {
 				if (!card) return this.errorReply(`Card with ID "${cardId}" not found.`);
 
 				if (action === 'add') {
-					await UserCollections.updateOne({ userId: user.id }, { $addToSet: { wishlist: card.cardId } });
+					await UserCollections.updateOne(
+						{ userId: user.id },
+						{ $addToSet: { wishlist: card.cardId } }
+					);
 					return this.sendReply(`Added ${card.name} to your wishlist.`);
 				} else { // remove
-					await UserCollections.updateOne({ userId: user.id }, { $pull: { wishlist: card.cardId } });
+					await UserCollections.updateOne(
+						{ userId: user.id },
+						{ $pull: { wishlist: card.cardId } }
+					);
 					return this.sendReply(`Removed ${card.name} from your wishlist.`);
 				}
 			} else { // view
@@ -191,7 +197,7 @@ export const collectionCommands: Chat.ChatCommands = {
 					return this.sendReplyBox(`${targetUsername} does not have a wishlist.`);
 				}
 
-				const cards = await TCGCards.find({ cardId: { $in: collection.wishlist } });
+				const cards = await TCGCards.find({ cardId: { $in: collection.wishlist } }).toArray();
 				cards.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
 				const tableHtml = TCG_UI.generateCardTable(cards, ['name', 'set', 'rarity']);
