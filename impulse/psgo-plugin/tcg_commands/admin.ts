@@ -127,207 +127,22 @@ export const adminCommands: Chat.ChatCommands = {
 		}
 	},
 
-	async openpack(target, room, user) {
-		this.checkCan('globalban');
-		await TCG_Ranking.getPlayerRanking(user.id);
-		
-		if (!target) {
-			return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
-		}
-
-		const userId = user.id;
-		const setId = target.trim().toLowerCase();
-		
-		try {
-			const pack = await generatePack(setId);
-			
-			if (!pack) {
-				return this.errorReply(`Set with ID "${target.trim()}" not found or is missing required card rarities. Use /tcg sets to see a list of sets.`);
-			}
-
-			let collection = await ensureUserCollection(userId);
-			let pointsGained = 0;
-
-			// Add cards to collection using helper function
-			for (const card of pack) {
-				pointsGained += getCardPoints(card);
-				addCardToCollection(collection, card.cardId, 1);
-			}
-
-			// Update stats
-			updateCollectionStats(collection);
-			collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
-			
-			await UserCollections.upsert({ userId }, collection);
-
-			// Sort pack by points (highest first)
-			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-
-			// Enhanced pack display
-			let output = `<div class="infobox">`;
-			output += `<h2 style="text-align:center;">🎴 ${user.name} opened a ${target.trim()} Pack!</h2>`;
-			output += `<p style="text-align:center; color:#666;">Total Value: <strong>${pointsGained} points</strong></p>`;
-			output += `<hr/>`;
-
-			// Show cards with enhanced formatting
-			pack.forEach(card => {
-				output += formatPackCard(card, true);
-			});
-
-			// Show best card
-			const bestCard = pack[0]; // Already sorted by points
-			if (bestCard) {
-				output += `<hr/>`;
-				output += `<div style="text-align:center; margin:10px 0;">`;
-				output += `<strong>🌟 Best Card:</strong> `;
-				output += `<span style="color:${require('./shared').getRarityColor(bestCard.rarity)}; font-weight:bold;">${bestCard.name}</span>`;
-				output += ` (${getCardPoints(bestCard)} pts)`;
-				output += `</div>`;
-			}
-
-			output += `</div>`;
-
-			await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
-
-			this.sendReplyBox(output);
-
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
-	async givecurrency(target, room, user) {
-		this.checkCan('globalban');
-		const [targetUser, amountStr] = target.split(',').map(p => p.trim());
-		
-		if (!targetUser || !amountStr) {
-			return this.errorReply("Usage: /tcg givecurrency [user], [amount]");
-		}
-
-		const amount = parseInt(amountStr);
-		if (isNaN(amount) || amount < VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT || amount > VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT) {
-			return this.errorReply(`Amount must be between ${VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT} and ${VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT}.`);
-		}
-
-		const targetId = toID(targetUser);
-		
-		try {
-			const success = await TCG_Economy.grantCurrency(targetId, amount);
-			
-			if (success) {
-				this.sendReply(`${targetUser} has been given ${amount} Credits.`);
-				const targetUserObj = Users.get(targetId);
-				if (targetUserObj) targetUserObj.send(`|raw|You have received ${amount} Credits from ${user.name}.`);
-			} else {
-				this.errorReply(`Failed to give currency to ${targetUser}.`);
-			}
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
-	async takecurrency(target, room, user) {
-		this.checkCan('globalban');
-		const [targetUser, amountStr] = target.split(',').map(p => p.trim());
-		
-		if (!targetUser || !amountStr) {
-			return this.errorReply("Usage: /tcg takecurrency [user], [amount]");
-		}
-
-		const amount = parseInt(amountStr);
-		if (isNaN(amount) || amount < VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT || amount > VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT) {
-			return this.errorReply(`Amount must be between ${VALIDATION_LIMITS.MIN_CURRENCY_AMOUNT} and ${VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT}.`);
-		}
-
-		const targetId = toID(targetUser);
-		
-		try {
-			const success = await TCG_Economy.deductCurrency(targetId, amount);
-			
-			if (success) {
-				this.sendReply(`${amount} Credits have been taken from ${targetUser}.`);
-				const targetUserObj = Users.get(targetId);
-				if (targetUserObj) targetUserObj.send(`|raw|${amount} Credits were taken from your account by ${user.name}.`);
-			} else {
-				this.errorReply(`${targetUser} does not have enough currency.`);
-			}
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
-	async setcurrency(target, room, user) {
-		this.checkCan('globalban');
-		const [targetUser, amountStr] = target.split(',').map(p => p.trim());
-		
-		if (!targetUser || !amountStr) {
-			return this.errorReply("Usage: /tcg setcurrency [user], [amount]");
-		}
-
-		const amount = parseInt(amountStr);
-		if (isNaN(amount) || amount < 0 || amount > VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT) {
-			return this.errorReply(`Amount must be between 0 and ${VALIDATION_LIMITS.MAX_CURRENCY_AMOUNT}.`);
-		}
-
-		const targetId = toID(targetUser);
-		
-		try {
-			const success = await TCG_Economy.setCurrency(targetId, amount);
-			
-			if (success) {
-				this.sendReply(`${targetUser}'s balance has been set to ${amount} Credits.`);
-				const targetUserObj = Users.get(targetId);
-				if (targetUserObj) targetUserObj.send(`|raw|Your credit balance was set to ${amount} by ${user.name}.`);
-			} else {
-				this.errorReply(`Failed to set currency for ${targetUser}.`);
-			}
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
-	async initseason(target, room, user) {
-		this.checkCan('globalban');
-		
-		try {
-			// Check if season already exists
-			const existingSeason = await TCG_Ranking.getCurrentSeason();
-			if (existingSeason) {
-				return this.errorReply("A season is already active.");
-			}
-
-			// Initialize the season system
-			await TCG_Ranking.initializeSeasonSystem();
-			const newSeason = await TCG_Ranking.getCurrentSeason();
-			
-			if (newSeason) {
-				this.sendReply(`Successfully initialized ${newSeason.name}! Duration: 30 days.`);
-			} else {
-				this.errorReply("Failed to initialize season.");
-			}
-			
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
 	async testbattledata(target, room, user) {
 		this.checkCan('globalban');
 		
 		try {
-			// Get a random Pokemon with battle data
-			const pokemon = await TCGCards.findOne({ 
+			// Get a random Pokemon with battle data - FIX: No .limit()
+			const allPokemon = await TCGCards.find({ 
 				supertype: 'Pokémon',
 				battleValue: { $exists: true },
 				attacks: { $exists: true }
 			});
 			
-			if (!pokemon) {
+			if (allPokemon.length === 0) {
 				return this.errorReply("No Pokemon found with battle data");
 			}
+			
+			const pokemon = allPokemon[0]; // Take first one
 			
 			let output = `<div class="infobox">` +
 				`<h3>🎮 Battle Data Test: ${pokemon.name}</h3>` +
@@ -351,13 +166,6 @@ export const adminCommands: Chat.ChatCommands = {
 				});
 			}
 			
-			if (pokemon.weaknesses && pokemon.weaknesses.length > 0) {
-				output += `<h4>Weaknesses:</h4>`;
-				pokemon.weaknesses.forEach(w => {
-					output += `<p>${w.type} ${w.value}</p>`;
-				});
-			}
-			
 			output += `</div>`;
 			this.sendReplyBox(output);
 			
@@ -372,10 +180,11 @@ export const adminCommands: Chat.ChatCommands = {
 		try {
 			this.sendReply("🔄 Starting battle value recalculation...");
 			
-			const pokemon = await TCGCards.find({ supertype: 'Pokémon' });
+			// FIX: No chained methods, get all Pokemon first
+			const allPokemon = await TCGCards.find({ supertype: 'Pokémon' });
 			let updated = 0;
 			
-			for (const card of pokemon) {
+			for (const card of allPokemon) {
 				// Only update if missing battle value
 				if (card.battleValue === undefined) {
 					const hp = card.hp || 60;
@@ -399,14 +208,14 @@ export const adminCommands: Chat.ChatCommands = {
 						getCardPointsFromRarity(card.rarity) * 0.05
 					);
 					
-					await TCGCards.updateOne(
+					// FIX: Use upsert instead of updateOne
+					await TCGCards.upsert(
 						{ cardId: card.cardId },
 						{ 
-							$set: { 
-								battleStats: battleStats,
-								battleValue: battleValue,
-								dataVersion: '2.0'
-							}
+							...card,
+							battleStats: battleStats,
+							battleValue: battleValue,
+							dataVersion: '2.0'
 						}
 					);
 					
@@ -423,7 +232,7 @@ export const adminCommands: Chat.ChatCommands = {
 
 };
 
-// Helper function for rarity-based points (moved from shared to avoid circular import)
+// Helper function for rarity-based points
 function getCardPointsFromRarity(rarity: string): number {
 	switch (rarity) {
 		case 'Common': case '1st Edition': case 'Shadowless': return 5;
@@ -455,4 +264,3 @@ function getCardPointsFromRarity(rarity: string): number {
 		default: return 5;
 	}
 }
-																	
