@@ -9,7 +9,7 @@ import { TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
 import { getRarityColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { BATTLE_CONFIG, VALIDATION_LIMITS, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints } from './shared';
-import * as TCG_Battle from '../../../impulse/tcg_battle_simple';
+import * as TCG_Battle from '../../../impulse/psgo-plugin/tcg_battle_simple';
 import { getCardPoints } from './shared';
 
 // Battle challenges map
