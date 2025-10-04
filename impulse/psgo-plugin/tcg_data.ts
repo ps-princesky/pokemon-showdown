@@ -74,6 +74,7 @@ export interface PlayerRanking {
 	averagePackValue: number;
 	createdAt: number;
 	updatedAt: number;
+	claimedEloMilestones?: string[];
 }
 
 export interface BattleHistory {
@@ -123,7 +124,29 @@ export interface DailyChallenge {
 		targetUserId: string;
 		battleId: string;
 		timestamp: number;
+		creditsEarned?: number;
 	}[];
+	totalCreditsEarnedToday?: number;
+}
+
+export interface WeeklyMilestones {
+	_id?: string;
+	userId: string;
+	weekStartTime: number;
+	lastReset: number;
+	
+	// Progress counters
+	rankedBattles: number;
+	rankedWins: number;
+	packsPurchased: number;
+	packsOpened: number;
+	creditsEarned: number;
+	
+	// Claimed milestones (prevent double claiming)
+	claimedMilestones: string[];
+	
+	// Total rewards earned this week
+	totalMilestoneCredits: number;
 }
 
 export interface SimulatedBattle {
