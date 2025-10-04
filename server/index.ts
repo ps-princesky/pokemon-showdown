@@ -72,6 +72,7 @@ try {
 import { FS, Repl } from '../lib';
 // Import MongoDB For Initialisation
 import { MongoDB } from '../impulse/mongodb_module';
+import * as TCG_Ranking from '../impulse/psgo-plugin/tcg_ranking';
 
 /*********************************************************
  * Set up most of our globals
@@ -109,6 +110,14 @@ function setupGlobals() {
 	*********************/
 
 	global.Impulse = {};
+
+	// Run season maintenance every hour
+	setInterval(async () => {
+		await TCG_Ranking.runSeasonMaintenance();
+	}, 60 * 60 * 1000); // 1 hour
+
+	// Also run it once on startup
+	TCG_Ranking.runSeasonMaintenance();
 
 	/********************
 	* Impulse Globals Ends
