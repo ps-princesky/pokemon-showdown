@@ -63,6 +63,31 @@ export const BATTLE_CONFIG = {
 	MAX_WAGER: 10000,
 	/** Minimum wager amount */
 	MIN_WAGER: 1,
+
+	// NEW: Battle simulator settings
+	ENABLE_TYPE_EFFECTIVENESS: true,    // Use weakness/resistance
+	ENABLE_ABILITIES: false,             // Abilities in Phase 2
+	ENABLE_STATUS_CONDITIONS: false,     // Status in Phase 2
+	
+	// Battle simulation
+	MAX_TURNS: 10,                       // Maximum turns per battle
+	STARTING_ENERGY: 3,                  // Starting energy per Pokemon
+	ENERGY_PER_TURN: 1,                  // Energy gained per turn
+	
+	// Type effectiveness multipliers
+	WEAKNESS_MULTIPLIER: 2.0,            // ×2 damage
+	RESISTANCE_REDUCTION: 20,            // -20 damage
+	
+	// Speed advantage
+	SPEED_ADVANTAGE_THRESHOLD: 20,
+} as const;
+
+export const TYPE_CHART = {
+	// Pokemon type names for matching
+	TYPES: [
+		'Colorless', 'Darkness', 'Dragon', 'Fairy', 'Fighting',
+		'Fire', 'Grass', 'Lightning', 'Metal', 'Psychic', 'Water'
+	],
 } as const;
 
 // ==================== RANKING SYSTEM ====================
