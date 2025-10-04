@@ -3,7 +3,7 @@
  * Handles ELO rating calculations and competitive battle rankings.
  */
 
-import { MongoDB } from '../../mongodb_module';
+import { MongoDB } from '../../impulse/mongodb_module';
 import { 
 	PlayerRanking,
 	BattleHistory,
@@ -25,144 +25,23 @@ import {
 } from './tcg_collections';
 import * as TCG_Economy from './tcg_economy';
 
-// ==================== CONSTANTS ====================
+// NEW: Import all config values
+import {
+	RANK_THRESHOLDS,
+	RANK_COLORS,
+	RANKING_CONFIG,
+	RANKED_BATTLE_REWARDS,
+	SEASON_REWARDS,
+	ELO_MILESTONE_REWARDS,
+	WEEKLY_MILESTONES,
+	PAGINATION_CONFIG,
+	ERROR_MESSAGES,
+	SUCCESS_MESSAGES,
+	ConfigUtils
+} from './tcg_config';
 
-export const RANK_THRESHOLDS = {
-	'Bronze III': 0,
-	'Bronze II': 800,
-	'Bronze I': 900,
-	'Silver III': 1000,
-	'Silver II': 1100,
-	'Silver I': 1200,
-	'Gold III': 1300,
-	'Gold II': 1400,
-	'Gold I': 1500,
-	'Platinum III': 1600,
-	'Platinum II': 1700,
-	'Platinum I': 1800,
-	'Diamond III': 1900,
-	'Diamond II': 2000,
-	'Diamond I': 2100,
-	'Master': 2200,
-	'Grandmaster': 2400,
-} as const;
+export { RANK_THRESHOLDS, RANK_COLORS, SEASON_REWARDS, ELO_MILESTONE_REWARDS };
 
-export const RANK_COLORS = {
-	'Bronze III': '#CD7F32', 'Bronze II': '#CD7F32', 'Bronze I': '#CD7F32',
-	'Silver III': '#C0C0C0', 'Silver II': '#C0C0C0', 'Silver I': '#C0C0C0',
-	'Gold III': '#FFD700', 'Gold II': '#FFD700', 'Gold I': '#FFD700',
-	'Platinum III': '#E5E4E2', 'Platinum II': '#E5E4E2', 'Platinum I': '#E5E4E2',
-	'Diamond III': '#B9F2FF', 'Diamond II': '#B9F2FF', 'Diamond I': '#B9F2FF',
-	'Master': '#FF6B6B', 'Grandmaster': '#9B59B6',
-} as const;
-
-const DEFAULT_ELO = 1000;
-const K_FACTOR = 32;
-const DECAY_THRESHOLD_DAYS = 14;
-const DECAY_AMOUNT = 25;
-const DAILY_CHALLENGES_LIMIT = 10;
-const LEADERBOARD_CHALLENGE_RANGE = 50;
-const SEASON_DURATION_DAYS = 30;
-
-// UPDATED: Balanced battle rewards
-const RANKED_BATTLE_REWARDS = {
-	win: 8,
-	loss: 3,
-	draw: 5,
-};
-
-const DAILY_CREDIT_BATTLES_LIMIT = 7; // First 7 battles give full rewards
-const REDUCED_REWARD_MULTIPLIER = 0.3; // Battles 8-10 give 30% rewards
-
-// UPDATED: Balanced season rewards
-export const SEASON_REWARDS = {
-	1: { credits: 1200, title: 'Grandmaster Champion' },
-	2: { credits: 1000, title: 'Elite Duelist' },
-	3: { credits: 900, title: 'Master Tactician' },
-	4: { credits: 800, title: 'Legendary Trainer' },
-	5: { credits: 700, title: 'Expert Battler' },
-	6: { credits: 600, title: 'Skilled Challenger' },
-	7: { credits: 500, title: 'Rising Star' },
-	8: { credits: 450, title: 'Promising Duelist' },
-	9: { credits: 350, title: 'Dedicated Trainer' },
-	10: { credits: 250, title: 'Top Competitor' },
-} as const;
-
-// NEW: ELO milestone rewards (one-time only)
-const ELO_MILESTONE_REWARDS = {
-	'silver_iii': { elo: 1000, reward: 400, name: 'Silver Promotion' },
-	'silver_i': { elo: 1200, reward: 500, name: 'High Silver' },
-	'gold_iii': { elo: 1300, reward: 600, name: 'Gold Promotion' },
-	'gold_i': { elo: 1500, reward: 700, name: 'High Gold' },
-	'platinum_iii': { elo: 1600, reward: 800, name: 'Platinum Promotion' },
-	'platinum_i': { elo: 1800, reward: 900, name: 'High Platinum' },
-	'diamond_iii': { elo: 1900, reward: 1000, name: 'Diamond Promotion' },
-	'diamond_i': { elo: 2100, reward: 1100, name: 'High Diamond' },
-	'master': { elo: 2200, reward: 1500, name: 'Master Rank' },
-	'grandmaster': { elo: 2400, reward: 2500, name: 'Grandmaster Rank' },
-} as const;
-
-// NEW: Weekly milestone definitions
-const WEEKLY_MILESTONES = {
-	battles_5: { requirement: 5, type: 'rankedBattles', reward: 50, name: 'Battler', description: 'Complete 5 ranked battles' },
-	battles_15: { requirement: 15, type: 'rankedBattles', reward: 100, name: 'Warrior', description: 'Complete 15 ranked battles' },
-	battles_30: { requirement: 30, type: 'rankedBattles', reward: 200, name: 'Champion', description: 'Complete 30 ranked battles' },
-	
-	wins_3: { requirement: 3, type: 'rankedWins', reward: 40, name: 'Victor', description: 'Win 3 ranked battles' },
-	wins_10: { requirement: 10, type: 'rankedWins', reward: 80, name: 'Dominator', description: 'Win 10 ranked battles' },
-	wins_20: { requirement: 20, type: 'rankedWins', reward: 150, name: 'Unbeatable', description: 'Win 20 ranked battles' },
-	
-	packs_3: { requirement: 3, type: 'packsPurchased', reward: 30, name: 'Collector', description: 'Purchase 3 packs from shop' },
-	packs_7: { requirement: 7, type: 'packsPurchased', reward: 70, name: 'Enthusiast', description: 'Purchase 7 packs from shop' },
-	
-	opened_5: { requirement: 5, type: 'packsOpened', reward: 25, name: 'Pack Hunter', description: 'Open 5 packs' },
-	opened_15: { requirement: 15, type: 'packsOpened', reward: 75, name: 'Pack Master', description: 'Open 15 packs' },
-	
-	credits_200: { requirement: 200, type: 'creditsEarned', reward: 50, name: 'Earner', description: 'Earn 200 credits from battles' },
-	credits_500: { requirement: 500, type: 'creditsEarned', reward: 100, name: 'Rich', description: 'Earn 500 credits from battles' },
-} as const;
-
-// ==================== CORE FUNCTIONS ====================
-
-/**
- * Calculate ELO change based on battle result
- */
-function calculateEloChange(playerElo: number, opponentElo: number, result: number): number {
-	const expectedScore = 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
-	return Math.round(K_FACTOR * (result - expectedScore));
-}
-
-/**
- * Determine rank based on ELO rating
- */
-function getRankFromElo(elo: number): string {
-	const ranks = Object.entries(RANK_THRESHOLDS).reverse();
-	for (const [rank, threshold] of ranks) {
-		if (elo >= threshold) return rank;
-	}
-	return 'Bronze III';
-}
-
-/**
- * Get division within rank (for display purposes)
- */
-function getDivisionFromElo(elo: number, rank: string): number {
-	const rankKeys = Object.keys(RANK_THRESHOLDS);
-	const currentRankIndex = rankKeys.indexOf(rank);
-	
-	if (currentRankIndex === -1) return 1;
-	if (currentRankIndex === rankKeys.length - 1) return 1; // Grandmaster
-	
-	const currentThreshold = RANK_THRESHOLDS[rank as keyof typeof RANK_THRESHOLDS];
-	const nextThreshold = RANK_THRESHOLDS[rankKeys[currentRankIndex + 1] as keyof typeof RANK_THRESHOLDS];
-	const progress = (elo - currentThreshold) / (nextThreshold - currentThreshold);
-	
-	return Math.min(5, Math.max(1, Math.ceil(progress * 5)));
-}
-
-/**
- * Helper function to get card points from rarity
- */
 function getCardPointsFromRarity(rarity: string): number {
 	switch (rarity) {
 		case 'Common': case '1st Edition': case 'Shadowless': return 5;
@@ -196,15 +75,52 @@ function getCardPointsFromRarity(rarity: string): number {
 	}
 }
 
+// ==================== CORE FUNCTIONS ====================
 /**
  * Calculate battle credit reward with diminishing returns
  */
 function calculateBattleReward(battlesCompletedToday: number, baseReward: number): number {
-	if (battlesCompletedToday < DAILY_CREDIT_BATTLES_LIMIT) {
-		return baseReward; // Full reward for first 7 battles
+	if (battlesCompletedToday < RANKING_CONFIG.DAILY_CREDIT_BATTLES_LIMIT) {
+		return baseReward; // Full reward for first battles
 	} else {
-		return Math.floor(baseReward * REDUCED_REWARD_MULTIPLIER); // 30% reward for battles 8-10
+		return Math.floor(baseReward * RANKING_CONFIG.REDUCED_REWARD_MULTIPLIER); // Reduced reward for excess battles
 	}
+}
+
+/**
+ * Calculate ELO change based on battle result
+ */
+function calculateEloChange(playerElo: number, opponentElo: number, result: number): number {
+	const expectedScore = 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
+	return Math.round(RANKING_CONFIG.K_FACTOR * (result - expectedScore));
+}
+
+/**
+ * Determine rank based on ELO rating
+ */
+function getRankFromElo(elo: number): string {
+	const ranks = Object.entries(RANK_THRESHOLDS).reverse();
+	for (const [rank, threshold] of ranks) {
+		if (elo >= threshold) return rank;
+	}
+	return 'Bronze III';
+}
+
+/**
+ * Get division within rank (for display purposes)
+ */
+function getDivisionFromElo(elo: number, rank: string): number {
+	const rankKeys = Object.keys(RANK_THRESHOLDS);
+	const currentRankIndex = rankKeys.indexOf(rank);
+	
+	if (currentRankIndex === -1) return 1;
+	if (currentRankIndex === rankKeys.length - 1) return 1; // Grandmaster
+	
+	const currentThreshold = RANK_THRESHOLDS[rank as keyof typeof RANK_THRESHOLDS];
+	const nextThreshold = RANK_THRESHOLDS[rankKeys[currentRankIndex + 1] as keyof typeof RANK_THRESHOLDS];
+	const progress = (elo - currentThreshold) / (nextThreshold - currentThreshold);
+	
+	return Math.min(5, Math.max(1, Math.ceil(progress * 5)));
 }
 
 // ==================== ELO MILESTONE FUNCTIONS ====================
@@ -250,6 +166,7 @@ export async function checkEloMilestones(userId: string, newElo: number): Promis
 	};
 }
 
+
 // ==================== PLAYER RANKING FUNCTIONS ====================
 
 /**
@@ -261,13 +178,13 @@ export async function getPlayerRanking(userId: string): Promise<PlayerRanking> {
 	if (!ranking) {
 		ranking = {
 			userId,
-			elo: DEFAULT_ELO,
+			elo: RANKING_CONFIG.DEFAULT_ELO,
 			wins: 0,
 			losses: 0,
 			draws: 0,
 			winStreak: 0,
 			bestWinStreak: 0,
-			rank: getRankFromElo(DEFAULT_ELO),
+			rank: getRankFromElo(RANKING_CONFIG.DEFAULT_ELO),
 			division: 1,
 			lastBattleTime: Date.now(),
 			seasonWins: 0,
@@ -277,7 +194,7 @@ export async function getPlayerRanking(userId: string): Promise<PlayerRanking> {
 			averagePackValue: 0,
 			createdAt: Date.now(),
 			updatedAt: Date.now(),
-			claimedEloMilestones: [], // ENSURE THIS IS INITIALIZED
+			claimedEloMilestones: [],
 		};
 		
 		await PlayerRankings.insertOne(ranking);
@@ -359,6 +276,7 @@ export async function updatePlayerRanking(
 		milestoneCredits,
 	};
 }
+
 
 /**
  * Process battle result and update both players
@@ -505,13 +423,24 @@ export async function updateMilestoneProgress(
 	type: 'rankedBattles' | 'rankedWins' | 'packsPurchased' | 'packsOpened' | 'creditsEarned',
 	amount: number = 1
 ): Promise<void> {
-	const milestones = await getWeeklyMilestones(userId);
-	
-	// Update progress
-	milestones[type] += amount;
-	
-	// Save progress
-	await WeeklyMilestonesCollection.upsert({ userId }, milestones);
+	try {
+		const milestones = await getWeeklyMilestones(userId);
+		
+		console.log(`Before update - ${userId} ${type}: ${milestones[type]}`);
+		
+		// Update progress
+		milestones[type] += amount;
+		
+		console.log(`After update - ${userId} ${type}: ${milestones[type]} (+${amount})`);
+		
+		// Save progress
+		await WeeklyMilestonesCollection.upsert({ userId }, milestones);
+		
+		console.log(`Successfully saved milestone progress for ${userId}`);
+	} catch (error: any) {
+		console.error(`Error updating milestone progress for ${userId}:`, error);
+		throw error;
+	}
 }
 
 /**
@@ -552,7 +481,7 @@ export async function getAvailableMilestones(userId: string): Promise<{
 		if (a.canClaim !== b.canClaim) return a.canClaim ? -1 : 1;
 		return b.reward - a.reward;
 	});
-}		
+}
 
 /**
  * Claim a milestone reward
@@ -622,6 +551,7 @@ export async function getWeeklyMilestoneSummary(userId: string): Promise<{
 	};
 }
 
+
 // ==================== DAILY CHALLENGE FUNCTIONS ====================
 
 /**
@@ -636,7 +566,7 @@ export async function getDailyChallenges(userId: string): Promise<DailyChallenge
 	if (!dailyChallenge) {
 		dailyChallenge = {
 			userId,
-			challengesRemaining: DAILY_CHALLENGES_LIMIT,
+			challengesRemaining: RANKING_CONFIG.DAILY_CHALLENGES_LIMIT,
 			lastReset: todayStart,
 			challengeHistory: [],
 			totalCreditsEarnedToday: 0,
@@ -644,7 +574,7 @@ export async function getDailyChallenges(userId: string): Promise<DailyChallenge
 		await DailyChallenges.insertOne(dailyChallenge);
 	} else if (dailyChallenge.lastReset < todayStart) {
 		// Reset daily challenges
-		dailyChallenge.challengesRemaining = DAILY_CHALLENGES_LIMIT;
+		dailyChallenge.challengesRemaining = RANKING_CONFIG.DAILY_CHALLENGES_LIMIT;
 		dailyChallenge.lastReset = todayStart;
 		dailyChallenge.challengeHistory = [];
 		dailyChallenge.totalCreditsEarnedToday = 0;
@@ -668,7 +598,7 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
 			userId: { $ne: challengerId }
 		},
 		{ elo: -1 },
-		LEADERBOARD_CHALLENGE_RANGE
+		RANKING_CONFIG.LEADERBOARD_CHALLENGE_RANGE
 	);
 	
 	// If no existing players, create a dummy ranking for the challenger to get started
@@ -679,6 +609,29 @@ export async function getAvailableChallengeTargets(challengerId: string): Promis
 	
 	return allPlayers.filter(player => !challengedToday.has(player.userId));
 }
+
+/**
+ * Get daily challenge status for display
+ */
+export async function getDailyChallengeStatus(userId: string): Promise<{
+	challengesRemaining: number;
+	challengesUsed: number;
+	nextReset: number;
+	recentChallenges: { targetUserId: string; timestamp: number }[];
+}> {
+	const dailyChallenge = await getDailyChallenges(userId);
+	const tomorrow = new Date();
+	tomorrow.setDate(tomorrow.getDate() + 1);
+	tomorrow.setHours(0, 0, 0, 0);
+	
+	return {
+		challengesRemaining: dailyChallenge.challengesRemaining,
+		challengesUsed: RANKING_CONFIG.DAILY_CHALLENGES_LIMIT - dailyChallenge.challengesRemaining,
+		nextReset: tomorrow.getTime(),
+		recentChallenges: dailyChallenge.challengeHistory.slice(-5),
+	};
+}
+
 
 /**
  * Simulate a pack opening for battle with more variance
@@ -750,13 +703,13 @@ export async function executeSimulatedChallenge(
 		// Check if challenger has challenges remaining
 		const dailyChallenge = await getDailyChallenges(challengerId);
 		if (dailyChallenge.challengesRemaining <= 0) {
-			return { success: false, error: "No challenges remaining today." };
+			return { success: false, error: ERROR_MESSAGES.NO_CHALLENGES_REMAINING };
 		}
 		
 		// Check if target was already challenged today
 		const alreadyChallenged = dailyChallenge.challengeHistory.some(h => h.targetUserId === targetId);
 		if (alreadyChallenged) {
-			return { success: false, error: "You have already challenged this player today." };
+			return { success: false, error: ERROR_MESSAGES.TARGET_ALREADY_CHALLENGED };
 		}
 		
 		// Ensure both players have ranking records (this creates them if they don't exist)
@@ -768,7 +721,7 @@ export async function executeSimulatedChallenge(
 		// Get available sets
 		const availableSets = await TCGCards.distinct('set');
 		if (availableSets.length === 0) {
-			return { success: false, error: "No sets available for battles." };
+			return { success: false, error: ERROR_MESSAGES.SET_UNAVAILABLE };
 		}
 		const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
 		
@@ -903,34 +856,13 @@ export async function executeSimulatedChallenge(
 	}
 }
 
-/**
- * Get daily challenge status for display
- */
-export async function getDailyChallengeStatus(userId: string): Promise<{
-	challengesRemaining: number;
-	challengesUsed: number;
-	nextReset: number;
-	recentChallenges: { targetUserId: string; timestamp: number }[];
-}> {
-	const dailyChallenge = await getDailyChallenges(userId);
-	const tomorrow = new Date();
-	tomorrow.setDate(tomorrow.getDate() + 1);
-	tomorrow.setHours(0, 0, 0, 0);
-	
-	return {
-		challengesRemaining: dailyChallenge.challengesRemaining,
-		challengesUsed: DAILY_CHALLENGES_LIMIT - dailyChallenge.challengesRemaining,
-		nextReset: tomorrow.getTime(),
-		recentChallenges: dailyChallenge.challengeHistory.slice(-5),
-	};
-}
 
 // ==================== LEADERBOARD FUNCTIONS ====================
 
 /**
  * Get top players by ELO
  */
-export async function getLeaderboard(limit: number = 10): Promise<PlayerRanking[]> {
+export async function getLeaderboard(limit: number = PAGINATION_CONFIG.LEADERBOARD_SIZE): Promise<PlayerRanking[]> {
 	return PlayerRankings.findSorted({}, { elo: -1 }, limit);
 }
 
@@ -964,7 +896,7 @@ export async function getPlayersInRank(rank: string): Promise<PlayerRanking[]> {
 /**
  * Get seasonal leaderboard
  */
-export async function getSeasonalLeaderboard(limit: number = 10): Promise<PlayerRanking[]> {
+export async function getSeasonalLeaderboard(limit: number = PAGINATION_CONFIG.LEADERBOARD_SIZE): Promise<PlayerRanking[]> {
 	return PlayerRankings.findSorted(
 		{ seasonWins: { $gt: 0 } },
 		{ seasonWins: -1, elo: -1 },
@@ -977,7 +909,7 @@ export async function getSeasonalLeaderboard(limit: number = 10): Promise<Player
 /**
  * Get battle history for a player
  */
-export async function getPlayerBattleHistory(userId: string, limit: number = 10): Promise<BattleHistory[]> {
+export async function getPlayerBattleHistory(userId: string, limit: number = PAGINATION_CONFIG.BATTLE_HISTORY_SIZE): Promise<BattleHistory[]> {
 	return BattleHistories.findSorted(
 		{ $or: [{ player1: userId }, { player2: userId }] },
 		{ battleTime: -1 },
@@ -995,7 +927,7 @@ export async function getRecentBattles(limit: number = 20): Promise<BattleHistor
 /**
  * Get recent simulated battles for a user
  */
-export async function getSimulatedBattleHistory(userId: string, limit: number = 10): Promise<SimulatedBattle[]> {
+export async function getSimulatedBattleHistory(userId: string, limit: number = PAGINATION_CONFIG.BATTLE_HISTORY_SIZE): Promise<SimulatedBattle[]> {
 	return SimulatedBattles.findSorted(
 		{ $or: [{ challengerId: userId }, { targetId: userId }] },
 		{ timestamp: -1 },
@@ -1026,7 +958,7 @@ async function createNewSeason(): Promise<RankingSeason> {
 		seasonId: `season_${seasonNumber}_${now}`,
 		name: `Season ${seasonNumber}`,
 		startTime: now,
-		endTime: now + (SEASON_DURATION_DAYS * 24 * 60 * 60 * 1000),
+		endTime: now + (RANKING_CONFIG.SEASON_DURATION_DAYS * 24 * 60 * 60 * 1000),
 		isActive: true,
 		isCompleted: false,
 		rewardsDistributed: false,
@@ -1228,7 +1160,7 @@ export async function runSeasonMaintenance(): Promise<void> {
  * Get rank color for display
  */
 export function getRankColor(rank: string): string {
-	return RANK_COLORS[rank as keyof typeof RANK_COLORS] || '#808080';
+	return ConfigUtils.getRankColor(rank as keyof typeof RANK_COLORS) || '#808080';
 }
 
 /**
@@ -1266,4 +1198,3 @@ export function getOpponentEloRange(playerElo: number): { min: number; max: numb
 		max: playerElo + range
 	};
 }
-
