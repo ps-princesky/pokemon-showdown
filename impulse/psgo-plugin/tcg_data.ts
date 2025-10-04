@@ -5,92 +5,17 @@
 
 // --- TYPE INTERFACES ---
 export interface TCGCard {
-	// ===== Core Identification =====
+	_id?: string;
 	cardId: string;
 	name: string;
 	set: string;
 	rarity: string;
 	supertype: string;
 	subtypes: string[];
-	
-	// ===== Type Information =====
-	type?: string;              // Primary type
-	types?: string[];           // All types (for multi-type cards)
-	
-	// ===== Basic Stats =====
+	type?: string;
 	hp?: number;
-	stage?: string;             // 'basic', 'stage1', 'stage2', 'legend', 'break', etc.
-	
-	// ===== Images =====
-	imageUrl?: string;          // Large image
-	smallImageUrl?: string;     // Small image
-	
-	// ===== Battle System Data =====
-	attacks?: {
-		name: string;
-		cost: string[];                    // ['Fire', 'Colorless']
-		convertedEnergyCost: number;       // Total energy needed
-		damage: number;                    // Parsed numeric damage
-		damageText: string;                // Original format ('30+', '10×', etc.)
-		text: string;                      // Attack description/effects
-	}[];
-	
-	abilities?: {
-		name: string;
-		type: string;              // 'Ability', 'Poké-Power', 'Poké-Body', etc.
-		text: string;              // Ability description
-	}[];
-	
-	weaknesses?: {
-		type: string;              // Type weak to
-		value: string;             // '×2', '+20', etc.
-	}[];
-	
-	resistances?: {
-		type: string;              // Type resistant to
-		value: string;             // '-20', '-30', etc.
-	}[];
-	
-	retreatCost?: string[];        // ['Colorless', 'Colorless']
-	convertedRetreatCost?: number; // Total retreat cost
-	
-	// ===== Calculated Battle Stats =====
-	battleStats?: {
-		attackPower: number;       // 10-300
-		defensePower: number;      // 30-340 (based on HP)
-		speed: number;             // 10-100 (based on retreat cost)
-		energyCost: number;        // 1-5 (average attack cost)
-	};
-	
-	battleValue?: number;          // Overall strength rating
-	
-	// ===== Evolution Chain =====
-	evolvesFrom?: string;          // Card name it evolves from
-	evolvesTo?: string[];          // Card names it can evolve to
-	
-	// ===== Additional Metadata =====
-	cardText?: string;             // Flavor text or card text
-	ruleText?: string;             // Special rules (GX, V, VMAX, etc.)
-	artist?: string;
-	nationalPokedexNumbers?: number[];
-	
-	// ===== Legality & Competitive =====
-	legalities?: {
-		[format: string]: string;  // 'standard': 'Legal', etc.
-	};
-	regulationMark?: string;
-	
-	// ===== External IDs =====
-	tcgplayerId?: string;
-	cardmarketId?: string;
-	
-	// ===== Set Information =====
-	number?: string;               // Card number in set
-	printedTotal?: number;         // Total cards in set
-	
-	// ===== Import Tracking =====
-	importedAt?: string;
-	dataVersion?: string;
+	stage?: string;
+	imageUrl?: string;
 }
 
 export interface UserCollection {

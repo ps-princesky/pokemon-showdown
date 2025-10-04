@@ -55,111 +55,14 @@ export const PACK_CONFIG = {
 	MIN_PACK_VALUE: 50,
 } as const;
 
-// ==================== BATTLE SYSTEM CONFIGURATION ====================
+// ==================== BATTLE CONFIGURATION ====================
 export const BATTLE_CONFIG = {
-	// Battle challenge settings
-	TIMEOUT_MINUTES: 2,                      // Challenge timeout
-	MAX_WAGER: 10000,                        // Maximum wager amount
-	MIN_WAGER: 1,                            // Minimum wager amount
-	
-	// Simple battle simulator settings
-	STARTING_ENERGY: 3,                      // Starting energy per Pokemon
-	ENERGY_PER_TURN: 1,                      // Energy gained per turn
-	MAX_TURNS: 15,                           // Maximum turns before draw
-	MAX_ENERGY: 10,                          // Maximum energy cap
-	
-	// Damage calculation
-	CRITICAL_HIT_CHANCE: 0.05,               // 5% critical hit chance
-	CRITICAL_HIT_MULTIPLIER: 1.5,            // 1.5x damage on critical
-	DAMAGE_VARIANCE: 0.1,                    // ±10% random variance
-	MIN_DAMAGE: 0,                           // Minimum damage floor
-	
-	// Type effectiveness
-	ENABLE_TYPE_EFFECTIVENESS: true,         // Use weakness/resistance
-	WEAKNESS_MULTIPLIER_DEFAULT: 2.0,        // Default ×2 multiplier
-	RESISTANCE_REDUCTION_DEFAULT: 20,        // Default -20 damage
-	TYPE_ADVANTAGE_BONUS: 30,                // Score bonus for type advantage
-	
-	// Status conditions
-	ENABLE_STATUS_CONDITIONS: true,          // Enable poison, burn, etc.
-	POISON_DAMAGE: 10,                       // Damage per turn from poison
-	BURN_DAMAGE: 20,                         // Damage per turn from burn
-	STATUS_INFLICT_CHANCE: 0.3,              // 30% chance to inflict status
-	SLEEP_WAKE_CHANCE: 0.5,                  // 50% chance to wake up
-	PARALYSIS_DURATION: 1,                   // Paralysis lasts 1 turn
-	CONFUSION_MIN_DURATION: 2,               // Confusion lasts 2-4 turns
-	CONFUSION_MAX_DURATION: 4,
-	CONFUSION_SELF_HIT_CHANCE: 0.5,          // 50% to hit self when confused
-	
-	// Status condition damage modifiers
-	PARALYZED_DAMAGE_MULTIPLIER: 0.5,        // 50% damage when paralyzed
-	POISONED_DAMAGE_MULTIPLIER: 0.75,        // 75% damage when poisoned
-	
-	// Speed mechanics
-	SPEED_ADVANTAGE_THRESHOLD: 5,            // Speed difference for advantages
-	SPEED_BONUS_SCORE: 10,                   // Score bonus for speed advantage
-	
-	// Battle AI strategy weights
-	AI_FINISHING_BLOW_BONUS: 100,            // Prioritize KO attacks
-	AI_EFFICIENCY_WEIGHT: 10,                // Weight for energy efficiency
-	AI_STATUS_EFFECT_BONUS: 20,              // Bonus for status-inflicting attacks
-	AI_TYPE_ADVANTAGE_BONUS: 30,             // Bonus for type advantage
-	
-	// Battle preview weights
-	PREVIEW_BATTLE_VALUE_WEIGHT: 0.20,       // 20% weight
-	PREVIEW_HP_WEIGHT: 0.15,                 // 15% weight
-	PREVIEW_ATTACK_WEIGHT: 0.20,             // 20% weight
-	PREVIEW_SPEED_WEIGHT: 0.10,              // 10% weight
-	PREVIEW_TYPE_WEIGHT: 0.25,               // 25% weight
-	PREVIEW_ENERGY_WEIGHT: 0.10,             // 10% weight
-	
-	// Win probability thresholds
-	WIN_PROBABILITY_THRESHOLD: 60,           // 60%+ = predicted winner
-	TOSSUP_RANGE_MIN: 40,                    // 40-60% = toss-up
-	TOSSUP_RANGE_MAX: 60,
-	
-	// Multi-battle simulation
-	DEFAULT_SIMULATION_COUNT: 100,           // Default number of simulations
-	MAX_SIMULATION_COUNT: 1000,              // Maximum simulations allowed
-	
-	// Battle statistics
-	TRACK_BATTLE_STATS: true,                // Track detailed statistics
-	SAVE_BATTLE_LOGS: true,                  // Save battle logs to database
-	MAX_BATTLE_LOG_ENTRIES: 50,              // Maximum log entries per battle
-} as const;
-
-
-// ==================== STATUS CONDITION TYPES ====================
-export const STATUS_CONDITIONS = {
-	NORMAL: 'normal',
-	POISONED: 'poisoned',
-	BURNED: 'burned',
-	PARALYZED: 'paralyzed',
-	ASLEEP: 'asleep',
-	CONFUSED: 'confused',
-} as const;
-
-// ==================== BATTLE PHASES ====================
-export const BATTLE_PHASES = {
-	SETUP: 'setup',
-	ACTIVE: 'active',
-	ENDED: 'ended',
-} as const;
-
-// ==================== EFFECTIVENESS TYPES ====================
-export const EFFECTIVENESS = {
-	SUPER_EFFECTIVE: 'super effective',
-	NORMAL: 'normal',
-	NOT_VERY_EFFECTIVE: 'not very effective',
-	NO_EFFECT: 'no effect',
-} as const;
-
-export const TYPE_CHART = {
-	// Pokemon type names for matching
-	TYPES: [
-		'Colorless', 'Darkness', 'Dragon', 'Fairy', 'Fighting',
-		'Fire', 'Grass', 'Lightning', 'Metal', 'Psychic', 'Water'
-	],
+	/** Battle challenge timeout (in minutes) */
+	TIMEOUT_MINUTES: 2,
+	/** Maximum wager amount */
+	MAX_WAGER: 10000,
+	/** Minimum wager amount */
+	MIN_WAGER: 1,
 } as const;
 
 // ==================== RANKING SYSTEM ====================
