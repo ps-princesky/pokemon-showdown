@@ -7,6 +7,7 @@ import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
 import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
 import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
 import { adminCommands } from '../../../impulse/psgo-plugin/tcg_commands/admin';
+import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
 
 export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
@@ -19,6 +20,9 @@ export const commands: Chat.ChatCommands = {
 		
 		// Info commands
 		...infoCommands,
+		
+		// Battle commands
+		...battleCommands,
 		
 		// Admin commands
 		...adminCommands,
@@ -45,6 +49,10 @@ export const commands: Chat.ChatCommands = {
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
 		'/tcg types - View all supertypes, types, and subtypes.',
+		'/tcg battle - View your battle campaign progress.',
+		'/tcg battle challenge [level] - Start a battle challenge.',
+		'/tcg battle fight [cardId1], [cardId2], ... - Execute battle with selected cards.',
+		'/tcg leaderboard - View the top 25 battle campaign players.',
 		'@ /tcg givecurrency [user], [amount] - Give credits to a user.',
 		'@ /tcg takecurrency [user], [amount] - Take credits from a user.',
 		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
