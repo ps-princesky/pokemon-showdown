@@ -12,7 +12,6 @@ import { generatePack, getCardPoints, ensureUserCollection, getValidPackSets } f
 
 export const shopCommands: Chat.ChatCommands = {
 	async shop(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const [action, ...args] = target.split(',').map(p => p.trim());
 		const userId = user.id;
 
@@ -91,7 +90,6 @@ export const shopCommands: Chat.ChatCommands = {
 					{ $set: collection },
 					{ upsert: true }
 				);
-				await TCG_Ranking.updateMilestoneProgress(userId, 'packsPurchased', 1);
 
 				const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
 				const displaySetName = setInfo ? setInfo.name : setId;
@@ -135,7 +133,6 @@ export const shopCommands: Chat.ChatCommands = {
 	},
 
 	async packs(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const [action, ...args] = target.split(',').map(p => p.trim());
 		const userId = user.id;
 
@@ -232,8 +229,6 @@ export const shopCommands: Chat.ChatCommands = {
 				tableHtml += `</table></div>`;
 
 				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
-
-				await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 				this.sendReplyBox(output);
 
 			} else { // View pack inventory
