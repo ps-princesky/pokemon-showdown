@@ -8,8 +8,7 @@ import { Collection } from 'mongodb';
 import {
 	TCGCard,
 	UserCollection,
-	ShopState,
-	BattleProgress
+	ShopState
 } from './tcg_data';
 
 // Helper function to get a typed collection
@@ -22,6 +21,3 @@ function getCollection<T>(collectionName: string): Collection<T> {
 export const TCGCards = getCollection<TCGCard>('tcg_cards');
 export const UserCollections = getCollection<UserCollection>('tcg_user_collections');
 export const ShopStateCollection = getCollection<ShopState>('tcg_shop_state');
-
-// Battle collection
-export const BattleProgressCollection = getCollection<BattleProgress>('tcg_battle_progress');
