@@ -4,7 +4,6 @@
  */
 
 import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
-import { collectionCommands } from '../../../impulse/psgo-plugin/tcg_commands/collection';
 import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
 import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
 import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
@@ -15,9 +14,6 @@ export const commands: Chat.ChatCommands = {
 	pokemontcg: {
 		// Core commands
 		...coreCommands,
-		
-		// Collection commands
-		...collectionCommands,
 		
 		// Shop commands
 		...shopCommands,
@@ -51,9 +47,6 @@ export const commands: Chat.ChatCommands = {
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
 		'/tcg setprogress [user], [set ID] - Check collection progress for a set.',
-		'/tcg wishlist [user] - View a user\'s wishlist.',
-		'/tcg wishlist add, [cardId] - Add a card to your wishlist.',
-		'/tcg wishlist remove, [cardId] - Remove a card from your wishlist.',
 		'/tcg stats [total|unique|points] - View global TCG statistics.',
 		'/tcg sets - View all Pokemon TCG sets.',
 		'/tcg rarities - View all card rarities.',
