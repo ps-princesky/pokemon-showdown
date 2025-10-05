@@ -170,14 +170,16 @@ export const collectionCommands: Chat.ChatCommands = {
 				content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top ${PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT} of ${filteredUserCards.length} matching cards.</em></p>`;
 			}
 			
-			// Sort controls
-			content += `<div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">` +
-				`<strong style="font-size: 0.9em;">Sort by:</strong> ` +
-				`<button name="send" value="/tcg collection ${targetUsername}, sort:rarity">Rarity</button> ` +
-				`<button name="send" value="/tcg collection ${targetUsername}, sort:battleValue">Battle Value</button> ` +
-				`<button name="send" value="/tcg collection ${targetUsername}, sort:hp">HP</button> ` +
-				`<button name="send" value="/tcg collection ${targetUsername}, sort:name">Name</button>` +
-				`</div>`;
+			// Use centralized sort controls
+			content += TCG_UI.buildSortControls({
+				baseCommand: `/tcg collection ${targetUsername}`,
+				sortOptions: [
+					{ value: 'rarity', label: 'Rarity' },
+					{ value: 'battleValue', label: 'Battle Value' },
+					{ value: 'hp', label: 'HP' },
+					{ value: 'name', label: 'Name' }
+				]
+			});
 			
 			const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s TCG Collection`, content);
 			this.sendReplyBox(output);
