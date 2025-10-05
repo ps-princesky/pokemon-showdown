@@ -5,142 +5,321 @@
 */
 
 import { FS } from '../../lib';
+import { MongoDB } from '../../impulse/mongodb_module';
 
-const AVATAR_PATH = 'config/avatars/';
 const STAFF_ROOM_ID = 'staff';
-const VALID_EXTENSIONS = ['.jpg', '.png', '.gif'];
 
-async function downloadImage(imageUrl: string, name: string, extension: string): Promise<void> {
+interface AvatarDocument {
+  _id: string; // userid
+  url: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Get typed MongoDB collection for avatars
+const AvatarsDB = MongoDB<AvatarDocument>('customavatars');
+
+async function updateAvatars(): Promise<void> {
   try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) return;
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.startsWith('image/')) return;
+    // Fetch all avatar documents from MongoDB
+    const avatarDocs = await AvatarsDB.find({});
     
-    const buffer = await response.arrayBuffer();
-    await FS(AVATAR_PATH + name + extension).write(Buffer.from(buffer));
+    let newCss = '/* AVATARS START */\n';
+    
+    for (const doc of avatarDocs) {
+      const url = doc.url;
+      const userid = doc._id;
+      
+      newCss += `[username="${userid}"] { background: url("${url}") no-repeat !important; background-size: 80px 80px !important;}\n`;
+    }
+    
+    newCss += '/* AVATARS END */\n';
+    
+    const file = FS('config/custom.css').readIfExistsSync().split('\n');
+    const start = file.indexOf('/* AVATARS START */');
+    const end = file.indexOf('/* AVATARS END */');
+    
+    if (start !== -1 && end !== -1) {
+      file.splice(start, (end - start) + 1);
+    }
+    
+    await FS('config/custom.css').writeUpdate(() => file.join('\n') + newCss);
+    Impulse.reloadCSS();
   } catch (err) {
-    console.error('Error downloading avatar:', err);
+    console.error('Error updating avatars:', err);
   }
 }
 
-function getExtension(filename: string): string {
-  const ext = filename.slice(filename.lastIndexOf('.'));
-  return ext || '';
-}
-
 export const commands: Chat.ChatCommands = {
-  customavatar: {
+  customavatar: 'avatar',
+  avatar: {
+    ''(target, room, user) {
+      this.parse(`/avatarhelp`);
+    },
+    
     async set(target, room, user) {
-      this.checkCan('bypassall');
-      const [name, avatarUrl] = target.split(',').map(s => s.trim());
-      if (!name || !avatarUrl) return this.parse('/help customavatar');
+      this.checkCan('globalban');
+      const parts = target.split(',').map(s => s.trim());
+      const [name, imageUrl] = parts;
+      
+      if (!name || !imageUrl) return this.parse('/help avatar');
       
       const userId = toID(name);
-      const processedUrl = /^https?:\/\//i.test(avatarUrl) ? avatarUrl : `http://${avatarUrl}`;
-      const ext = getExtension(processedUrl);
-      if (!VALID_EXTENSIONS.includes(ext)) {
-        return this.errorReply('Image must have .jpg, .png, or .gif extension.');
+      if (userId.length > 19) return this.errorReply('Usernames are not this long...');
+      
+      // Use exists() - most efficient way to check existence
+      if (await AvatarsDB.exists({ _id: userId })) {
+        return this.errorReply('This user already has a custom avatar. Remove it first with /customavatar delete [user].');
       }
-
-      // Check if user already has a personal avatar and remove the old file
-      const userAvatars = Users.Avatars.avatars[userId];
-      if (userAvatars && userAvatars.allowed[0]) {
-        const oldPersonalAvatar = userAvatars.allowed[0];
-        // Only delete if it's a local file (not starting with #)
-        if (oldPersonalAvatar && !oldPersonalAvatar.startsWith('#')) {
-          try {
-            await FS(AVATAR_PATH + oldPersonalAvatar).unlinkIfExists();
-          } catch (err) {
-            console.error('Error deleting old avatar file:', err);
-          }
-        }
-      }
-
-      // Download the new image to config/avatars/
-      const avatarFilename = userId + ext;
-      await downloadImage(processedUrl, userId, ext);
-
-      // Use the new avatar system API to add the personal avatar
-      const avatar = avatarFilename;
-      if (!Users.Avatars.addPersonal(userId, avatar)) {
-        return this.errorReply(`Failed to set avatar. User may already have this avatar.`);
-      }
-
-      // Save the avatars immediately
-      Users.Avatars.save(true);
-
-      this.sendReply(`|raw|${name}'s avatar was successfully set. Avatar:<p><img src='${processedUrl}' width='80' height='80'></p>`);
+      
+      const now = new Date();
+      
+      // Use insertOne() for single document insert
+      await AvatarsDB.insertOne({
+        _id: userId,
+        url: imageUrl,
+        createdAt: now,
+        updatedAt: now,
+      } as any);
+      
+      await updateAvatars();
+      
+      this.sendReply(`|raw|You have given ${Impulse.nameColor(name, true, true)} a custom avatar.`);
       
       const targetUser = Users.get(userId);
-      if (targetUser) {
-        targetUser.popup(`|html|${Impulse.nameColor(user.name, true, true)} set your custom avatar.<p><img src='${processedUrl}' width='80' height='80'></p><p>Use <code>/avatars</code> to see your custom avatars!</p>`);
-        // Update the user's current avatar
-        targetUser.avatar = avatar;
+      if (targetUser?.connected) {
+        targetUser.popup(`|html|${Impulse.nameColor(user.name, true, true)} has set your custom avatar to: <img src="${imageUrl}" width="80" height="80"><br /><center>Refresh, If you don't see it.</center>`);
       }
       
-      let staffRoom = Rooms.get(STAFF_ROOM_ID);
+      const staffRoom = Rooms.get(STAFF_ROOM_ID);
       if (staffRoom) {
-        staffRoom.add(`|html|<div class="infobox"><center><strong>${Impulse.nameColor(user.name, true, true)} set custom avatar for ${Impulse.nameColor(userId, true, false)}:</strong><br><img src='${processedUrl}' width='80' height='80'></center></div>`).update();
+        staffRoom.add(`|html|<div class="infobox"> ${Impulse.nameColor(user.name, true, true)} set custom avatar for ${Impulse.nameColor(name, true, true)}: <img src="${imageUrl}" width="80" height="80"></div>`).update();
+      }
+    },
+    
+    async update(target, room, user) {
+      this.checkCan('globalban');
+      const parts = target.split(',').map(s => s.trim());
+      const [name, imageUrl] = parts;
+      
+      if (!name || !imageUrl) return this.parse('/help avatar');
+      
+      const userId = toID(name);
+      
+      // Use findById() - most efficient for _id lookups
+      const existingAvatar = await AvatarsDB.findById(userId);
+      if (!existingAvatar) {
+        return this.errorReply('This user does not have a custom avatar. Use /customavatar set to create one.');
+      }
+      
+      // Build update object
+      const updateFields: Partial<AvatarDocument> = {
+        url: imageUrl,
+        updatedAt: new Date(),
+      };
+      
+      // Use updateOne() with $set operator
+      await AvatarsDB.updateOne(
+        { _id: userId },
+        { $set: updateFields }
+      );
+      
+      await updateAvatars();
+      
+      this.sendReply(`|raw|You have updated ${Impulse.nameColor(name, true, true)}'s custom avatar.`);
+      
+      const targetUser = Users.get(userId);
+      if (targetUser?.connected) {
+        targetUser.popup(`|html|${Impulse.nameColor(user.name, true, true)} has updated your custom avatar: <img src="${imageUrl}" width="80" height="80"><br /><center>Refresh, If you don't see it.</center>`);
+      }
+      
+      const staffRoom = Rooms.get(STAFF_ROOM_ID);
+      if (staffRoom) {
+        staffRoom.add(`|html|<div class="infobox"> ${Impulse.nameColor(user.name, true, true)} updated custom avatar for ${Impulse.nameColor(name, true, true)}: <img src="${imageUrl}" width="80" height="80"></div>`).update();
       }
     },
     
     async delete(target, room, user) {
-      this.checkCan('bypassall');
+      this.checkCan('globalban');
       const userId = toID(target);
       
-      // Check if user has any custom avatars
-      const userAvatars = Users.Avatars.avatars[userId];
-      if (!userAvatars || !userAvatars.allowed.length) {
+      // Use exists() for efficient check before delete
+      if (!await AvatarsDB.exists({ _id: userId })) {
         return this.errorReply(`${target} does not have a custom avatar.`);
       }
-
-      // Get the personal avatar (first in the allowed array)
-      const personalAvatar = userAvatars.allowed[0];
-      if (!personalAvatar) {
-        return this.errorReply(`${target} does not have a personal avatar.`);
+      
+      // Use deleteOne() for single document deletion
+      await AvatarsDB.deleteOne({ _id: userId });
+      await updateAvatars();
+      
+      this.sendReply(`You removed ${target}'s custom avatar.`);
+      
+      const targetUser = Users.get(userId);
+      if (targetUser?.connected) {
+        targetUser.popup(`|html|${Impulse.nameColor(user.name, true, true)} has removed your custom avatar.`);
       }
-
-      try {
-        // Delete the physical file
-        await FS(AVATAR_PATH + personalAvatar).unlinkIfExists();
-        
-        // Remove from the avatar system
-        Users.Avatars.removeAllowed(userId, personalAvatar);
-        Users.Avatars.save(true);
-        
-        const targetUser = Users.get(userId);
-        if (targetUser) {
-          targetUser.popup(`|html|${Impulse.nameColor(this.user.name, true, true)} has deleted your custom avatar.`);
-          // Reset to default avatar
-          targetUser.avatar = 1;
-        }
-        
-        this.sendReply(`${target}'s avatar has been removed.`);
-        
-        let staffRoom = Rooms.get(STAFF_ROOM_ID);
-        if (staffRoom) {
-          staffRoom.add(`|html|<div class="infobox"><strong>${Impulse.nameColor(this.user.name, true, true)} deleted custom avatar for ${Impulse.nameColor(userId, true, false)}.</strong></div>`).update(); 
-        }
-      } catch (err) {
-        console.error('Error deleting avatar:', err);
-        return this.errorReply('An error occurred while deleting the avatar.');
+      
+      const staffRoom = Rooms.get(STAFF_ROOM_ID);
+      if (staffRoom) {
+        staffRoom.add(`|html|<div class="infobox">${Impulse.nameColor(user.name, true, true)} removed custom avatar for ${Impulse.nameColor(target, true, true)}.</div>`).update();
       }
     },
+    
+    async list(target, room, user) {
+      this.checkCan('globalban');
+      
+      const page = parseInt(target) || 1;
+      
+      // Use findWithPagination() - optimized for paginated results
+      const result = await AvatarsDB.findWithPagination({}, {
+        page,
+        limit: 20,
+        sort: { _id: 1 }
+      });
+      
+      if (result.total === 0) {
+        return this.sendReply('No custom avatars have been set.');
+      }
+      
+      let output = `<div class="ladder pad"><h2>Custom Avatars (Page ${result.page}/${result.pages})</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th><th>Created</th></tr>`;
+      
+      for (const avatar of result.data) {
+        const created = avatar.createdAt ? avatar.createdAt.toLocaleDateString() : 'Unknown';
+        output += `<tr><td>${Impulse.nameColor(avatar._id, true, true)}</td><td><img src="${avatar.url}" width="80" height="80"></td><td>${created}</td></tr>`;
+      }
+      
+      output += `</table></div>`;
+      
+      if (result.pages > 1) {
+        output += `<div class="pad"><center>`;
+        if (result.page > 1) {
+          output += `<button class="button" name="send" value="/customavatar list ${result.page - 1}">Previous</button> `;
+        }
+        if (result.page < result.pages) {
+          output += `<button class="button" name="send" value="/customavatar list ${result.page + 1}">Next</button>`;
+        }
+        output += `</center></div>`;
+      }
+      
+      this.sendReply(`|raw|${output}`);
+    },
+    
+    async view(target, room, user) {
+      const userId = toID(target);
+      if (!userId) return this.parse('/help avatar');
+      
+      // Use findById() - most efficient for _id lookups
+      const avatar = await AvatarsDB.findById(userId);
+      if (!avatar) {
+        return this.sendReply(`${target} does not have a custom avatar.`);
+      }
+      
+      const created = avatar.createdAt ? avatar.createdAt.toLocaleString() : 'Unknown';
+      const updated = avatar.updatedAt ? avatar.updatedAt.toLocaleString() : 'Unknown';
+      
+      this.sendReplyBox(
+        `<strong>Custom Avatar for ${target}:</strong><br />` +
+        `<img src="${avatar.url}" width="80" height="80"><br />` +
+        `<strong>URL:</strong> ${avatar.url}<br />` +
+        `<strong>Created:</strong> ${created}<br />` +
+        `<strong>Last Updated:</strong> ${updated}`
+      );
+    },
+    
+    async setmany(target, room, user) {
+      this.checkCan('globalban');
+      
+      // Parse bulk input: userid1:url1, userid2:url2, ...
+      const entries = target.split(',').map(s => s.trim()).filter(Boolean);
+      if (entries.length === 0) return this.errorReply('No avatars to set. Format: /customavatar setmany user1:url1, user2:url2');
+      
+      const documents: any[] = [];
+      const now = new Date();
+      
+      for (const entry of entries) {
+        const [name, url] = entry.split(':').map(s => s.trim());
+        if (!name || !url) continue;
+        
+        const userId = toID(name);
+        if (userId.length > 19) continue;
+        
+        documents.push({
+          _id: userId,
+          url,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      
+      if (documents.length === 0) {
+        return this.errorReply('No valid avatars to set.');
+      }
+      
+      // Use insertMany() for bulk inserts - much more efficient than multiple insertOne()
+      try {
+        await AvatarsDB.insertMany(documents);
+        await updateAvatars();
+        this.sendReply(`|raw|Successfully set ${documents.length} custom avatar(s).`);
+        
+        const staffRoom = Rooms.get(STAFF_ROOM_ID);
+        if (staffRoom) {
+          staffRoom.add(`|html|<div class="infobox">${Impulse.nameColor(user.name, true, true)} bulk set ${documents.length} custom avatars.</div>`).update();
+        }
+      } catch (err) {
+        this.errorReply(`Error setting avatars: ${err}`);
+      }
+    },
+    
+    async search(target, room, user) {
+      this.checkCan('globalban');
+      
+      if (!target) return this.errorReply('Please provide a search term.');
+      
+      const searchTerm = toID(target);
+      
+      // Use find() with regex filter for searching
+      const avatars = await AvatarsDB.find({
+        _id: { $regex: searchTerm, $options: 'i' } as any
+      });
+      
+      if (avatars.length === 0) {
+        return this.sendReply(`No custom avatars found matching "${target}".`);
+      }
+      
+      let output = `<div class="ladder pad"><h2>Search Results for "${target}"</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th></tr>`;
+      
+      for (const avatar of avatars) {
+        output += `<tr><td>${Impulse.nameColor(avatar._id, true, true)}</td><td><img src="${avatar.url}" width="80" height="80"></td></tr>`;
+      }
+      
+      output += `</table></div>`;
+      this.sendReply(`|raw|${output}`);
+    },
+    
+    async count(target, room, user) {
+      this.checkCan('globalban');
+      
+      // Use count() - most efficient way to get document count
+      const total = await AvatarsDB.count({});
+      this.sendReply(`There are currently ${total} custom avatar(s) set.`);
+    },
   },
-   
-  customavatarhelp(target, room, user) {
+  
+  avatarhelp(target, room, user) {
     if (!this.runBroadcast()) return;
     this.sendReplyBox(
       `<div><b><center>Custom Avatar Commands</center></b><br>` +
       `<ul>` +
-      `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar (downloads and adds to system)</li>` +
-      `<li><code>/customavatar delete [username]</code> - Removes a user's personal avatar</li>` +
+      `<li><code>/customavatar set [username], [image url]</code> - Gives [user] a custom avatar (Requires: ~)</li>` +
+      `<li><code>/customavatar update [username], [image url]</code> - Updates an existing custom avatar's URL (Requires: ~)</li>` +
+      `<li><code>/customavatar delete [username]</code> - Removes a user's custom avatar (Requires: ~)</li>` +
+      `<li><code>/customavatar setmany [user1:url1, user2:url2, ...]</code> - Bulk set multiple custom avatars (Requires: ~)</li>` +
+      `<li><code>/customavatar list [page]</code> - Lists all custom avatars with pagination (Requires: ~)</li>` +
+      `<li><code>/customavatar view [username]</code> - View details about a user's custom avatar</li>` +
+      `<li><code>/customavatar search [term]</code> - Search for custom avatars by username (Requires: ~)</li>` +
+      `<li><code>/customavatar count</code> - Show total number of custom avatars (Requires: ~)</li>` +
       `</ul>` +
-      `<small>All commands require ~ or higher permission.</small>` +
-      `<br><small>Note: This integrates with the main avatar system. Users can view their avatars with <code>/avatars</code>.</small>` +
       `</div>`
     );
-  },	
+  },
 };
