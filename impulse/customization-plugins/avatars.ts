@@ -259,7 +259,7 @@ export const commands: Chat.ChatCommands = {
     this.sendReplyBox(
       `<div><b><center>Custom Avatar Commands</center></b><br>` +
       `<ul>` +
-      `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar (downloads and adds to system)</li>` +
+      `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar</li>` +
       `<li><code>/customavatar delete [username]</code> - Removes a user's personal avatar</li>` +
       `<li><code>/customavatar list [page]</code> - Lists all custom avatars with pagination</li>` +
       `<li><code>/customavatar view [username]</code> - View details about a user's custom avatar</li>` +
