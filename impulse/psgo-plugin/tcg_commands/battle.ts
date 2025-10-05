@@ -4,7 +4,6 @@
 
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
-import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
 import { BATTLE_CONFIG, VALIDATION_LIMITS, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, getCardPoints } from './shared';
@@ -14,12 +13,10 @@ const battleChallenges: Map<string, {
 	from: string; 
 	wager: number; 
 	setId: string; 
-	ranked?: boolean; 
 }> = new Map();
 
 export const battleCommands: Chat.ChatCommands = {
 	async battle(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const [action, ...args] = target.split(',').map(p => p.trim());
 
 		switch (toID(action)) {
@@ -189,133 +186,6 @@ export const battleCommands: Chat.ChatCommands = {
 
 			default:
 				this.errorReply("Invalid battle action. Use `challenge`, `accept`, `reject`, or `cancel`.");
-		}
-	},
-
-	async rankedbattle(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
-		const [action, ...args] = target.split(',').map(p => p.trim());
-
-		switch (toID(action)) {
-			case 'challenge': {
-				const [targetUsername] = args;
-				if (!targetUsername) {
-					return this.errorReply("Usage: /tcg rankedbattle challenge, [user]");
-				}
-
-				const challengerId = user.id;
-				const targetId = toID(targetUsername);
-
-				if (challengerId === targetId) {
-					return this.errorReply(ERROR_MESSAGES.SELF_ACTION_ERROR);
-				}
-
-				try {
-					const result = await TCG_Ranking.executeSimulatedChallenge(challengerId, targetId);
-					
-					if (!result.success) {
-						return this.errorReply(result.error || "Challenge failed.");
-					}
-
-					const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(challengerId);
-
-					const output = TCG_UI.buildRankedBattleResult({
-						challengerName: user.name,
-						targetName: targetUsername,
-						battle: result.battle!,
-						challengerRanking: result.challengerRanking!,
-						targetRanking: result.targetRanking!,
-						challengerPack: result.challengerPack || [],
-						targetPack: result.targetPack || [],
-						challengerCredits: result.challengerCredits || 0,
-						targetCredits: result.targetCredits || 0,
-						challengerId,
-						player1EloMilestones: result.player1EloMilestones,
-						player2EloMilestones: result.player2EloMilestones,
-						challengesRemaining: challengeStatus.challengesRemaining,
-						getCardPoints,
-						nameColor: Impulse.nameColor
-					});
-
-					this.sendReplyBox(output);
-
-				} catch (e: any) {
-					return this.errorReply(`Error executing challenge: ${e.message}`);
-				}
-				break;
-			}
-
-			case 'targets': {
-				if (!this.runBroadcast()) return;
-				
-				try {
-					const availableTargets = await TCG_Ranking.getAvailableChallengeTargets(user.id);
-					const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
-
-					const output = TCG_UI.buildChallengeTargets({
-						targets: availableTargets,
-						challengesRemaining: challengeStatus.challengesRemaining,
-						nameColor: Impulse.nameColor
-					});
-
-					this.sendReplyBox(output);
-
-				} catch (e: any) {
-					return this.errorReply(`Error fetching targets: ${e.message}`);
-				}
-				break;
-			}
-				
-			case 'status': {
-				if (!this.runBroadcast()) return;
-				
-				try {
-					const challengeStatus = await TCG_Ranking.getDailyChallengeStatus(user.id);
-					const nextReset = new Date(challengeStatus.nextReset);
-					const dailyChallenge = await TCG_Ranking.getDailyChallenges(user.id);
-
-					let content = `<p><strong>Challenges Remaining:</strong> ${challengeStatus.challengesRemaining}/10</p>` +
-						`<p><strong>Challenges Used:</strong> ${challengeStatus.challengesUsed}/10</p>` +
-						`<p><strong>Credits Earned Today:</strong> ${dailyChallenge.totalCreditsEarnedToday || 0}</p>` +
-						`<p><strong>Next Reset:</strong> ${nextReset.toLocaleString()}</p>`;
-
-					const battlesUsed = challengeStatus.challengesUsed;
-					const DAILY_CREDIT_BATTLES_LIMIT = 7;
-					const RANKED_BATTLE_REWARDS = { win: 8, loss: 3, draw: 5 };
-					const REDUCED_REWARD_MULTIPLIER = 0.3;
-					
-					if (battlesUsed > 0) {
-						content += `<h4>Reward Structure:</h4>` +
-							`<p>Next ${Math.max(0, DAILY_CREDIT_BATTLES_LIMIT - battlesUsed)} battles: Full rewards (${RANKED_BATTLE_REWARDS.win} win/${RANKED_BATTLE_REWARDS.loss} loss/${RANKED_BATTLE_REWARDS.draw} draw)</p>`;
-						if (challengeStatus.challengesRemaining > 0 && battlesUsed >= DAILY_CREDIT_BATTLES_LIMIT) {
-							const reducedWin = Math.floor(RANKED_BATTLE_REWARDS.win * REDUCED_REWARD_MULTIPLIER);
-							const reducedLoss = Math.floor(RANKED_BATTLE_REWARDS.loss * REDUCED_REWARD_MULTIPLIER);
-							const reducedDraw = Math.floor(RANKED_BATTLE_REWARDS.draw * REDUCED_REWARD_MULTIPLIER);
-							content += `<p>Remaining battles: Reduced rewards (${reducedWin} win/${reducedLoss} loss/${reducedDraw} draw)</p>`;
-						}
-					}
-
-					if (challengeStatus.recentChallenges.length > 0) {
-						content += `<h4>Recent Challenges Today:</h4>` +
-							`<ul>`;
-						challengeStatus.recentChallenges.forEach(challenge => {
-							const time = new Date(challenge.timestamp).toLocaleTimeString();
-							content += `<li>${Impulse.nameColor(challenge.targetUserId, true)} at ${time}</li>`;
-						});
-						content += `</ul>`;
-					}
-
-					const output = TCG_UI.buildInfoBox('Daily Challenge Status', content);
-					this.sendReplyBox(output);
-
-				} catch (e: any) {
-					return this.errorReply(`Error fetching challenge status: ${e.message}`);
-				}
-				break;
-			}
-
-			default:
-				this.errorReply("Usage: /tcg rankedbattle [challenge/targets/status], [user]");
 		}
 	},
 };
