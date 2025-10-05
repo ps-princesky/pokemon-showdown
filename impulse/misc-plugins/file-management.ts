@@ -10,7 +10,10 @@
 
 import * as https from "https";
 import { FS } from "../../lib";
+import { exec } from "child_process";
+import { promisify } from "util";
 
+const execAsync = promisify(exec);
 const GITHUB_API_URL = "https://api.github.com/gists";
 const GITHUB_TOKEN: string | undefined = Config.githubToken;
 
@@ -131,6 +134,32 @@ function validateGistRawURL(url: string): void {
   if (!isAllowed) {
     throw new Error("Invalid URL. Only raw URLs from gist.githubusercontent.com or raw.githubusercontent.com are allowed.");
   }
+}
+
+async function findGitRoot(startPath: string): Promise<string | null> {
+  const path = require('path');
+  let currentPath = path.resolve(startPath);
+  const maxLevels = 10; // Safety limit to prevent infinite loops
+  
+  for (let i = 0; i < maxLevels; i++) {
+    const gitPath = path.join(currentPath, '.git');
+    try {
+      const exists = await FS(gitPath).isDirectory();
+      if (exists) return currentPath;
+    } catch {
+      // Directory doesn't exist, continue searching
+    }
+    
+    // Go up one level
+    const parentPath = path.dirname(currentPath);
+    
+    // Check if we've reached the filesystem root
+    if (parentPath === currentPath) break;
+    
+    currentPath = parentPath;
+  }
+  
+  return null;
 }
 
 class FileManager {
@@ -304,8 +333,193 @@ export const commands: Chat.ChatCommands = {
       notifyStaff("Directory listing failed", dirPath, user, err.message);
     }
   },
-  
   fl: 'filelist',
+
+  // GIT INTEGRATION COMMANDS
+
+  async gitpull(target, room, user) {
+    this.canUseConsole();
+    const repoPath = target.trim() || './';
+    
+    try {
+      // Check if it's a git repository
+      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
+      if (!isGitRepo) {
+        return this.errorReply(`${repoPath} is not a git repository.`);
+      }
+
+      this.sendReply('Pulling from remote repository...');
+      
+      const { stdout, stderr } = await execAsync('git pull', { cwd: repoPath });
+      
+      let resultMessage = '<div class="infobox">';
+      resultMessage += '<strong>[GIT PULL]</strong><br>';
+      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      
+      if (stdout) {
+        resultMessage += '<strong>Output:</strong><br><pre>' + Chat.escapeHTML(stdout) + '</pre>';
+      }
+      if (stderr) {
+        resultMessage += '<strong>Errors:</strong><br><pre>' + Chat.escapeHTML(stderr) + '</pre>';
+      }
+      
+      resultMessage += '</div>';
+      
+      this.sendReplyBox(resultMessage);
+      notifyStaff("Git pull executed", repoPath, user, stdout.slice(0, 100));
+      
+    } catch (err: any) {
+      this.errorReply('Git pull failed: ' + err.message);
+      notifyStaff("Git pull failed", repoPath, user, err.message);
+    }
+  },
+
+  async gitstatus(target, room, user) {
+    this.canUseConsole();
+    const repoPath = target.trim() || './';
+    
+    try {
+      // Check if it's a git repository
+      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
+      if (!isGitRepo) {
+        return this.errorReply(`${repoPath} is not a git repository.`);
+      }
+
+      // Get git status
+      const { stdout: status } = await execAsync('git status', { cwd: repoPath });
+      
+      // Get current branch
+      const { stdout: branch } = await execAsync('git branch --show-current', { cwd: repoPath });
+      
+      // Get latest commit
+      const { stdout: commit } = await execAsync('git log -1 --oneline', { cwd: repoPath });
+      
+      let resultMessage = '<div class="infobox">';
+      resultMessage += '<strong>[GIT STATUS]</strong><br>';
+      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      resultMessage += `<strong>Branch:</strong> ${Chat.escapeHTML(branch.trim())}<br>`;
+      resultMessage += `<strong>Latest Commit:</strong> ${Chat.escapeHTML(commit.trim())}<br><br>`;
+      resultMessage += '<details><summary><strong>Full Status</strong></summary>';
+      resultMessage += '<pre>' + Chat.escapeHTML(status) + '</pre>';
+      resultMessage += '</details>';
+      resultMessage += '</div>';
+      
+      this.sendReplyBox(resultMessage);
+      notifyStaff("Git status checked", repoPath, user);
+      
+    } catch (err: any) {
+      this.errorReply('Git status failed: ' + err.message);
+      notifyStaff("Git status failed", repoPath, user, err.message);
+    }
+  },
+
+  async gitcommit(target, room, user) {
+    this.canUseConsole();
+    
+    const [repoPath, ...messageParts] = target.split(',');
+    const path = repoPath.trim() || './';
+    const message = messageParts.join(',').trim();
+    
+    if (!message) {
+      return this.errorReply('Usage: /gitcommit [repository path], [commit message]');
+    }
+    
+    try {
+      // Check if it's a git repository
+      const isGitRepo = await FS(path + '/.git').isDirectory();
+      if (!isGitRepo) {
+        return this.errorReply(`${path} is not a git repository.`);
+      }
+
+      // Add all changes
+      this.sendReply('Staging changes...');
+      await execAsync('git add .', { cwd: path });
+      
+      // Commit changes
+      this.sendReply('Committing changes...');
+      const { stdout, stderr } = await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: path });
+      
+      let resultMessage = '<div class="infobox">';
+      resultMessage += '<strong>[GIT COMMIT]</strong><br>';
+      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(path)}<br>`;
+      resultMessage += `<strong>Message:</strong> ${Chat.escapeHTML(message)}<br>`;
+      resultMessage += `<strong>User:</strong> <username>${user.id}</username><br>`;
+      
+      if (stdout) {
+        resultMessage += '<strong>Output:</strong><br><pre>' + Chat.escapeHTML(stdout) + '</pre>';
+      }
+      if (stderr) {
+        resultMessage += '<strong>Info:</strong><br><pre>' + Chat.escapeHTML(stderr) + '</pre>';
+      }
+      
+      resultMessage += '</div>';
+      
+      this.sendReplyBox(resultMessage);
+      notifyStaff("Git commit created", path, user, `Message: ${message}`);
+      
+    } catch (err: any) {
+      // Check if error is because there's nothing to commit
+      if (err.message.includes('nothing to commit')) {
+        this.sendReply('Nothing to commit - working tree clean.');
+        return;
+      }
+      this.errorReply('Git commit failed: ' + err.message);
+      notifyStaff("Git commit failed", path, user, err.message);
+    }
+  },
+
+  async gitpush(target, room, user) {
+    this.canUseConsole();
+    const repoPath = target.trim() || './';
+    
+    try {
+      // Check if it's a git repository
+      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
+      if (!isGitRepo) {
+        return this.errorReply(`${repoPath} is not a git repository.`);
+      }
+
+      this.sendReply('Pushing to remote repository...');
+      
+      const { stdout, stderr } = await execAsync('git push', { cwd: repoPath });
+      
+      let resultMessage = '<div class="infobox">';
+      resultMessage += '<strong>[GIT PUSH]</strong><br>';
+      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      
+      if (stdout) {
+        resultMessage += '<strong>Output:</strong><br><pre>' + Chat.escapeHTML(stdout) + '</pre>';
+      }
+      if (stderr) {
+        resultMessage += '<strong>Info:</strong><br><pre>' + Chat.escapeHTML(stderr) + '</pre>';
+      }
+      
+      resultMessage += '</div>';
+      
+      this.sendReplyBox(resultMessage);
+      notifyStaff("Git push executed", repoPath, user);
+      
+    } catch (err: any) {
+      this.errorReply('Git push failed: ' + err.message);
+      notifyStaff("Git push failed", repoPath, user, err.message);
+    }
+  },
+
+  githelp(target, room, user) {
+    if (!this.runBroadcast()) return;
+    this.sendReplyBox(
+      `<div><b><center>Git Integration Commands</center></b><br>` +
+      `<ul>` +
+      `<li><code>/gitpull [repository path]</code> - Pull latest changes from remote repository</li>` +
+      `<li><code>/gitstatus [repository path]</code> - Show git status, branch, and latest commit</li>` +
+      `<li><code>/gitcommit [repository path], [commit message]</code> - Stage and commit all changes</li>` +
+      `<li><code>/gitpush [repository path]</code> - Push commits to remote repository</li>` +
+      `</ul>` +
+      `<small>All commands require Console/Owner permission.</small><br>` +
+      `<small>If no repository path is specified, current directory (./) is used.</small>` +
+      `</div>`
+    );
+  },
   
   fmhelp(target, room, user) {
     if (!this.runBroadcast()) return;
@@ -317,6 +531,7 @@ export const commands: Chat.ChatCommands = {
       `<li><code>/filesave [path], [raw gist url]</code> OR <code>/fs [path], [raw gist url]</code> - Save/overwrite file</li>` +
       `<li><code>/filedelete confirm, [path]</code> OR <code>/fd confirm, [path]</code> - Delete file</li>` +
       `<li><code>/filelist [directory]</code> OR <code>/fl [directory]</code> - List directory contents</li>` +
+      `<li><code>/githelp</code> - View git integration commands</li>` +
       `</ul>` +
       `<small>All commands require Console/Owner permission.</small>` +
       `</div>`
