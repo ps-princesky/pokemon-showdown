@@ -4,7 +4,6 @@
  */
 
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
-import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { POKEMON_SETS, getRarityColor, getSubtypeColor } from '../../../impulse/psgo-plugin/tcg_data';
 import { PAGINATION_CONFIG, ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
@@ -13,7 +12,6 @@ import { getCardPoints } from './shared';
 export const collectionCommands: Chat.ChatCommands = {
 	async collection(target, room, user) {
 		if (!this.runBroadcast()) return;
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const parts = target.split(',').map(p => p.trim());
 		const targetUsername = parts[0] || user.name;
 		const targetId = toID(targetUsername);
@@ -223,7 +221,6 @@ export const collectionCommands: Chat.ChatCommands = {
 	},
 
 	async setprogress(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!this.runBroadcast()) return;
 		const parts = target.split(',').map(p => p.trim());
 		const targetUsername = parts[0] || user.name;
@@ -334,7 +331,6 @@ export const collectionCommands: Chat.ChatCommands = {
 	},
 
 	async wishlist(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!this.runBroadcast()) return;
 		const parts = target.split(',').map(p => p.trim());
 		const action = parts.length > 1 ? toID(parts[0]) : 'view';
