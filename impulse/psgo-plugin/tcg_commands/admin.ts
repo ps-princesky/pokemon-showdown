@@ -3,7 +3,6 @@
  */
 
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
-import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections } from '../../../impulse/psgo-plugin/tcg_collections';
 import { VALIDATION_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
@@ -49,7 +48,6 @@ export const adminCommands: Chat.ChatCommands = {
 
 	async openpack(target, room, user) {
 		this.checkCan('globalban');
-		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!target) {
 			return this.errorReply("Usage: /tcg openpack [set ID]. This is an admin command.");
 		}
@@ -129,7 +127,6 @@ export const adminCommands: Chat.ChatCommands = {
 			tableHtml += `</table></div>`;
 
 			const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
-			await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
 
 			this.sendReplyBox(output);
 		} catch (e: any) {
@@ -221,45 +218,22 @@ export const adminCommands: Chat.ChatCommands = {
 		}
 	},
 
-	async initseason(target, room, user) {
-		this.checkCan('globalban');
-
-		try {
-			// Check if season already exists
-			const existingSeason = await TCG_Ranking.getCurrentSeason();
-			if (existingSeason) {
-				return this.errorReply("A season is already active.");
-			}
-			// Initialize the season system
-			await TCG_Ranking.initializeSeasonSystem();
-	
-			const newSeason = await TCG_Ranking.getCurrentSeason();
-			if (newSeason) {
-				this.sendReply(`Successfully initialized ${newSeason.name}! Duration: 30 days.`);
-			} else {
-				this.errorReply("Failed to initialize season.");
-			}
-		} catch (e: any) {
-			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-		}
-	},
-
 	clearcache(target, room, user) {
-	this.checkCan('globalban');
-	clearPackCaches();
-	this.sendReply('Pack caches cleared.');
+		this.checkCan('globalban');
+		clearPackCaches();
+		this.sendReply('Pack caches cleared.');
 	},
 
 	async cachestats(target, room, user) {
-	this.checkCan('globalban');
-	const { getCacheStats } = await import('./shared');
-	const stats = getCacheStats();
-	
-	let output = `<strong>TCG Cache Statistics:</strong><br/>`;
-	output += `Valid Sets Loaded: ${stats.validSetsLoaded ? '✅ Yes' : '❌ No'} (${stats.validSetsCount} sets)<br/>`;
-	output += `Cached Set Pools: ${stats.cachedSetsCount}<br/>`;
-	output += `Estimated Memory: ~${stats.estimatedMemoryMB}MB`;
-	
-	this.sendReplyBox(output);
+		this.checkCan('globalban');
+		const { getCacheStats } = await import('./shared');
+		const stats = getCacheStats();
+		
+		let output = `<strong>TCG Cache Statistics:</strong><br/>`;
+		output += `Valid Sets Loaded: ${stats.validSetsLoaded ? '✅ Yes' : '❌ No'} (${stats.validSetsCount} sets)<br/>`;
+		output += `Cached Set Pools: ${stats.cachedSetsCount}<br/>`;
+		output += `Estimated Memory: ~${stats.estimatedMemoryMB}MB`;
+		
+		this.sendReplyBox(output);
 	}
 };
