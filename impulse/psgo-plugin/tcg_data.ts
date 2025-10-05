@@ -95,9 +95,20 @@ export interface TCGSet {
 }
 
 export interface ShopState {
-  _id?: string;
-  stock: string[];
-  lastRotation: number;
+	_id?: string;
+	stock: string[];
+	lastRotation: number;
+}
+
+export interface BattleProgress {
+	_id?: string;
+	userId: string;
+	currentLevel: number;
+	highestLevel: number;
+	lastDefeatTime?: number;
+	totalWins: number;
+	totalLosses: number;
+	lastUpdated: number;
 }
 
 // --- DATA CONSTANTS ---
