@@ -83,7 +83,6 @@ export interface UserCollection {
 		totalPoints?: number; 
 	};
 	currency?: number;
-	wishlist?: string[];
 	lastUpdated: number;
 	lastDaily?: number;
 }

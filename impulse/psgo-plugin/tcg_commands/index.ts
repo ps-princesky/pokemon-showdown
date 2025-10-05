@@ -5,7 +5,6 @@
 
 import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
 import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
-import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
 import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
 import { adminCommands } from '../../../impulse/psgo-plugin/tcg_commands/admin';
 
@@ -17,9 +16,6 @@ export const commands: Chat.ChatCommands = {
 		
 		// Shop commands
 		...shopCommands,
-		
-		// Battle commands
-		...battleCommands,
 		
 		// Info commands
 		...infoCommands,
@@ -41,8 +37,6 @@ export const commands: Chat.ChatCommands = {
 		'/tcg shop - View the daily rotating card pack shop (100 credits each).',
 		'/tcg shop buy, [set ID] - Buy a booster pack from the shop.',
 		'/tcg packs - View and open your saved packs.',
-		'/tcg battle challenge, [user], [wager] - Challenge a user to a pack battle.',
-		'/tcg battle accept, [user] - Accept a pack battle challenge.',
 		'/tcg collection [user], [filters] - View a user\'s TCG card collection.',
 		'/tcg card [cardId] - View the details of a specific card.',
 		'/tcg search [filter]:[value] - Search for cards in the database.',
