@@ -82,7 +82,7 @@ export const commands: Chat.ChatCommands = {
       
       let staffRoom = Rooms.get(STAFF_ROOM_ID);
       if (staffRoom) {
-        staffRoom.add(`|html|<div class="infobox"><center><strong>${Impulse.nameColor(user.name, true, true)} set custom avatar for ${Impulse.nameColor(userId, true, false)}:</strong><br><img src='${processedUrl}' width='80' height='80'></center></div>`).update();
+        staffRoom.add(`|html|<div class="infobox"><center><strong>${Impulse.nameColor(user.name, true, true)} set custom avatar for ${Impulse.nameColor(userId, true, true)}:</strong><br><img src='${processedUrl}' width='80' height='80'></center></div>`).update();
       }
     },
     
@@ -121,12 +121,136 @@ export const commands: Chat.ChatCommands = {
         
         let staffRoom = Rooms.get(STAFF_ROOM_ID);
         if (staffRoom) {
-          staffRoom.add(`|html|<div class="infobox"><strong>${Impulse.nameColor(this.user.name, true, true)} deleted custom avatar for ${Impulse.nameColor(userId, true, false)}.</strong></div>`).update(); 
+          staffRoom.add(`|html|<div class="infobox"><strong>${Impulse.nameColor(this.user.name, true, true)} deleted custom avatar for ${Impulse.nameColor(userId, true, true)}.</strong></div>`).update(); 
         }
       } catch (err) {
         console.error('Error deleting avatar:', err);
         return this.errorReply('An error occurred while deleting the avatar.');
       }
+    },
+    
+    async list(target, room, user) {
+      this.checkCan('bypassall');
+      
+      const avatarsData = Users.Avatars.avatars;
+      const customAvatars: [string, string][] = [];
+      
+      // Filter users with custom avatars (personal avatars that aren't default #IDs)
+      for (const userid in avatarsData) {
+        const userAvatar = avatarsData[userid];
+        if (userAvatar.allowed.length && userAvatar.allowed[0] && !userAvatar.allowed[0].startsWith('#')) {
+          customAvatars.push([userid, userAvatar.allowed[0]]);
+        }
+      }
+      
+      if (customAvatars.length === 0) {
+        return this.sendReply('No custom avatars have been set.');
+      }
+      
+      // Sort alphabetically
+      customAvatars.sort((a, b) => a[0].localeCompare(b[0]));
+      
+      const page = parseInt(target) || 1;
+      const itemsPerPage = 20;
+      const totalPages = Math.ceil(customAvatars.length / itemsPerPage);
+      
+      if (page < 1 || page > totalPages) {
+        return this.errorReply(`Invalid page number. Please use a page between 1 and ${totalPages}.`);
+      }
+      
+      const startIndex = (page - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      const pageEntries = customAvatars.slice(startIndex, endIndex);
+      
+      let output = `<div class="ladder pad"><h2>Custom Avatars (Page ${page}/${totalPages})</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th><th>Filename</th></tr>`;
+      
+      for (const [userid, filename] of pageEntries) {
+        const avatarPath = `${AVATAR_PATH}${filename}`;
+        output += `<tr><td>${Impulse.nameColor(userid, true, true)}</td><td><img src="${avatarPath}" width="80" height="80"></td><td>${filename}</td></tr>`;
+      }
+      
+      output += `</table></div>`;
+      
+      if (totalPages > 1) {
+        output += `<div class="pad"><center>`;
+        if (page > 1) {
+          output += `<button class="button" name="send" value="/customavatar list ${page - 1}">Previous</button> `;
+        }
+        if (page < totalPages) {
+          output += `<button class="button" name="send" value="/customavatar list ${page + 1}">Next</button>`;
+        }
+        output += `</center></div>`;
+      }
+      
+      this.sendReply(`|raw|${output}`);
+    },
+    
+    async view(target, room, user) {
+      const userId = toID(target);
+      if (!userId) return this.parse('/help customavatar');
+      
+      const userAvatars = Users.Avatars.avatars[userId];
+      if (!userAvatars || !userAvatars.allowed.length || !userAvatars.allowed[0] || userAvatars.allowed[0].startsWith('#')) {
+        return this.sendReply(`${target} does not have a custom avatar.`);
+      }
+      
+      const avatarFilename = userAvatars.allowed[0];
+      const avatarPath = `${AVATAR_PATH}${avatarFilename}`;
+      
+      this.sendReplyBox(
+        `<strong>Custom Avatar for ${target}:</strong><br />` +
+        `<img src="${avatarPath}" width="80" height="80"><br />` +
+        `<strong>Filename:</strong> ${avatarFilename}`
+      );
+    },
+    
+    async search(target, room, user) {
+      this.checkCan('bypassall');
+      
+      if (!target) return this.errorReply('Please provide a search term.');
+      
+      const searchTerm = toID(target);
+      const avatarsData = Users.Avatars.avatars;
+      const results: [string, string][] = [];
+      
+      for (const userid in avatarsData) {
+        if (userid.includes(searchTerm)) {
+          const userAvatar = avatarsData[userid];
+          if (userAvatar.allowed.length && userAvatar.allowed[0] && !userAvatar.allowed[0].startsWith('#')) {
+            results.push([userid, userAvatar.allowed[0]]);
+          }
+        }
+      }
+      
+      if (results.length === 0) {
+        return this.sendReply(`No custom avatars found matching "${target}".`);
+      }
+      
+      let output = `<div class="ladder pad"><h2>Search Results for "${target}"</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th></tr>`;
+      
+      for (const [userid, filename] of results) {
+        const avatarPath = `${AVATAR_PATH}${filename}`;
+        output += `<tr><td>${Impulse.nameColor(userid, true, true)}</td><td><img src="${avatarPath}" width="80" height="80"></td></tr>`;
+      }
+      
+      output += `</table></div>`;
+      this.sendReply(`|raw|${output}`);
+    },
+    
+    async count(target, room, user) {
+      this.checkCan('bypassall');
+      
+      const avatarsData = Users.Avatars.avatars;
+      let count = 0;
+      
+      for (const userid in avatarsData) {
+        const userAvatar = avatarsData[userid];
+        if (userAvatar.allowed.length && userAvatar.allowed[0] && !userAvatar.allowed[0].startsWith('#')) {
+          count++;
+        }
+      }
+      
+      this.sendReply(`There are currently ${count} custom avatar(s) set.`);
     },
   },
    
@@ -137,8 +261,12 @@ export const commands: Chat.ChatCommands = {
       `<ul>` +
       `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar (downloads and adds to system)</li>` +
       `<li><code>/customavatar delete [username]</code> - Removes a user's personal avatar</li>` +
+      `<li><code>/customavatar list [page]</code> - Lists all custom avatars with pagination</li>` +
+      `<li><code>/customavatar view [username]</code> - View details about a user's custom avatar</li>` +
+      `<li><code>/customavatar search [term]</code> - Search for custom avatars by username</li>` +
+      `<li><code>/customavatar count</code> - Show total number of custom avatars</li>` +
       `</ul>` +
-      `<small>All commands require ~ or higher permission.</small>` +
+      `<small>All commands except view require ~ or higher permission.</small>` +
       `<br><small>Note: This integrates with the main avatar system. Users can view their avatars with <code>/avatars</code>.</small>` +
       `</div>`
     );
