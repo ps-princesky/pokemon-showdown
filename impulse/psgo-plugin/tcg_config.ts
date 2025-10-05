@@ -45,14 +45,6 @@ export const PACK_CONFIG = {
 	MAX_UNIQUE_ATTEMPTS: 50,
 } as const;
 
-// ==================== BATTLE CONFIGURATION ====================
-export const BATTLE_CONFIG = {
-	/** Battle challenge timeout (in minutes) */
-	TIMEOUT_MINUTES: 2,
-	/** Maximum wager amount */
-	MAX_WAGER: 10000,
-} as const;
-
 // ==================== PAGINATION SETTINGS ====================
 export const PAGINATION_CONFIG = {
 	/** Cards per page in search results */
