@@ -165,7 +165,7 @@ export const commands: Chat.ChatCommands = {
       let output = `<div class="ladder pad"><h2>Custom Avatars (Page ${page}/${totalPages})</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th><th>Filename</th></tr>`;
       
       for (const [userid, filename] of pageEntries) {
-        const avatarPath = `${AVATAR_PATH}${filename}`;
+        const avatarPath = `https://impulse-server.fun/avatars/${filename}`;
         output += `<tr><td>${Impulse.nameColor(userid, true, true)}</td><td><img src="${avatarPath}" width="80" height="80"></td><td>${filename}</td></tr>`;
       }
       
@@ -195,7 +195,7 @@ export const commands: Chat.ChatCommands = {
       }
       
       const avatarFilename = userAvatars.allowed[0];
-      const avatarPath = `${AVATAR_PATH}${avatarFilename}`;
+      const avatarPath = `https://impulse-server.fun/avatars/${avatarFilename}`;
       
       this.sendReplyBox(
         `<strong>Custom Avatar for ${target}:</strong><br />` +
@@ -229,7 +229,7 @@ export const commands: Chat.ChatCommands = {
       let output = `<div class="ladder pad"><h2>Search Results for "${target}"</h2><table style="width: 100%"><tr><th>User</th><th>Avatar</th></tr>`;
       
       for (const [userid, filename] of results) {
-        const avatarPath = `${AVATAR_PATH}${filename}`;
+        const avatarPath = `https://impulse-server.fun/avatars/${filename}`;
         output += `<tr><td>${Impulse.nameColor(userid, true, true)}</td><td><img src="${avatarPath}" width="80" height="80"></td></tr>`;
       }
       
