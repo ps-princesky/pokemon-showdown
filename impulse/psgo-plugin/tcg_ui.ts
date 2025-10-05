@@ -195,6 +195,267 @@ export function buildTable(params: {
 	return table;
 }
 
+// ==================== CARD DETAIL DISPLAY ====================
+
+/**
+ * Build detailed card view with all information
+ */
+export function buildCardDetailView(params: {
+	card: TCGCard;
+	getCardPoints: (card: TCGCard) => number;
+	hexToRgba: (hex: string, alpha: number) => string;
+	SPECIAL_SUBTYPES: any;
+}): string {
+	const { card, getCardPoints, hexToRgba, SPECIAL_SUBTYPES } = params;
+	
+	const rarityColorHex = getRarityColor(card.rarity);
+	const startColor = hexToRgba(rarityColorHex, 0.25);
+	const endColor = hexToRgba(rarityColorHex, 0.1);
+	const backgroundStyle = `background: linear-gradient(135deg, ${startColor}, ${endColor});`;
+
+	const cardNumber = card.cardId.split('-')[1] || '??';
+	const points = getCardPoints(card);
+
+	let borderColor = rarityColorHex;
+	const specialSubtype = card.subtypes.find(s => SPECIAL_SUBTYPES[s]);
+	if (specialSubtype && SPECIAL_SUBTYPES[specialSubtype]) {
+		borderColor = SPECIAL_SUBTYPES[specialSubtype].color;
+	}
+
+	const formattedSubtypes = card.subtypes.map(s => {
+		const color = getSubtypeColor(s);
+		return color ? `<strong style="color: ${color}">${s}</strong>` : s;
+	}).join(', ');
+
+	// Helper function to get energy icon
+	const getEnergyIcon = (energyType: string) => {
+		const typeMap: {[key: string]: string} = {
+			'Fighting': 'fighting', 'Psychic': 'psychic', 'Poison': 'poison', 'Dragon': 'dragon',
+			'Ghost': 'ghost', 'Dark': 'dark', 'Darkness': 'dark', 'Ground': 'ground',
+			'Fire': 'fire', 'Fairy': 'fairy', 'Water': 'water', 'Flying': 'flying',
+			'Normal': 'normal', 'Colorless': 'normal', 'Rock': 'rock', 'Lightning': 'electric',
+			'Electric': 'electric', 'Bug': 'bug', 'Grass': 'grass', 'Ice': 'ice',
+			'Steel': 'steel', 'Metal': 'steel'
+		};
+		const iconName = typeMap[energyType] || energyType.toLowerCase();
+		return `<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/types/masters/${iconName}.png" alt="${energyType}" style="width: 16px; height: 16px; vertical-align: middle;">`;
+	};
+
+	let output = `<div class="impulse-card">` +
+		`<div class="impulse-card-container" style="border: 2px solid ${borderColor}; ${backgroundStyle}">` +
+		`<table style="width: 100%; border-collapse: collapse;"><tr>`;
+
+	if (card.imageUrl) {
+		output += `<td style="width: 180px; vertical-align: top; padding-right: 16px;">` +
+			`<img src="${card.imageUrl}" alt="${card.name}" width="170" style="display: block; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">`;
+		
+		if (card.battleValue) {
+			output += `<div style="margin-top: 8px; text-align: center; padding: 6px; background: rgba(231,76,60,0.9); color: white; border-radius: 4px; font-weight: bold; font-size: 0.95em;">` +
+				`<img src="https://raw.githubusercontent.com/msikma/pokesprite/master/misc/mark/vigor-mark.png" alt="Battle Value" style="width: 16px; height: 16px; vertical-align: middle;"> Battle Value: ${card.battleValue}` +
+				`</div>`;
+		}
+		
+		output += `</td>`;
+	}
+
+	output += `<td style="vertical-align: top; line-height: 1.5;">` +
+		`<div class="impulse-card-name">${card.name}</div>` +
+		`<div class="impulse-card-rarity" style="color: ${rarityColorHex};">${card.rarity}</div>`;
+
+	// Compact info table
+	const infoRows = [];
+	infoRows.push(['Set', `${card.set} #${cardNumber}`]);
+	infoRows.push(['Type', card.type || card.supertype]);
+	if (card.subtypes.length > 0) infoRows.push(['Subtypes', formattedSubtypes]);
+	if (card.hp) infoRows.push(['HP', `<strong style="color: #e74c3c;">${card.hp}</strong>`]);
+	if (card.evolvesFrom) infoRows.push(['Evolves From', card.evolvesFrom]);
+	if (card.retreatCost && card.retreatCost.length > 0) {
+		infoRows.push(['Retreat', card.retreatCost.map(e => getEnergyIcon(e)).join(' ')]);
+	}
+	infoRows.push(['Points', `<strong>${points}</strong>`]);
+
+	output += `<table style="width: 100%; font-size: 0.9em;">`;
+	infoRows.forEach(([label, value]) => {
+		output += `<tr><td class="impulse-card-info-label"><strong>${label}:</strong></td><td class="impulse-card-info-value">${value}</td></tr>`;
+	});
+	output += `</table>`;
+
+	// Battle Stats
+	if (card.battleStats) {
+		output += `<div class="impulse-card-battle-stats">` +
+			`<strong class="impulse-card-battle-stats-title">⚔️ Battle Stats</strong>` +
+			`<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">`;
+		
+		const stats = [
+			{ label: 'ATK', value: card.battleStats.attackPower, max: 300, color: '#e74c3c' },
+			{ label: 'DEF', value: card.battleStats.defensePower, max: 340, color: '#3498db' },
+			{ label: 'SPD', value: card.battleStats.speed, max: 100, color: '#f39c12' },
+			{ label: 'Cost', value: card.battleStats.energyCost, max: 5, color: '#9b59b6' }
+		];
+		
+		stats.forEach(stat => {
+			const percent = Math.round((stat.value / stat.max) * 100);
+			output += `<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">` +
+				`<span class="impulse-card-stat-label">${stat.label}:</span>` +
+				`<span style="font-weight: bold; color: ${stat.color}; min-width: 32px; font-size: 1.05em;">${stat.value}</span>` +
+				`<div class="impulse-card-stat-progress">` +
+				`<div class="impulse-card-stat-progress-bar" style="background: ${stat.color}; width: ${percent}%;"></div>` +
+				`</div>` +
+				`</div>`;
+		});
+		output += `</div></div>`;
+	}
+
+	output += `</td></tr></table>`;
+
+	// Attacks
+	if (card.attacks && card.attacks.length > 0) {
+		output += `<div style="margin-top: 12px;">` +
+			`<strong class="impulse-card-section-title">⚔️ Attacks</strong>`;
+		
+		card.attacks.forEach(attack => {
+			const energyCost = attack.cost && attack.cost.length > 0 
+				? attack.cost.map(e => getEnergyIcon(e)).join(' ')
+				: '';
+			
+			output += `<div class="impulse-card-attack-container">` +
+				`<div class="impulse-card-attack-name"><strong>${energyCost} ${attack.name}</strong>` +
+				(attack.damageText ? ` <span style="color: #e74c3c; float: right;">${attack.damageText}</span>` : '') +
+				`</div>`;
+			
+			if (attack.text) {
+				output += `<div class="impulse-card-attack-text">${attack.text}</div>`;
+			}
+			
+			output += `</div>`;
+		});
+		output += `</div>`;
+	}
+
+	// Abilities
+	if (card.abilities && card.abilities.length > 0) {
+		output += `<div style="margin-top: 12px;">` +
+			`<strong class="impulse-card-section-title">✨ Abilities</strong>`;
+		
+		card.abilities.forEach(ability => {
+			output += `<div class="impulse-card-ability-container">` +
+				`<div class="impulse-card-ability-name"><strong>${ability.name}</strong> <span style="color: #9b59b6; font-size: 0.9em;">(${ability.type})</span></div>`;
+			
+			if (ability.text) {
+				output += `<div class="impulse-card-ability-text">${ability.text}</div>`;
+			}
+			output += `</div>`;
+		});
+		output += `</div>`;
+	}
+
+	// Weakness & Resistance
+	const hasWeaknessOrResistance = (card.weaknesses && card.weaknesses.length > 0) || (card.resistances && card.resistances.length > 0);
+	if (hasWeaknessOrResistance) {
+		output += `<div class="impulse-card-weakness-resistance">`;
+		if (card.weaknesses && card.weaknesses.length > 0) {
+			output += `<div style="flex: 1;">` +
+			`<strong style="color: #e74c3c;">🔻 Weakness:</strong> `;
+			output += card.weaknesses.map(w => `<span class="impulse-card-weakness-badge">${w.type} ${w.value}</span>`).join('');
+			output += `</div>`;
+		}
+
+		if (card.resistances && card.resistances.length > 0) {
+			output += `<div style="flex: 1;">` +
+			`<strong style="color: #3498db;">🛡️ Resistance:</strong> `;
+			output += card.resistances.map(r => `<span class="impulse-card-resistance-badge">${r.type} ${r.value}</span>`).join('');
+			output += `</div>`;
+		}
+
+		output += `</div>`;
+	}
+
+	// Flavor text & Artist
+	if (card.cardText || card.artist) {
+		output += `<div class="impulse-card-footer">`;
+		
+		if (card.cardText) {
+			output += `<div class="impulse-card-flavor-text">"${card.cardText}"</div>`;
+		}
+		
+		if (card.artist) {
+			output += `<div class="impulse-card-artist">Illus. ${card.artist}</div>`;
+		}
+		
+		output += `</div>`;
+	}
+
+	output += `</div></div>`;
+	return output;
+}
+
+// ==================== PAGINATION & SORTING CONTROLS ====================
+
+/**
+ * Build pagination controls with page numbers and navigation
+ */
+export function buildPaginationControls(params: {
+	commandString: string;
+	currentPage: number;
+	totalPages: number;
+	totalResults: number;
+	resultsPerPage: number;
+	includeSortButtons?: boolean;
+	sortOptions?: string[];
+}): string {
+	const { commandString, currentPage, totalPages, totalResults, resultsPerPage, includeSortButtons = false, sortOptions = [] } = params;
+	
+	let output = `<div style="text-align: center; margin-top: 5px;">`;
+	
+	// Previous button
+	if (currentPage > 1) {
+		output += `<button name="send" value="${commandString}, page:${currentPage - 1}" style="margin-right: 5px;">&laquo; Previous</button>`;
+	}
+	
+	// Page indicator
+	output += `<strong>Page ${currentPage} of ${totalPages}</strong>`;
+	
+	// Next button
+	if ((currentPage * resultsPerPage) < totalResults) {
+		output += `<button name="send" value="${commandString}, page:${currentPage + 1}" style="margin-left: 5px;">Next &raquo;</button>`;
+	}
+	
+	// Sort buttons (optional)
+	if (includeSortButtons && sortOptions.length > 0) {
+		output += `<div style="margin-top: 8px;">` +
+			`<strong style="font-size: 0.9em;">Sort by:</strong> `;
+		
+		sortOptions.forEach(option => {
+			output += `<button name="send" value="${commandString}, sort:${option}">${option.charAt(0).toUpperCase() + option.slice(1)}</button> `;
+		});
+		
+		output += `</div>`;
+	}
+	
+	output += `</div>`;
+	return output;
+}
+
+/**
+ * Build sort controls for collection/search views
+ */
+export function buildSortControls(params: {
+	baseCommand: string;
+	sortOptions: { value: string; label: string }[];
+}): string {
+	const { baseCommand, sortOptions } = params;
+	
+	let output = `<div style="text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">` +
+		`<strong style="font-size: 0.9em;">Sort by:</strong> `;
+	
+	sortOptions.forEach(option => {
+		output += `<button name="send" value="${baseCommand}, sort:${option.value}">${option.label}</button> `;
+	});
+	
+	output += `</div>`;
+	return output;
+}
+
 // ==================== BATTLE RESULT COMPONENTS ====================
 
 /**
