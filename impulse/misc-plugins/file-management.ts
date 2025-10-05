@@ -339,65 +339,198 @@ export const commands: Chat.ChatCommands = {
 
   async gitpull(target, room, user) {
     this.canUseConsole();
-    const repoPath = target.trim() || './';
+    const startPath = target.trim() || './';
     
     try {
-      // Check if it's a git repository
-      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
-      if (!isGitRepo) {
-        return this.errorReply(`${repoPath} is not a git repository.`);
+      // Find the git repository root
+      const gitRoot = await findGitRoot(startPath);
+      if (!gitRoot) {
+        return this.errorReply(`No git repository found in or above: ${startPath}`);
       }
 
+      this.sendReply(`Found git repository at: ${gitRoot}`);
       this.sendReply('Pulling from remote repository...');
       
-      const { stdout, stderr } = await execAsync('git pull', { cwd: repoPath });
+      // Get current commit before pull (for comparison)
+      let beforeCommit = '';
+      try {
+        const { stdout: before } = await execAsync('git rev-parse HEAD', { cwd: gitRoot });
+        beforeCommit = before.trim();
+      } catch {
+        // Ignore if we can't get it
+      }
+      
+      const { stdout, stderr } = await execAsync('git pull', { cwd: gitRoot });
+      
+      // Get current commit after pull
+      let afterCommit = '';
+      try {
+        const { stdout: after } = await execAsync('git rev-parse HEAD', { cwd: gitRoot });
+        afterCommit = after.trim();
+      } catch {
+        // Ignore if we can't get it
+      }
+      
+      // Check if there were any changes
+      const hasChanges = beforeCommit !== afterCommit;
+      const isAlreadyUpToDate = stdout.includes('Already up to date') || stdout.includes('Already up-to-date');
       
       let resultMessage = '<div class="infobox">';
-      resultMessage += '<strong>[GIT PULL]</strong><br>';
-      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      resultMessage += `<strong>[GIT PULL] ${isAlreadyUpToDate ? '✓' : '✅'}</strong><br>`;
+      resultMessage += `<strong>Repository Root:</strong> ${Chat.escapeHTML(gitRoot)}<br>`;
+      resultMessage += `<strong>Executed From:</strong> ${Chat.escapeHTML(startPath)}<br><br>`;
       
+      // Show the actual git output (like terminal)
       if (stdout) {
-        resultMessage += '<strong>Output:</strong><br><pre>' + Chat.escapeHTML(stdout) + '</pre>';
+        resultMessage += '<strong>Git Output:</strong><br>';
+        resultMessage += '<pre style="background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 4px; overflow-x: auto;">';
+        resultMessage += Chat.escapeHTML(stdout);
+        resultMessage += '</pre>';
       }
+      
+      // Show stderr if present (git often uses stderr for informational messages)
       if (stderr) {
-        resultMessage += '<strong>Errors:</strong><br><pre>' + Chat.escapeHTML(stderr) + '</pre>';
+        resultMessage += '<br><strong>Additional Info:</strong><br>';
+        resultMessage += '<pre style="background: #2d2d2d; color: #ffd700; padding: 10px; border-radius: 4px; overflow-x: auto;">';
+        resultMessage += Chat.escapeHTML(stderr);
+        resultMessage += '</pre>';
+      }
+      
+      // Add summary if changes were pulled
+      if (hasChanges && !isAlreadyUpToDate) {
+        try {
+          // Get the commit log of what was pulled
+          const { stdout: log } = await execAsync(
+            `git log ${beforeCommit}..${afterCommit} --oneline --decorate`,
+            { cwd: gitRoot }
+          );
+          if (log.trim()) {
+            resultMessage += '<br><strong>New Commits:</strong><br>';
+            resultMessage += '<pre style="background: #1e1e1e; color: #4ec9b0; padding: 10px; border-radius: 4px; overflow-x: auto;">';
+            resultMessage += Chat.escapeHTML(log.trim());
+            resultMessage += '</pre>';
+          }
+        } catch {
+          // If we can't get the log, that's okay
+        }
+        
+        // Get file change statistics
+        try {
+          const { stdout: diffStat } = await execAsync(
+            `git diff --stat ${beforeCommit}..${afterCommit}`,
+            { cwd: gitRoot }
+          );
+          if (diffStat.trim()) {
+            resultMessage += '<br><strong>Files Changed:</strong><br>';
+            resultMessage += '<pre style="background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 4px; overflow-x: auto;">';
+            resultMessage += Chat.escapeHTML(diffStat.trim());
+            resultMessage += '</pre>';
+          }
+        } catch {
+          // If we can't get the diff stat, that's okay
+        }
       }
       
       resultMessage += '</div>';
       
       this.sendReplyBox(resultMessage);
-      notifyStaff("Git pull executed", repoPath, user, stdout.slice(0, 100));
+      
+      const logMessage = isAlreadyUpToDate ? 'Already up to date' : 
+                        hasChanges ? `Pulled new changes` : 'Pull completed';
+      notifyStaff(`Git pull executed - ${logMessage}`, gitRoot, user);
       
     } catch (err: any) {
-      this.errorReply('Git pull failed: ' + err.message);
-      notifyStaff("Git pull failed", repoPath, user, err.message);
+      const errorMsg = err.message || err.toString();
+      
+      // Check if it's a merge conflict
+      if (errorMsg.includes('CONFLICT') || errorMsg.includes('Automatic merge failed')) {
+        // Get list of conflicted files
+        let conflictedFiles: string[] = [];
+        try {
+          const { stdout: conflictList } = await execAsync('git diff --name-only --diff-filter=U', { cwd: gitRoot });
+          conflictedFiles = conflictList.trim().split('\n').filter(Boolean);
+        } catch {
+          // If we can't get the list, that's okay
+        }
+        
+        let conflictMessage = '<div class="message-error">';
+        conflictMessage += '<strong>❌ MERGE CONFLICT DETECTED</strong><br><br>';
+        conflictMessage += '⚠️ <strong>Git pull failed due to merge conflicts!</strong><br><br>';
+        
+        if (conflictedFiles.length > 0) {
+          conflictMessage += `<strong>Conflicted Files (${conflictedFiles.length}):</strong><br>`;
+          conflictMessage += '<pre>' + conflictedFiles.map(f => Chat.escapeHTML(f)).join('\n') + '</pre><br>';
+        }
+        
+        conflictMessage += '<strong>Error Details:</strong><br>';
+        conflictMessage += '<pre>' + Chat.escapeHTML(errorMsg) + '</pre><br>';
+        
+        conflictMessage += '<strong>⚠️ REPOSITORY IS NOW IN CONFLICTED STATE</strong><br><br>';
+        
+        conflictMessage += '<strong>To Resolve:</strong><br>';
+        conflictMessage += '1. <strong>Option A - Abort the merge:</strong><br>';
+        conflictMessage += '   Run manually: <code>git merge --abort</code><br>';
+        conflictMessage += '   This will cancel the pull and restore your previous state.<br><br>';
+        
+        conflictMessage += '2. <strong>Option B - Fix conflicts manually:</strong><br>';
+        conflictMessage += '   • Edit each conflicted file to resolve conflicts<br>';
+        conflictMessage += '   • Look for conflict markers: <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code><br>';
+        conflictMessage += '   • After fixing, commit: <code>/gitcommit ./, Resolved merge conflicts</code><br><br>';
+        
+        conflictMessage += '<small>Use <code>/gitstatus</code> to check current state</small>';
+        conflictMessage += '</div>';
+        
+        this.sendReplyBox(conflictMessage);
+        notifyStaff("Git pull FAILED - MERGE CONFLICT", gitRoot, user, `${conflictedFiles.length} files conflicted`);
+      } else {
+        // Other git errors
+        let errorMessage = '<div class="message-error">';
+        errorMessage += '<strong>❌ Git Pull Failed</strong><br><br>';
+        errorMessage += '<strong>Error:</strong><br>';
+        errorMessage += '<pre>' + Chat.escapeHTML(errorMsg) + '</pre>';
+        errorMessage += '</div>';
+        
+        this.sendReplyBox(errorMessage);
+        notifyStaff("Git pull failed", gitRoot, user, errorMsg.slice(0, 200));
+      }
     }
   },
 
   async gitstatus(target, room, user) {
     this.canUseConsole();
-    const repoPath = target.trim() || './';
+    const startPath = target.trim() || './';
     
     try {
-      // Check if it's a git repository
-      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
-      if (!isGitRepo) {
-        return this.errorReply(`${repoPath} is not a git repository.`);
+      // Find the git repository root
+      const gitRoot = await findGitRoot(startPath);
+      if (!gitRoot) {
+        return this.errorReply(`No git repository found in or above: ${startPath}`);
       }
 
       // Get git status
-      const { stdout: status } = await execAsync('git status', { cwd: repoPath });
+      const { stdout: status } = await execAsync('git status', { cwd: gitRoot });
       
       // Get current branch
-      const { stdout: branch } = await execAsync('git branch --show-current', { cwd: repoPath });
+      const { stdout: branch } = await execAsync('git branch --show-current', { cwd: gitRoot });
       
       // Get latest commit
-      const { stdout: commit } = await execAsync('git log -1 --oneline', { cwd: repoPath });
+      const { stdout: commit } = await execAsync('git log -1 --oneline', { cwd: gitRoot });
+      
+      // Get remote URL
+      let remoteUrl = 'Not configured';
+      try {
+        const { stdout: remote } = await execAsync('git remote get-url origin', { cwd: gitRoot });
+        remoteUrl = remote.trim();
+      } catch {
+        // Remote not configured, use default message
+      }
       
       let resultMessage = '<div class="infobox">';
       resultMessage += '<strong>[GIT STATUS]</strong><br>';
-      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      resultMessage += `<strong>Repository Root:</strong> ${Chat.escapeHTML(gitRoot)}<br>`;
+      resultMessage += `<strong>Current Directory:</strong> ${Chat.escapeHTML(startPath)}<br>`;
       resultMessage += `<strong>Branch:</strong> ${Chat.escapeHTML(branch.trim())}<br>`;
+      resultMessage += `<strong>Remote:</strong> ${Chat.escapeHTML(remoteUrl)}<br>`;
       resultMessage += `<strong>Latest Commit:</strong> ${Chat.escapeHTML(commit.trim())}<br><br>`;
       resultMessage += '<details><summary><strong>Full Status</strong></summary>';
       resultMessage += '<pre>' + Chat.escapeHTML(status) + '</pre>';
@@ -405,43 +538,45 @@ export const commands: Chat.ChatCommands = {
       resultMessage += '</div>';
       
       this.sendReplyBox(resultMessage);
-      notifyStaff("Git status checked", repoPath, user);
+      notifyStaff("Git status checked", gitRoot, user);
       
     } catch (err: any) {
       this.errorReply('Git status failed: ' + err.message);
-      notifyStaff("Git status failed", repoPath, user, err.message);
+      notifyStaff("Git status failed", startPath, user, err.message);
     }
   },
 
   async gitcommit(target, room, user) {
     this.canUseConsole();
     
-    const [repoPath, ...messageParts] = target.split(',');
-    const path = repoPath.trim() || './';
+    const [pathInput, ...messageParts] = target.split(',');
+    const startPath = pathInput.trim() || './';
     const message = messageParts.join(',').trim();
     
     if (!message) {
-      return this.errorReply('Usage: /gitcommit [repository path], [commit message]');
+      return this.errorReply('Usage: /gitcommit [path], [commit message]\nExample: /gitcommit ./, Fixed avatar system');
     }
     
     try {
-      // Check if it's a git repository
-      const isGitRepo = await FS(path + '/.git').isDirectory();
-      if (!isGitRepo) {
-        return this.errorReply(`${path} is not a git repository.`);
+      // Find the git repository root
+      const gitRoot = await findGitRoot(startPath);
+      if (!gitRoot) {
+        return this.errorReply(`No git repository found in or above: ${startPath}`);
       }
 
       // Add all changes
+      this.sendReply(`Found git repository at: ${gitRoot}`);
       this.sendReply('Staging changes...');
-      await execAsync('git add .', { cwd: path });
+      await execAsync('git add .', { cwd: gitRoot });
       
       // Commit changes
       this.sendReply('Committing changes...');
-      const { stdout, stderr } = await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: path });
+      const { stdout, stderr } = await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: gitRoot });
       
       let resultMessage = '<div class="infobox">';
       resultMessage += '<strong>[GIT COMMIT]</strong><br>';
-      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(path)}<br>`;
+      resultMessage += `<strong>Repository Root:</strong> ${Chat.escapeHTML(gitRoot)}<br>`;
+      resultMessage += `<strong>Executed From:</strong> ${Chat.escapeHTML(startPath)}<br>`;
       resultMessage += `<strong>Message:</strong> ${Chat.escapeHTML(message)}<br>`;
       resultMessage += `<strong>User:</strong> <username>${user.id}</username><br>`;
       
@@ -455,7 +590,7 @@ export const commands: Chat.ChatCommands = {
       resultMessage += '</div>';
       
       this.sendReplyBox(resultMessage);
-      notifyStaff("Git commit created", path, user, `Message: ${message}`);
+      notifyStaff("Git commit created", gitRoot, user, `Message: ${message}`);
       
     } catch (err: any) {
       // Check if error is because there's nothing to commit
@@ -464,28 +599,30 @@ export const commands: Chat.ChatCommands = {
         return;
       }
       this.errorReply('Git commit failed: ' + err.message);
-      notifyStaff("Git commit failed", path, user, err.message);
+      notifyStaff("Git commit failed", startPath, user, err.message);
     }
   },
 
   async gitpush(target, room, user) {
     this.canUseConsole();
-    const repoPath = target.trim() || './';
+    const startPath = target.trim() || './';
     
     try {
-      // Check if it's a git repository
-      const isGitRepo = await FS(repoPath + '/.git').isDirectory();
-      if (!isGitRepo) {
-        return this.errorReply(`${repoPath} is not a git repository.`);
+      // Find the git repository root
+      const gitRoot = await findGitRoot(startPath);
+      if (!gitRoot) {
+        return this.errorReply(`No git repository found in or above: ${startPath}`);
       }
 
+      this.sendReply(`Found git repository at: ${gitRoot}`);
       this.sendReply('Pushing to remote repository...');
       
-      const { stdout, stderr } = await execAsync('git push', { cwd: repoPath });
+      const { stdout, stderr } = await execAsync('git push', { cwd: gitRoot });
       
       let resultMessage = '<div class="infobox">';
       resultMessage += '<strong>[GIT PUSH]</strong><br>';
-      resultMessage += `<strong>Repository:</strong> ${Chat.escapeHTML(repoPath)}<br>`;
+      resultMessage += `<strong>Repository Root:</strong> ${Chat.escapeHTML(gitRoot)}<br>`;
+      resultMessage += `<strong>Executed From:</strong> ${Chat.escapeHTML(startPath)}<br>`;
       
       if (stdout) {
         resultMessage += '<strong>Output:</strong><br><pre>' + Chat.escapeHTML(stdout) + '</pre>';
@@ -497,11 +634,11 @@ export const commands: Chat.ChatCommands = {
       resultMessage += '</div>';
       
       this.sendReplyBox(resultMessage);
-      notifyStaff("Git push executed", repoPath, user);
+      notifyStaff("Git push executed", gitRoot, user);
       
     } catch (err: any) {
       this.errorReply('Git push failed: ' + err.message);
-      notifyStaff("Git push failed", repoPath, user, err.message);
+      notifyStaff("Git push failed", startPath, user, err.message);
     }
   },
 
@@ -510,13 +647,23 @@ export const commands: Chat.ChatCommands = {
     this.sendReplyBox(
       `<div><b><center>Git Integration Commands</center></b><br>` +
       `<ul>` +
-      `<li><code>/gitpull [repository path]</code> - Pull latest changes from remote repository</li>` +
-      `<li><code>/gitstatus [repository path]</code> - Show git status, branch, and latest commit</li>` +
-      `<li><code>/gitcommit [repository path], [commit message]</code> - Stage and commit all changes</li>` +
-      `<li><code>/gitpush [repository path]</code> - Push commits to remote repository</li>` +
+      `<li><code>/gitpull [path]</code> - Pull latest changes from remote repository<br>` +
+      `<small>⚠️ Will fail with detailed error if merge conflicts occur</small></li>` +
+      `<li><code>/gitstatus [path]</code> - Show git status, branch, remote, and latest commit</li>` +
+      `<li><code>/gitcommit [path], [commit message]</code> - Stage and commit all changes</li>` +
+      `<li><code>/gitpush [path]</code> - Push commits to remote repository</li>` +
       `</ul>` +
       `<small>All commands require Console/Owner permission.</small><br>` +
-      `<small>If no repository path is specified, current directory (./) is used.</small>` +
+      `<small>Path is optional - defaults to current directory (./).</small><br>` +
+      `<small><strong>Smart Feature:</strong> Commands automatically find the git repository root, so you can run them from any subdirectory!</small><br><br>` +
+      `<strong>Recommended Workflow:</strong><br>` +
+      `1. <code>/gitstatus</code> - Check what changed<br>` +
+      `2. <code>/gitcommit ./, Your message</code> - Commit your changes<br>` +
+      `3. <code>/gitpull</code> - Pull latest from remote<br>` +
+      `4. <code>/gitpush</code> - Push your commits<br><br>` +
+      `<strong>If merge conflicts occur:</strong><br>` +
+      `• Abort: Run <code>git merge --abort</code> manually<br>` +
+      `• Or resolve conflicts manually and commit<br>` +
       `</div>`
     );
   },
