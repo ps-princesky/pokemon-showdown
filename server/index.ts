@@ -114,30 +114,6 @@ async function initializeMongoDB() {
 		Monitor.notice('Connecting to MongoDB...');
 		await MongoDB.connect(Config.mongodb);
 		Monitor.notice(`MongoDB connected successfully to database: ${Config.mongodb.database}`);
-
-		const preloadSetCaches = await import('../impulse/psgo-plugin/tcg_commands/shared');
-		
-		setTimeout(async () => {
-			await preloadSetCaches();
-		}, 5000); // 5 seconds after startup
-		
-		// NOW it's safe to load TCG modules (using dynamic import)
-		const TCG_Ranking = await import('../impulse/psgo-plugin/tcg_ranking');
-		
-		// Run season maintenance after MongoDB is connected
-		await TCG_Ranking.runSeasonMaintenance();
-		
-		// Set up recurring season maintenance (every hour)
-		setInterval(async () => {
-			try {
-				await TCG_Ranking.runSeasonMaintenance();
-			} catch (error) {
-				Monitor.error('Error in season maintenance: ' + error);
-			}
-		}, 60 * 60 * 1000); // 1 hour
-		
-		Monitor.notice('TCG system initialized successfully');
-		
 	} catch (error) {
 		Monitor.error('Failed to connect to MongoDB: ' + error);
 		Monitor.warn('Server will continue without MongoDB support');
