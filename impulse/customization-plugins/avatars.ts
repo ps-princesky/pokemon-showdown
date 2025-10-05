@@ -259,14 +259,15 @@ export const commands: Chat.ChatCommands = {
     this.sendReplyBox(
       `<div><b><center>Custom Avatar Commands</center></b><br>` +
       `<ul>` +
-      `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar (downloads and adds to system) (Requires: ~)</li>` +
-      `<li><code>/customavatar delete [username]</code> - Removes a user's personal avatar (Requires: ~)</li>` +
-      `<li><code>/customavatar list [page]</code> - Lists all custom avatars with pagination (Requires: ~)</li>` +
+      `<li><code>/customavatar set [username], [image url]</code> - Sets a user's personal avatar (downloads and adds to system)</li>` +
+      `<li><code>/customavatar delete [username]</code> - Removes a user's personal avatar</li>` +
+      `<li><code>/customavatar list [page]</code> - Lists all custom avatars with pagination</li>` +
       `<li><code>/customavatar view [username]</code> - View details about a user's custom avatar</li>` +
-      `<li><code>/customavatar search [term]</code> - Search for custom avatars by username (Requires: ~)</li>` +
-      `<li><code>/customavatar count</code> - Show total number of custom avatars (Requires: ~)</li>` +
+      `<li><code>/customavatar search [term]</code> - Search for custom avatars by username</li>` +
+      `<li><code>/customavatar count</code> - Show total number of custom avatars</li>` +
       `</ul>` +
-      `<small>Note: This integrates with the main avatar system. Users can view their avatars with <code>/avatars</code>.</small>` +
+      `<small>All commands except view require ~ or higher permission.</small>` +
+      `<br><small>Note: This integrates with the main avatar system. Users can view their avatars with <code>/avatars</code>.</small>` +
       `</div>`
     );
   },	
