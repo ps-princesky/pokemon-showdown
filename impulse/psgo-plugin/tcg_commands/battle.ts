@@ -6,7 +6,7 @@ import * as TCG_Battle from '../../../impulse/psgo-plugin/tcg_battle';
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
 import { TCGCards, UserCollections, BattleProgressCollection } from '../../../impulse/psgo-plugin/tcg_collections';
-import { BattleProgress } from '../../../impulse/psgo-plugin/tcg_data';
+import { BattleProgress, POKEMON_SETS } from '../../../impulse/psgo-plugin/tcg_data';
 import { ERROR_MESSAGES } from '../../../impulse/psgo-plugin/tcg_config';
 import { generatePack, ensureUserCollection, getValidPackSets } from './shared';
 
@@ -37,21 +37,15 @@ export const battleCommands: Chat.ChatCommands = {
 				await BattleProgressCollection.insertOne(progress);
 			}
 
-			// Check lockout
+			// Check lockout for all actions except viewing
 			const lockoutStatus = TCG_Battle.isLockedOut(progress.lastDefeatTime);
-			if (lockoutStatus.locked && toID(action) !== '') {
+			if (lockoutStatus.locked && action && toID(action) !== '' && toID(action) !== 'view' && toID(action) !== 'progress' && toID(action) !== 'status') {
 				const timeLeft = TCG_Battle.formatTimeRemaining(lockoutStatus.timeLeft!);
 				return this.errorReply(`You are locked out from battles for ${timeLeft} after your last defeat.`);
 			}
 
-			// View progress (no action specified)
-			if (!action || toID(action) === 'progress' || toID(action) === 'status') {
-				if (!this.runBroadcast()) return;
-				return this.parse(`/tcg battle view`);
-			}
-
-			// View detailed progress
-			if (toID(action) === 'view') {
+			// View progress (default action - no action specified or view/progress/status)
+			if (!action || toID(action) === '' || toID(action) === 'view' || toID(action) === 'progress' || toID(action) === 'status') {
 				if (!this.runBroadcast()) return;
 				
 				const cardsRequired = TCG_Battle.getCardsRequired(progress.currentLevel);
@@ -72,9 +66,13 @@ export const battleCommands: Chat.ChatCommands = {
 					`<p style="margin-bottom: 10px;"><strong>Difficulty:</strong> ` + 
 					`<span style="color: ${progress.currentLevel <= 10 ? '#2ecc71' : progress.currentLevel <= 30 ? '#f39c12' : progress.currentLevel <= 50 ? '#e67e22' : '#c0392b'};">` +
 					`${progress.currentLevel <= 10 ? 'Easy' : progress.currentLevel <= 30 ? 'Medium' : progress.currentLevel <= 50 ? 'Hard' : 'Extreme'}` +
-					`</span></p>` +
-					`<button name="send" value="/tcg battle challenge ${progress.currentLevel}" class="button" style="padding: 8px 16px; font-size: 1.1em;">⚔️ Start Battle</button>` +
-					`</div>`;
+					`</span></p>`;
+				
+				if (!lockoutStatus.locked) {
+					content += `<button name="send" value="/tcg battle challenge ${progress.currentLevel}" class="button" style="padding: 8px 16px; font-size: 1.1em;">⚔️ Start Battle</button>`;
+				}
+				
+				content += `</div>`;
 				
 				if (lockoutStatus.locked) {
 					const timeLeft = TCG_Battle.formatTimeRemaining(lockoutStatus.timeLeft!);
@@ -124,19 +122,21 @@ export const battleCommands: Chat.ChatCommands = {
 				// Sort by battle value
 				userCards.sort((a, b) => (b.battleValue || 0) - (a.battleValue || 0));
 
+				if (!this.runBroadcast()) return;
+
 				let content = `<p style="text-align: center; font-size: 1.1em; margin-bottom: 15px;">` +
 					`<strong>Level ${level}:</strong> Select ${cardsRequired} card(s) for battle` +
 					`</p>`;
 
 				content += `<p style="text-align: center; margin-bottom: 10px;">` +
-					`<em>Click the card IDs below to add them to your team</em>` +
+					`<em>Copy card IDs from the table below and use the command at the bottom</em>` +
 					`</p>`;
 
 				// Show top cards
 				const displayCards = userCards.slice(0, 50); // Show top 50 for selection
 				content += TCG_UI.generateCardTable(
 					displayCards,
-					['name', 'rarity', 'type', 'hp', 'battleValue']
+					['id', 'name', 'rarity', 'type', 'hp', 'battleValue']
 				);
 
 				content += `<hr/><p style="text-align: center; margin-top: 15px;">` +
@@ -163,7 +163,7 @@ export const battleCommands: Chat.ChatCommands = {
 
 				const cardIds = args.map(id => id.trim()).filter(id => id);
 				if (cardIds.length !== pending.cardsRequired) {
-					return this.errorReply(`You must select exactly ${pending.cardsRequired} card(s) for this battle.`);
+					return this.errorReply(`You must select exactly ${pending.cardsRequired} card(s) for this battle. You provided ${cardIds.length}.`);
 				}
 
 				// Verify user owns all selected cards
@@ -309,7 +309,7 @@ export const battleCommands: Chat.ChatCommands = {
 				}
 
 				const output = TCG_UI.buildPage(`Battle Results - Level ${pending.level}`, content);
-				this.sendReplyBox(output);
+				return this.sendReplyBox(output);
 			}
 
 		} catch (e: any) {
