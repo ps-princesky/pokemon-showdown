@@ -4,7 +4,6 @@
 
 import * as TCG_Economy from '../../../impulse/psgo-plugin/tcg_economy';
 import * as TCG_UI from '../../../impulse/psgo-plugin/tcg_ui';
-import * as TCG_Ranking from '../../../impulse/psgo-plugin/tcg_ranking';
 import { UserCollections, TCGCards } from '../../../impulse/psgo-plugin/tcg_collections';
 import { POKEMON_SETS, getRarityColor, SPECIAL_SUBTYPES } from '../../../impulse/psgo-plugin/tcg_data';
 import { DAILY_CONFIG, ERROR_MESSAGES, VALIDATION_LIMITS } from '../../../impulse/psgo-plugin/tcg_config';
@@ -13,136 +12,127 @@ import { generatePack, getCardPoints, ensureUserCollection, getValidPackSets } f
 export const coreCommands: Chat.ChatCommands = {
 
 	async daily(target, room, user) {
-	console.time('DAILY-TOTAL');
-	if (!this.runBroadcast()) return;
-	
-	console.time('getPlayerRanking');
-	await TCG_Ranking.getPlayerRanking(user.id);
-	console.timeEnd('getPlayerRanking');
-	
-	const userId = user.id;
-	const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
-
-	try {
-		console.time('findCollection');
-		let collection = await UserCollections.findOne({ userId });
-		console.timeEnd('findCollection');
-
-		if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
-			const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
-			const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-			const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-			console.timeEnd('DAILY-TOTAL');
-			return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
-		}
-
-		console.time('getValidPackSets');
-		const availableSets = await getValidPackSets();
-		console.timeEnd('getValidPackSets');
+		console.time('DAILY-TOTAL');
+		if (!this.runBroadcast()) return;
 		
-		if (availableSets.length === 0) {
-			console.timeEnd('DAILY-TOTAL');
-			return this.errorReply(ERROR_MESSAGES.SET_UNAVAILABLE);
-		}
-		const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
-		
-		console.time('generatePack');
-		const pack = await generatePack(randomSetId);
-		console.timeEnd('generatePack');
-		
-		if (!pack) {
-			console.timeEnd('DAILY-TOTAL');
-			return this.errorReply(`${ERROR_MESSAGES.PACK_GENERATION_FAILED} from set "${randomSetId}".`);
-		}
+		const userId = user.id;
+		const twentyFourHours = DAILY_CONFIG.COOLDOWN_HOURS * 60 * 60 * 1000;
 
-		console.time('ensureUserCollection');
-		collection = await ensureUserCollection(userId);
-		console.timeEnd('ensureUserCollection');
+		try {
+			console.time('findCollection');
+			let collection = await UserCollections.findOne({ userId });
+			console.timeEnd('findCollection');
 
-		let pointsGained = 0;
-		for (const card of pack) {
-			pointsGained += getCardPoints(card);
-			const existingCard = collection.cards.find(c => c.cardId === card.cardId);
-			if (existingCard) {
-				existingCard.quantity++;
-			} else {
-				collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+			if (collection?.lastDaily && (Date.now() - collection.lastDaily < twentyFourHours)) {
+				const timeLeft = collection.lastDaily + twentyFourHours - Date.now();
+				const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+				const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+				console.timeEnd('DAILY-TOTAL');
+				return this.sendReply(`You have already claimed your daily pack. Please wait ${hours}h ${minutes}m.`);
 			}
-		}
 
-		collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
-		collection.stats.uniqueCards = collection.cards.length;
-		collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
-		collection.currency = (collection.currency || 0) + DAILY_CONFIG.CURRENCY_AWARD;
-		collection.lastUpdated = Date.now();
-		collection.lastDaily = Date.now();
-
-		console.time('updateCollection');
-		await UserCollections.updateOne(
-			{ userId },
-			{ $set: collection },
-			{ upsert: true }
-		);
-		console.timeEnd('updateCollection');
-
-		const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
-		const displaySetName = setInfo ? setInfo.name : randomSetId;
-
-		pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
-		
-		// Build table with battle value
-		let tableHtml = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CONFIG.CURRENCY_AWARD} Credits</strong>!</p><hr/>` +
-			`<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
-			`<tr class="themed-table-header">` +
-			`<th>Name</th>` +
-			`<th>Set</th>` +
-			`<th>Rarity</th>` +
-			`<th>Type</th>` +
-			`<th>⚔️ BV</th>` +
-			`</tr>`;
-
-		for (const card of pack) {
-			const rarityColor = getRarityColor(card.rarity);
+			console.time('getValidPackSets');
+			const availableSets = await getValidPackSets();
+			console.timeEnd('getValidPackSets');
 			
-			tableHtml += `<tr class="themed-table-row">` +
-				`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-				`<td>${card.set}</td>` +
-				`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
-				`<td>${card.type || card.supertype}</td>`;
+			if (availableSets.length === 0) {
+				console.timeEnd('DAILY-TOTAL');
+				return this.errorReply(ERROR_MESSAGES.SET_UNAVAILABLE);
+			}
+			const randomSetId = availableSets[Math.floor(Math.random() * availableSets.length)];
 			
-			// Battle Value with color coding
-			if (card.battleValue) {
-				let bvColor = '#95a5a6';
-				if (card.battleValue >= 150) bvColor = '#e74c3c';
-				else if (card.battleValue >= 100) bvColor = '#f39c12';
-				else if (card.battleValue >= 70) bvColor = '#3498db';
+			console.time('generatePack');
+			const pack = await generatePack(randomSetId);
+			console.timeEnd('generatePack');
+			
+			if (!pack) {
+				console.timeEnd('DAILY-TOTAL');
+				return this.errorReply(`${ERROR_MESSAGES.PACK_GENERATION_FAILED} from set "${randomSetId}".`);
+			}
+
+			console.time('ensureUserCollection');
+			collection = await ensureUserCollection(userId);
+			console.timeEnd('ensureUserCollection');
+
+			let pointsGained = 0;
+			for (const card of pack) {
+				pointsGained += getCardPoints(card);
+				const existingCard = collection.cards.find(c => c.cardId === card.cardId);
+				if (existingCard) {
+					existingCard.quantity++;
+				} else {
+					collection.cards.push({ cardId: card.cardId, quantity: 1, addedAt: Date.now() });
+				}
+			}
+
+			collection.stats.totalCards = collection.cards.reduce((sum, c) => sum + c.quantity, 0);
+			collection.stats.uniqueCards = collection.cards.length;
+			collection.stats.totalPoints = (collection.stats.totalPoints || 0) + pointsGained;
+			collection.currency = (collection.currency || 0) + DAILY_CONFIG.CURRENCY_AWARD;
+			collection.lastUpdated = Date.now();
+			collection.lastDaily = Date.now();
+
+			console.time('updateCollection');
+			await UserCollections.updateOne(
+				{ userId },
+				{ $set: collection },
+				{ upsert: true }
+			);
+			console.timeEnd('updateCollection');
+
+			const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(randomSetId));
+			const displaySetName = setInfo ? setInfo.name : randomSetId;
+
+			pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
+			
+			// Build table with battle value
+			let tableHtml = `<p style="text-align:center;">You received a pack from <strong>${displaySetName}</strong> and <strong>${DAILY_CONFIG.CURRENCY_AWARD} Credits</strong>!</p><hr/>` +
+				`<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
+				`<tr class="themed-table-header">` +
+				`<th>Name</th>` +
+				`<th>Set</th>` +
+				`<th>Rarity</th>` +
+				`<th>Type</th>` +
+				`<th>⚔️ BV</th>` +
+				`</tr>`;
+
+			for (const card of pack) {
+				const rarityColor = getRarityColor(card.rarity);
 				
-				tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
-			} else {
-				tableHtml += `<td>-</td>`;
+				tableHtml += `<tr class="themed-table-row">` +
+					`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
+					`<td>${card.set}</td>` +
+					`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
+					`<td>${card.type || card.supertype}</td>`;
+				
+				// Battle Value with color coding
+				if (card.battleValue) {
+					let bvColor = '#95a5a6';
+					if (card.battleValue >= 150) bvColor = '#e74c3c';
+					else if (card.battleValue >= 100) bvColor = '#f39c12';
+					else if (card.battleValue >= 70) bvColor = '#3498db';
+					
+					tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
+				} else {
+					tableHtml += `<td>-</td>`;
+				}
+				
+				tableHtml += `</tr>`;
 			}
+
+			tableHtml += `</table></div>`;
+
+			const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, tableHtml);
 			
-			tableHtml += `</tr>`;
+			console.timeEnd('DAILY-TOTAL');
+			this.sendReplyBox(output);
+		} catch (e: any) {
+			console.timeEnd('DAILY-TOTAL');
+			return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
 		}
-
-		tableHtml += `</table></div>`;
-
-		const output = TCG_UI.buildPage(`🎁 You claimed your daily pack!`, tableHtml);
-		
-		console.time('updateMilestoneProgress');
-		await TCG_Ranking.updateMilestoneProgress(userId, 'packsOpened', 1);
-		console.timeEnd('updateMilestoneProgress');
-		
-		console.timeEnd('DAILY-TOTAL');
-		this.sendReplyBox(output);
-	} catch (e: any) {
-		console.timeEnd('DAILY-TOTAL');
-		return this.errorReply(`${ERROR_MESSAGES.DATABASE_ERROR}: ${e.message}`);
-	}
-},
+	},
 
 	async currency(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		if (!this.runBroadcast()) return;
 		const targetUser = toID(target) || user.id;
 		const targetUsername = target.trim() || user.name;
@@ -157,7 +147,6 @@ export const coreCommands: Chat.ChatCommands = {
 	},
 
 	async pay(target, room, user) {
-		await TCG_Ranking.getPlayerRanking(user.id);
 		const [targetUser, amountStr] = target.split(',').map(p => p.trim());
 		if (!targetUser || !amountStr) {
 			return this.errorReply("Usage: /tcg pay [user], [amount]");
