@@ -7,7 +7,6 @@ import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
 import { collectionCommands } from '../../../impulse/psgo-plugin/tcg_commands/collection';
 import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
 import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
-import { rankingCommands } from '../../../impulse/psgo-plugin/tcg_commands/ranking';
 import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
 import { adminCommands } from '../../../impulse/psgo-plugin/tcg_commands/admin';
 
@@ -25,9 +24,6 @@ export const commands: Chat.ChatCommands = {
 		
 		// Battle commands
 		...battleCommands,
-		
-		// Ranking commands
-		...rankingCommands,
 		
 		// Info commands
 		...infoCommands,
@@ -67,17 +63,5 @@ export const commands: Chat.ChatCommands = {
 		'@ /tcg setcurrency [user], [amount] - Set a user\'s credit balance.',
 		'@ /tcg openpack [set ID] - Open a pack of cards from a specific set.',
 		'@ /tcg addcard [id], [name], [set]... - Add a card to the database.',
-		'/tcg rankedbattle challenge, [user] - Challenge a user to a simulated ranked battle (10 daily, earn credits).',
-		'/tcg rankedbattle targets - View available players you can challenge today.',
-		'/tcg rankedbattle status - Check your daily challenge status and credit earnings.',
-		'/tcg season - View current season information and rewards.',
-		'/tcg seasonhistory [user] - View season reward history for a user.',
-		'/tcg ranking [user] - View ranking information for a user.',
-		'/tcg leaderboard [elo|seasonal] - View the ELO or seasonal leaderboards.',
-		'/tcg battlehistory [user] - View ranked battle history for a user.',
-		'/tcg milestones - View weekly milestone progress and claim rewards.',
-		'/tcg claimmilestone [id] - Claim a completed milestone reward.',
-		'@ /tcg season end - Force end the current season..',
-		'@ /tcg initseason - Force start a season, when there is no season.',
 	],
 };
