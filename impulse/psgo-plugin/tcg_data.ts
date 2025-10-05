@@ -100,17 +100,6 @@ export interface ShopState {
 	lastRotation: number;
 }
 
-export interface BattleProgress {
-	_id?: string;
-	userId: string;
-	currentLevel: number;
-	highestLevel: number;
-	lastDefeatTime?: number;
-	totalWins: number;
-	totalLosses: number;
-	lastUpdated: number;
-}
-
 // --- DATA CONSTANTS ---
 export const SUPERTYPES = [
 	'Pokémon',
