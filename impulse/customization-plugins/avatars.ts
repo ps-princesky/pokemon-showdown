@@ -44,7 +44,21 @@ export const commands: Chat.ChatCommands = {
         return this.errorReply('Image must have .jpg, .png, or .gif extension.');
       }
 
-      // Download the image to config/avatars/
+      // Check if user already has a personal avatar and remove the old file
+      const userAvatars = Users.Avatars.avatars[userId];
+      if (userAvatars && userAvatars.allowed[0]) {
+        const oldPersonalAvatar = userAvatars.allowed[0];
+        // Only delete if it's a local file (not starting with #)
+        if (oldPersonalAvatar && !oldPersonalAvatar.startsWith('#')) {
+          try {
+            await FS(AVATAR_PATH + oldPersonalAvatar).unlinkIfExists();
+          } catch (err) {
+            console.error('Error deleting old avatar file:', err);
+          }
+        }
+      }
+
+      // Download the new image to config/avatars/
       const avatarFilename = userId + ext;
       await downloadImage(processedUrl, userId, ext);
 
