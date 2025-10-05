@@ -65,194 +65,6 @@ export const BATTLE_CONFIG = {
 	MIN_WAGER: 1,
 } as const;
 
-// ==================== RANKING SYSTEM ====================
-export const RANKING_CONFIG = {
-	/** Starting ELO for new players */
-	DEFAULT_ELO: 1000,
-	/** ELO calculation K-factor */
-	K_FACTOR: 32,
-	/** Number of daily ranked challenges allowed */
-	DAILY_CHALLENGES_LIMIT: 10,
-	/** Number of battles with full credit rewards */
-	DAILY_CREDIT_BATTLES_LIMIT: 7,
-	/** Credit multiplier for battles beyond the limit */
-	REDUCED_REWARD_MULTIPLIER: 0.3,
-	/** Season duration in days */
-	SEASON_DURATION_DAYS: 30,
-	/** ELO decay threshold (days of inactivity) */
-	DECAY_THRESHOLD_DAYS: 14,
-	/** ELO decay amount */
-	DECAY_AMOUNT: 25,
-	/** Challenge target search range */
-	LEADERBOARD_CHALLENGE_RANGE: 50,
-} as const;
-
-// ==================== RANK THRESHOLDS ====================
-export const RANK_THRESHOLDS = {
-	'Bronze III': 0,
-	'Bronze II': 800,
-	'Bronze I': 900,
-	'Silver III': 1000,
-	'Silver II': 1100,
-	'Silver I': 1200,
-	'Gold III': 1300,
-	'Gold II': 1400,
-	'Gold I': 1500,
-	'Platinum III': 1600,
-	'Platinum II': 1700,
-	'Platinum I': 1800,
-	'Diamond III': 1900,
-	'Diamond II': 2000,
-	'Diamond I': 2100,
-	'Master': 2200,
-	'Grandmaster': 2400,
-} as const;
-
-// ==================== RANK COLORS ====================
-export const RANK_COLORS = {
-	'Bronze III': '#CD7F32', 'Bronze II': '#CD7F32', 'Bronze I': '#CD7F32',
-	'Silver III': '#C0C0C0', 'Silver II': '#C0C0C0', 'Silver I': '#C0C0C0',
-	'Gold III': '#FFD700', 'Gold II': '#FFD700', 'Gold I': '#FFD700',
-	'Platinum III': '#E5E4E2', 'Platinum II': '#E5E4E2', 'Platinum I': '#E5E4E2',
-	'Diamond III': '#B9F2FF', 'Diamond II': '#B9F2FF', 'Diamond I': '#B9F2FF',
-	'Master': '#FF6B6B', 'Grandmaster': '#9B59B6',
-} as const;
-
-// ==================== BATTLE REWARDS ====================
-export const RANKED_BATTLE_REWARDS = {
-	/** Credits for winning a ranked battle */
-	win: 8,
-	/** Credits for losing a ranked battle */
-	loss: 3,
-	/** Credits for drawing a ranked battle */
-	draw: 5,
-} as const;
-
-// ==================== SEASON REWARDS ====================
-export const SEASON_REWARDS = {
-	1: { credits: 500, title: 'Grandmaster Champion' },
-	2: { credits: 400, title: 'Elite Duelist' },
-	3: { credits: 325, title: 'Master Tactician' },
-	4: { credits: 275, title: 'Legendary Trainer' },
-	5: { credits: 225, title: 'Expert Battler' },
-	6: { credits: 185, title: 'Skilled Challenger' },
-	7: { credits: 150, title: 'Rising Star' },
-	8: { credits: 125, title: 'Promising Duelist' },
-	9: { credits: 100, title: 'Dedicated Trainer' },
-	10: { credits: 75, title: 'Top Competitor' },
-} as const;
-
-// ==================== ELO MILESTONE REWARDS ====================
-export const ELO_MILESTONE_REWARDS = {
-	'silver_iii': { elo: 1000, reward: 100, name: 'Silver Promotion' },
-	'silver_i': { elo: 1200, reward: 150, name: 'High Silver' },
-	'gold_iii': { elo: 1300, reward: 200, name: 'Gold Promotion' },
-	'gold_i': { elo: 1500, reward: 300, name: 'High Gold' },
-	'platinum_iii': { elo: 1600, reward: 400, name: 'Platinum Promotion' },
-	'platinum_i': { elo: 1800, reward: 600, name: 'High Platinum' },
-	'diamond_iii': { elo: 1900, reward: 800, name: 'Diamond Promotion' },
-	'diamond_i': { elo: 2100, reward: 1000, name: 'High Diamond' },
-	'master': { elo: 2200, reward: 1500, name: 'Master Rank' },
-	'grandmaster': { elo: 2400, reward: 2000, name: 'Grandmaster Rank' },
-} as const;
-
-// ==================== WEEKLY MILESTONES ====================
-export const WEEKLY_MILESTONES = {
-	// Battle Milestones
-	battles_5: { 
-		requirement: 5, 
-		type: 'rankedBattles' as const, 
-		reward: 50, 
-		name: 'Battler', 
-		description: 'Complete 5 ranked battles' 
-	},
-	battles_15: { 
-		requirement: 15, 
-		type: 'rankedBattles' as const, 
-		reward: 100, 
-		name: 'Warrior', 
-		description: 'Complete 15 ranked battles' 
-	},
-	battles_30: { 
-		requirement: 30, 
-		type: 'rankedBattles' as const, 
-		reward: 200, 
-		name: 'Champion', 
-		description: 'Complete 30 ranked battles' 
-	},
-	
-	// Win Milestones
-	wins_3: { 
-		requirement: 3, 
-		type: 'rankedWins' as const, 
-		reward: 40, 
-		name: 'Victor', 
-		description: 'Win 3 ranked battles' 
-	},
-	wins_10: { 
-		requirement: 10, 
-		type: 'rankedWins' as const, 
-		reward: 80, 
-		name: 'Dominator', 
-		description: 'Win 10 ranked battles' 
-	},
-	wins_20: { 
-		requirement: 20, 
-		type: 'rankedWins' as const, 
-		reward: 150, 
-		name: 'Unbeatable', 
-		description: 'Win 20 ranked battles' 
-	},
-	
-	// Pack Purchase Milestones
-	packs_3: { 
-		requirement: 3, 
-		type: 'packsPurchased' as const, 
-		reward: 30, 
-		name: 'Collector', 
-		description: 'Purchase 3 packs from shop' 
-	},
-	packs_7: { 
-		requirement: 7, 
-		type: 'packsPurchased' as const, 
-		reward: 70, 
-		name: 'Enthusiast', 
-		description: 'Purchase 7 packs from shop' 
-	},
-	
-	// Pack Opening Milestones
-	opened_5: { 
-		requirement: 5, 
-		type: 'packsOpened' as const, 
-		reward: 25, 
-		name: 'Pack Hunter', 
-		description: 'Open 5 packs' 
-	},
-	opened_15: { 
-		requirement: 15, 
-		type: 'packsOpened' as const, 
-		reward: 75, 
-		name: 'Pack Master', 
-		description: 'Open 15 packs' 
-	},
-	
-	// Credit Earning Milestones
-	credits_200: { 
-		requirement: 200, 
-		type: 'creditsEarned' as const, 
-		reward: 50, 
-		name: 'Earner', 
-		description: 'Earn 200 credits from battles' 
-	},
-	credits_500: { 
-		requirement: 500, 
-		type: 'creditsEarned' as const, 
-		reward: 100, 
-		name: 'Rich', 
-		description: 'Earn 500 credits from battles' 
-	},
-} as const;
-
 // ==================== PAGINATION SETTINGS ====================
 export const PAGINATION_CONFIG = {
 	/** Cards per page in search results */
@@ -353,8 +165,6 @@ export const ERROR_MESSAGES = {
 	BATTLE_COOLDOWN: 'Please wait before challenging again',
 	ALREADY_IN_BATTLE: 'Already in a battle or challenge',
 	INVALID_WAGER: 'Invalid wager amount',
-	NO_CHALLENGES_REMAINING: 'No challenges remaining today',
-	TARGET_ALREADY_CHALLENGED: 'You have already challenged this player today',
 	
 	// Shop errors
 	SHOP_EMPTY: 'Shop is currently empty',
@@ -385,29 +195,15 @@ export const SUCCESS_MESSAGES = {
 	DAILY_CLAIMED: 'Daily pack claimed',
 	
 	// Battle messages
-	CHALLENGE_SENT: 'Challenge sent successfully',
 	BATTLE_COMPLETED: 'Battle completed',
-	RANK_UPDATED: 'Rank updated',
-	
-	// Milestone messages
-	MILESTONE_CLAIMED: 'Milestone reward claimed',
-	ACHIEVEMENT_UNLOCKED: 'Achievement unlocked',
 } as const;
 
 // ==================== FEATURE FLAGS ====================
 export const FEATURE_FLAGS = {
 	/** Enable daily pack claims */
 	ENABLE_DAILY_PACKS: true,
-	/** Enable ranked battles */
-	ENABLE_RANKED_BATTLES: true,
 	/** Enable shop system */
 	ENABLE_SHOP: true,
-	/** Enable milestone system */
-	ENABLE_MILESTONES: true,
-	/** Enable ELO milestone rewards */
-	ENABLE_ELO_MILESTONES: true,
-	/** Enable season system */
-	ENABLE_SEASONS: true,
 	/** Enable pack battles (wager battles) */
 	ENABLE_PACK_BATTLES: true,
 	/** Enable wishlist system */
@@ -418,10 +214,6 @@ export const FEATURE_FLAGS = {
 	ENABLE_CACHING: true,
 	/** Enable logging */
 	ENABLE_LOGGING: true,
-	/** Enable automatic season management */
-	ENABLE_AUTO_SEASONS: true,
-	/** Enable ELO decay */
-	ENABLE_ELO_DECAY: false,
 } as const;
 
 // ==================== CACHE CONFIGURATION ====================
@@ -430,14 +222,12 @@ export const CACHE_CONFIG = {
 	DEFAULT_TTL_MS: 300000, // 5 minutes
 	/** Shop stock cache TTL */
 	SHOP_STOCK_TTL_MS: 3600000, // 1 hour
-	/** Leaderboard cache TTL */
-	LEADERBOARD_TTL_MS: 600000, // 10 minutes
 	/** User stats cache TTL */
 	USER_STATS_TTL_MS: 300000, // 5 minutes
 	/** Card search cache TTL */
 	SEARCH_CACHE_TTL_MS: 600000, // 10 minutes
 	/** Maximum cache entries */
-	MAX_CACHE_ENTRIES: 1000,
+	MAX_CACHE_ENTRIES: 100000,
 } as const;
 
 // ==================== LOGGING CONFIGURATION ====================
@@ -456,30 +246,8 @@ export const LOGGING_CONFIG = {
 	MAX_LOG_FILES: 5,
 } as const;
 
-// ==================== TYPE DEFINITIONS ====================
-export type MilestoneType = 'rankedBattles' | 'rankedWins' | 'packsPurchased' | 'packsOpened' | 'creditsEarned';
-export type BattleResult = 'win' | 'loss' | 'draw';
-export type SeasonRewardRank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
-export type RankTier = keyof typeof RANK_THRESHOLDS;
-export type EloMilestoneId = keyof typeof ELO_MILESTONE_REWARDS;
-export type WeeklyMilestoneId = keyof typeof WEEKLY_MILESTONES;
-
 // ==================== UTILITY FUNCTIONS ====================
 export class ConfigUtils {
-	/**
-	 * Get all rank tiers in order
-	 */
-	static getRankTiers(): RankTier[] {
-		return Object.keys(RANK_THRESHOLDS) as RankTier[];
-	}
-	
-	/**
-	 * Get rank color for a given tier
-	 */
-	static getRankColor(rank: RankTier): string {
-		return RANK_COLORS[rank] || '#808080';
-	}
-	
 	/**
 	 * Check if a feature is enabled
 	 */
@@ -499,19 +267,5 @@ export class ConfigUtils {
 	 */
 	static validateInput(input: string, maxLength: number = VALIDATION_LIMITS.MAX_INPUT_LENGTH): boolean {
 		return input.length > 0 && input.length <= maxLength;
-	}
-	
-	/**
-	 * Get milestone configuration by ID
-	 */
-	static getMilestone(milestoneId: WeeklyMilestoneId) {
-		return WEEKLY_MILESTONES[milestoneId];
-	}
-	
-	/**
-	 * Get ELO milestone configuration by ID
-	 */
-	static getEloMilestone(milestoneId: EloMilestoneId) {
-		return ELO_MILESTONE_REWARDS[milestoneId];
 	}
 }
