@@ -104,7 +104,7 @@ export const shopCommands: Chat.ChatCommands = {
 					`<p><strong>Your Balance:</strong> ${balance} Credits</p><hr/>`;
 		
 				if (currentStock.length === 0) {
-					content += `<p>${ERROR_MESSAGES.SHOP_EMPTY}. Please check back later.</p>`;
+					content += `<p>No packs are currently available. Please check back later.</p>`;
 				} else {
 					const rows = currentStock.map(setId => {
 						const setInfo = POKEMON_SETS.find(s => toID(s.code) === toID(setId));
@@ -192,41 +192,11 @@ export const shopCommands: Chat.ChatCommands = {
 				
 				pack.sort((a, b) => getCardPoints(b) - getCardPoints(a));
 
-				// Build table with battle value
-				let tableHtml = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
-					`<tr class="themed-table-header">` +
-					`<th>Name</th>` +
-					`<th>Set</th>` +
-					`<th>Rarity</th>` +
-					`<th>Type</th>` +
-					`<th>⚔️ BV</th>` +
-					`</tr>`;
-
-				for (const card of pack) {
-					const rarityColor = getRarityColor(card.rarity);
-					
-					tableHtml += `<tr class="themed-table-row">` +
-						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-						`<td>${card.set}</td>` +
-						`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
-						`<td>${card.type || card.supertype}</td>`;
-					
-					// Battle Value with color coding
-					if (card.battleValue) {
-						let bvColor = '#95a5a6';
-						if (card.battleValue >= 150) bvColor = '#e74c3c';
-						else if (card.battleValue >= 100) bvColor = '#f39c12';
-						else if (card.battleValue >= 70) bvColor = '#3498db';
-						
-						tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
-					} else {
-						tableHtml += `<td>-</td>`;
-					}
-					
-					tableHtml += `</tr>`;
-				}
-
-				tableHtml += `</table></div>`;
+				// Use generateCardTable instead of manual table building
+				const tableHtml = TCG_UI.generateCardTable(
+					pack,
+					['name', 'set', 'rarity', 'type', 'battleValue']
+				);
 
 				const output = TCG_UI.buildPage(`🎴 ${user.name} opened a ${displaySetName} Pack!`, tableHtml);
 				this.sendReplyBox(output);
