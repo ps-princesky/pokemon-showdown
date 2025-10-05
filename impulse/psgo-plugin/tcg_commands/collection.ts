@@ -159,46 +159,12 @@ export const collectionCommands: Chat.ChatCommands = {
 				`<strong>Total Battle Value:</strong> ${totalBattleValue}` +
 				`</p>`;
 			
-			// Table with battle value column
-			content += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
-				`<tr class="themed-table-header">` +
-				`<th>Name</th>` +
-				`<th>Set</th>` +
-				`<th>Rarity</th>` +
-				`<th>Type</th>` +
-				`<th>HP</th>` +
-				`<th>⚔️ BV</th>` +
-				`<th>Qty</th>` +
-				`</tr>`;
-
-			for (const card of cardsToDisplay) {
-				const quantity = quantityMap.get(card.cardId) || 1;
-				const rarityColor = getRarityColor(card.rarity);
-				
-				content += `<tr class="themed-table-row">` +
-					`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-					`<td>${card.set}</td>` +
-					`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>` +
-					`<td>${card.type || card.supertype}</td>` +
-					`<td>${card.hp || '-'}</td>`;
-				
-				// Battle Value with color coding
-				if (card.battleValue) {
-					let bvColor = '#95a5a6';
-					if (card.battleValue >= 150) bvColor = '#e74c3c';
-					else if (card.battleValue >= 100) bvColor = '#f39c12';
-					else if (card.battleValue >= 70) bvColor = '#3498db';
-					
-					content += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
-				} else {
-					content += `<td>-</td>`;
-				}
-				
-				content += `<td><strong>${quantity}</strong></td>` +
-					`</tr>`;
-			}
-
-			content += `</table></div>`;
+			// Use generateCardTable instead of manual table building
+			content += TCG_UI.generateCardTable(
+				cardsToDisplay,
+				['name', 'set', 'rarity', 'type', 'hp', 'battleValue', 'quantity'],
+				quantityMap
+			);
 
 			if (filteredUserCards.length > PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT) {
 				content += `<p style="text-align:center; margin-top: 8px;"><em>Showing top ${PAGINATION_CONFIG.COLLECTION_DISPLAY_LIMIT} of ${filteredUserCards.length} matching cards.</em></p>`;
@@ -286,38 +252,11 @@ export const collectionCommands: Chat.ChatCommands = {
 					return getCardPoints(b) - getCardPoints(a);
 				});
 				
-				// Table with battle value
-				let tableHtml = `<div style="max-height: 300px; overflow-y: auto;"><table class="themed-table">` +
-					`<tr class="themed-table-header">` +
-					`<th>Name</th>` +
-					`<th>Rarity</th>` +
-					`<th>⚔️ BV</th>` +
-					`</tr>`;
-				
-				for (const card of missingCards) {
-					const rarityColor = getRarityColor(card.rarity);
-					
-					tableHtml += `<tr class="themed-table-row">` +
-						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-						`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>`;
-					
-					// Battle Value
-					if (card.battleValue) {
-						let bvColor = '#95a5a6';
-						if (card.battleValue >= 150) bvColor = '#e74c3c';
-						else if (card.battleValue >= 100) bvColor = '#f39c12';
-						else if (card.battleValue >= 70) bvColor = '#3498db';
-						
-						tableHtml += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
-					} else {
-						tableHtml += `<td>-</td>`;
-					}
-					
-					tableHtml += `</tr>`;
-				}
-				
-				tableHtml += `</table></div>`;
-				content += tableHtml;
+				// Use generateCardTable instead of manual table building
+				content += TCG_UI.generateCardTable(
+					missingCards,
+					['name', 'rarity', 'battleValue']
+				);
 			} else {
 				content += `<p style="text-align:center; font-weight:bold; color:#2ecc71; margin-top:15px;">🎉 Set Complete! 🎉</p>`;
 			}
@@ -381,39 +320,11 @@ export const collectionCommands: Chat.ChatCommands = {
 					content += `<p style="text-align: center; color: #e74c3c; font-weight: bold; margin-bottom: 10px;">⚔️ Total Wishlist Battle Value: ${totalBattleValue}</p>`;
 				}
 				
-				// Table with battle value
-				content += `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">` +
-					`<tr class="themed-table-header">` +
-					`<th>Name</th>` +
-					`<th>Set</th>` +
-					`<th>Rarity</th>` +
-					`<th>⚔️ BV</th>` +
-					`</tr>`;
-				
-				for (const card of cards) {
-					const rarityColor = getRarityColor(card.rarity);
-					
-					content += `<tr class="themed-table-row">` +
-						`<td><button name="send" value="/tcg card ${card.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${card.name}</button></td>` +
-						`<td>${card.set}</td>` +
-						`<td><span style="color: ${rarityColor}">${card.rarity.toUpperCase()}</span></td>`;
-					
-					// Battle Value
-					if (card.battleValue) {
-						let bvColor = '#95a5a6';
-						if (card.battleValue >= 150) bvColor = '#e74c3c';
-						else if (card.battleValue >= 100) bvColor = '#f39c12';
-						else if (card.battleValue >= 70) bvColor = '#3498db';
-						
-						content += `<td><strong style="color: ${bvColor}">${card.battleValue}</strong></td>`;
-					} else {
-						content += `<td>-</td>`;
-					}
-					
-					content += `</tr>`;
-				}
-				
-				content += `</table></div>`;
+				// Use generateCardTable instead of manual table building
+				content += TCG_UI.generateCardTable(
+					cards,
+					['name', 'set', 'rarity', 'battleValue']
+				);
 				
 				const output = TCG_UI.buildPage(`${Impulse.nameColor(targetUsername, true)}'s Wishlist`, content);
 				this.sendReplyBox(output);
