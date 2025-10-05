@@ -7,7 +7,6 @@ import { coreCommands } from '../../../impulse/psgo-plugin/tcg_commands/core';
 import { shopCommands } from '../../../impulse/psgo-plugin/tcg_commands/shop';
 import { infoCommands } from '../../../impulse/psgo-plugin/tcg_commands/info';
 import { adminCommands } from '../../../impulse/psgo-plugin/tcg_commands/admin';
-import { battleCommands } from '../../../impulse/psgo-plugin/tcg_commands/battle';
 
 export const commands: Chat.ChatCommands = {
 	tcg: 'pokemontcg',
@@ -20,9 +19,6 @@ export const commands: Chat.ChatCommands = {
 		
 		// Info commands
 		...infoCommands,
-		
-		// Battle commands
-		...battleCommands,
 		
 		// Admin commands
 		...adminCommands,
