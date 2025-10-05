@@ -72,26 +72,9 @@ export function buildProgressBar(params: {
 	return output;
 }
 
-/**
- * Build a notification/alert box
- */
-export function buildNotification(message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info'): string {
-	const colors = {
-		success: { bg: 'rgba(46,204,113,0.1)', text: '#27ae60', border: '#27ae60' },
-		info: { bg: 'rgba(52,152,219,0.1)', text: '#2980b9', border: '#2980b9' },
-		warning: { bg: 'rgba(243,156,18,0.1)', text: '#f39c12', border: '#f39c12' },
-		error: { bg: 'rgba(231,76,60,0.1)', text: '#e74c3c', border: '#e74c3c' }
-	};
-	
-	const style = colors[type];
-	return `<div style="text-align:center; color: ${style.text}; margin: 10px 0; padding: 8px; background: ${style.bg}; border: 1px solid ${style.border}; border-radius: 5px;">` +
-		message +
-		`</div>`;
-}
-
 // ==================== TABLE COMPONENTS ====================
 
-type CardTableColumn = 'id' | 'name' | 'set' | 'rarity' | 'type' | 'subtypes' | 'hp' | 'quantity';
+type CardTableColumn = 'id' | 'name' | 'set' | 'rarity' | 'type' | 'subtypes' | 'hp' | 'quantity' | 'battleValue';
 
 /**
  * Generate a themed table for cards
@@ -110,6 +93,7 @@ export function generateCardTable(
 		subtypes: 'Subtypes',
 		hp: 'HP',
 		quantity: 'Quantity',
+		battleValue: '⚔️ BV',
 	};
 
 	let table = `<div style="max-height: 380px; overflow-y: auto;"><table class="themed-table">`;
@@ -150,10 +134,21 @@ export function generateCardTable(
 					cell += formattedSubtypes;
 					break;
 				case 'hp':
-					cell += card.hp || 'N/A';
+					cell += card.hp || '-';
 					break;
 				case 'quantity':
 					cell += quantityMap?.get(card.cardId) || 1;
+					break;
+				case 'battleValue':
+					if (card.battleValue) {
+						let bvColor = '#95a5a6';
+						if (card.battleValue >= 150) bvColor = '#e74c3c';
+						else if (card.battleValue >= 100) bvColor = '#f39c12';
+						else if (card.battleValue >= 70) bvColor = '#3498db';
+						cell += `<strong style="color: ${bvColor}">${card.battleValue}</strong>`;
+					} else {
+						cell += '-';
+					}
 					break;
 			}
 			cell += '</td>';
@@ -203,30 +198,6 @@ export function buildTable(params: {
 // ==================== BATTLE RESULT COMPONENTS ====================
 
 /**
- * Build pack display for battles
- */
-export function buildPackDisplay(params: {
-	playerName: string;
-	pack: TCGCard[];
-	totalValue: number;
-	getCardPoints: (card: TCGCard) => number;
-	nameColor: (name: string, withLink: boolean) => string;
-}): string {
-	const { playerName, pack, totalValue, getCardPoints, nameColor } = params;
-	const sortedPack = [...pack].sort((a, b) => getCardPoints(b) - getCardPoints(a));
-	
-	const packHtml = sortedPack.map(c => 
-		`<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td>` +
-		`<td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`
-	).join('');
-	
-	return `<td style="width:50%; vertical-align:top; padding-right:5px;">` +
-		`<strong>${nameColor(playerName, true)}'s Pack (Total: ${totalValue} Points)</strong>` +
-		`<table class="themed-table">${packHtml}</table>` +
-		`</td>`;
-}
-
-/**
  * Build pack battle result display
  */
 export function buildPackBattleResult(params: {
@@ -238,23 +209,26 @@ export function buildPackBattleResult(params: {
 }): string {
 	const { challenger, acceptor, winner, getCardPoints, nameColor } = params;
 
+	// Helper function to build pack display
+	const buildPackDisplay = (playerName: string, pack: TCGCard[], totalValue: number): string => {
+		const sortedPack = [...pack].sort((a, b) => getCardPoints(b) - getCardPoints(a));
+		
+		const packHtml = sortedPack.map(c => 
+			`<tr><td><button name="send" value="/tcg card ${c.cardId}" style="background:none; border:none; padding:0; font-weight:bold; color:inherit; text-decoration:underline; cursor:pointer;">${c.name}</button></td>` +
+			`<td><span style="color: ${getRarityColor(c.rarity)}">${c.rarity}</span></td></tr>`
+		).join('');
+		
+		return `<td style="width:50%; vertical-align:top; padding-right:5px;">` +
+			`<strong>${nameColor(playerName, true)}'s Pack (Total: ${totalValue} Points)</strong>` +
+			`<table class="themed-table">${packHtml}</table>` +
+			`</td>`;
+	};
+
 	let output = `<div class="infobox">` +
 		`<h2 style="text-align:center;">Pack Battle!</h2>` +
 		`<table style="width:100%;"><tr>` +
-		buildPackDisplay({ 
-			playerName: challenger.name, 
-			pack: challenger.pack, 
-			totalValue: challenger.points, 
-			getCardPoints, 
-			nameColor 
-		}) +
-		buildPackDisplay({ 
-			playerName: acceptor.name, 
-			pack: acceptor.pack, 
-			totalValue: acceptor.points, 
-			getCardPoints, 
-			nameColor 
-		}) +
+		buildPackDisplay(challenger.name, challenger.pack, challenger.points) +
+		buildPackDisplay(acceptor.name, acceptor.pack, acceptor.points) +
 		`</tr></table><hr/>`;
 
 	if (winner) {
