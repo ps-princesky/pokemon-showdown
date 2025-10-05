@@ -122,8 +122,6 @@ export const battleCommands: Chat.ChatCommands = {
 				// Sort by battle value
 				userCards.sort((a, b) => (b.battleValue || 0) - (a.battleValue || 0));
 
-				if (!this.runBroadcast()) return;
-
 				let content = `<p style="text-align: center; font-size: 1.1em; margin-bottom: 15px;">` +
 					`<strong>Level ${level}:</strong> Select ${cardsRequired} card(s) for battle` +
 					`</p>`;
@@ -241,9 +239,6 @@ export const battleCommands: Chat.ChatCommands = {
 
 				// Clear pending battle
 				pendingBattles.delete(userId);
-
-				// Display battle results
-				if (!this.runBroadcast()) return;
 				
 				let content = `<div style="text-align: center; margin-bottom: 15px;">` +
 					`<h3 style="color: ${result.winner === 'player' ? '#2ecc71' : '#e74c3c'}; margin: 5px 0;">` +
